@@ -67,7 +67,7 @@ pub struct StatusResponse {
     #[serde(rename = "StatusPTH")]
     pub power_thresholds: Option<serde_json::Value>,
 
-    /// Sensor information (Status 8 / Energy).
+    /// State information (Status 11 / runtime state).
     #[serde(rename = "StatusSTS")]
     pub sensor_status: Option<serde_json::Value>,
 }

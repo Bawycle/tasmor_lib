@@ -7,6 +7,11 @@
 //!
 //! This module provides commands for querying energy consumption data
 //! from devices with power monitoring capabilities.
+//!
+//! Energy data (voltage, current, power) is obtained via `Status 10` command,
+//! which returns sensor information including the ENERGY object.
+//!
+//! Reference: <https://tasmota.github.io/docs/Commands/#management>
 
 use crate::command::Command;
 
@@ -21,15 +26,19 @@ use crate::command::Command;
 /// - Today's energy consumption (kWh)
 /// - Yesterday's energy consumption (kWh)
 ///
+/// Note: To query individual values like voltage or current, use `EnergyCommand::Get`
+/// which returns all energy data via `Status 10`. There are no separate Tasmota commands
+/// for querying voltage or current individually.
+///
 /// # Examples
 ///
 /// ```
 /// use tasmor_lib::command::{Command, EnergyCommand};
 ///
-/// // Query current energy readings
+/// // Query current energy readings (uses Status 10)
 /// let cmd = EnergyCommand::Get;
 /// assert_eq!(cmd.name(), "Status");
-/// assert_eq!(cmd.payload(), Some("8".to_string()));
+/// assert_eq!(cmd.payload(), Some("10".to_string()));
 ///
 /// // Reset energy counters
 /// let reset = EnergyCommand::ResetTotal;
@@ -37,7 +46,12 @@ use crate::command::Command;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnergyCommand {
-    /// Query current energy readings (Status 8).
+    /// Query current energy readings (Status 10).
+    ///
+    /// Returns sensor information including ENERGY object with:
+    /// - Total, Yesterday, Today (kWh)
+    /// - Power (W), Voltage (V), Current (A)
+    /// - Factor, Frequency, etc.
     Get,
     /// Reset today's energy counter.
     ResetToday,
@@ -85,91 +99,12 @@ impl Command for EnergyCommand {
 
     fn payload(&self) -> Option<String> {
         match self {
-            Self::Get => Some("8".to_string()),
+            // Status 10 returns sensor information (replaces deprecated Status 8)
+            // Reference: https://tasmota.github.io/docs/Commands/#management
+            Self::Get => Some("10".to_string()),
             Self::ResetToday | Self::ResetYesterday | Self::ResetTotal => Some("0".to_string()),
             Self::SetToday(wh) | Self::SetTotal(wh) => Some(wh.to_string()),
         }
-    }
-}
-
-/// Command to query voltage.
-///
-/// # Examples
-///
-/// ```
-/// use tasmor_lib::command::{Command, VoltageCommand};
-///
-/// let cmd = VoltageCommand::Get;
-/// assert_eq!(cmd.name(), "Voltage");
-/// assert_eq!(cmd.payload(), None);
-/// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VoltageCommand {
-    /// Query current voltage.
-    Get,
-}
-
-impl Command for VoltageCommand {
-    fn name(&self) -> String {
-        "Voltage".to_string()
-    }
-
-    fn payload(&self) -> Option<String> {
-        None
-    }
-}
-
-/// Command to query current.
-///
-/// # Examples
-///
-/// ```
-/// use tasmor_lib::command::{Command, CurrentCommand};
-///
-/// let cmd = CurrentCommand::Get;
-/// assert_eq!(cmd.name(), "Current");
-/// assert_eq!(cmd.payload(), None);
-/// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CurrentCommand {
-    /// Query current amperage.
-    Get,
-}
-
-impl Command for CurrentCommand {
-    fn name(&self) -> String {
-        "Current".to_string()
-    }
-
-    fn payload(&self) -> Option<String> {
-        None
-    }
-}
-
-/// Command to query power consumption.
-///
-/// # Examples
-///
-/// ```
-/// use tasmor_lib::command::{Command, PowerMonitorCommand};
-///
-/// let cmd = PowerMonitorCommand::Get;
-/// assert_eq!(cmd.name(), "Power");
-/// assert_eq!(cmd.payload(), None);
-/// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PowerMonitorCommand {
-    /// Query current power consumption in Watts.
-    Get,
-}
-
-impl Command for PowerMonitorCommand {
-    fn name(&self) -> String {
-        "Power".to_string()
-    }
-
-    fn payload(&self) -> Option<String> {
-        None
     }
 }
 
@@ -179,9 +114,11 @@ mod tests {
 
     #[test]
     fn energy_command_get() {
+        // Status 10 is the current command for sensor data
+        // (Status 8 is deprecated but retained for backwards compatibility)
         let cmd = EnergyCommand::Get;
         assert_eq!(cmd.name(), "Status");
-        assert_eq!(cmd.payload(), Some("8".to_string()));
+        assert_eq!(cmd.payload(), Some("10".to_string()));
     }
 
     #[test]
@@ -200,26 +137,5 @@ mod tests {
         let total = EnergyCommand::SetTotal(50000);
         assert_eq!(total.name(), "EnergyTotal");
         assert_eq!(total.payload(), Some("50000".to_string()));
-    }
-
-    #[test]
-    fn voltage_command() {
-        let cmd = VoltageCommand::Get;
-        assert_eq!(cmd.name(), "Voltage");
-        assert_eq!(cmd.payload(), None);
-    }
-
-    #[test]
-    fn current_command() {
-        let cmd = CurrentCommand::Get;
-        assert_eq!(cmd.name(), "Current");
-        assert_eq!(cmd.payload(), None);
-    }
-
-    #[test]
-    fn power_monitor_command() {
-        let cmd = PowerMonitorCommand::Get;
-        assert_eq!(cmd.name(), "Power");
-        assert_eq!(cmd.payload(), None);
     }
 }

@@ -290,6 +290,7 @@ impl CapabilitiesBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::response::StatusResponse;
 
     #[test]
     fn default_capabilities() {
@@ -346,5 +347,278 @@ mod tests {
 
         let multi = CapabilitiesBuilder::new().power_channels(4).build();
         assert!(multi.is_multi_relay());
+    }
+
+    // ========================================================================
+    // Tests for Capabilities::from_status() based on real Tasmota responses
+    // Reference: https://tasmota.github.io/docs/JSON-Status-Responses/
+    // ========================================================================
+
+    #[test]
+    fn from_status_detects_neo_coolcam_by_module_id() {
+        // Neo Coolcam Power Plug has Module ID 49
+        // Reference: https://tasmota.github.io/docs/Commands/#management
+        let json = r#"{
+            "Status": {
+                "Module": 49,
+                "DeviceName": "Neo Coolcam Plug",
+                "FriendlyName": ["Plug"],
+                "Topic": "tasmota_plug",
+                "Power": 1
+            }
+        }"#;
+
+        let status: StatusResponse = serde_json::from_str(json).unwrap();
+        let caps = Capabilities::from_status(&status);
+
+        assert!(
+            caps.energy,
+            "Neo Coolcam (Module 49) should have energy monitoring"
+        );
+        assert_eq!(caps.power_channels, 1);
+    }
+
+    #[test]
+    fn from_status_detects_multi_relay_from_friendly_names() {
+        // Tasmota uses FriendlyName array to indicate multiple relays
+        // Reference: https://tasmota.github.io/docs/JSON-Status-Responses/
+        // Status response example: {"Status": {"FriendlyName": ["Relay1", "Relay2", "Relay3", "Relay4"]}}
+        let json = r#"{
+            "Status": {
+                "Module": 18,
+                "DeviceName": "4CH Pro",
+                "FriendlyName": ["Relay 1", "Relay 2", "Relay 3", "Relay 4"],
+                "Topic": "tasmota_4ch"
+            }
+        }"#;
+
+        let status: StatusResponse = serde_json::from_str(json).unwrap();
+        let caps = Capabilities::from_status(&status);
+
+        assert_eq!(caps.power_channels, 4);
+        assert!(caps.is_multi_relay());
+    }
+
+    #[test]
+    fn from_status_detects_energy_from_status_sns() {
+        // Energy data appears in StatusSNS (Status 10) with ENERGY object
+        // Reference: https://tasmota.github.io/docs/JSON-Status-Responses/
+        // Example: "ENERGY": {"Total": 3.185, "Yesterday": 3.058, "Today": 0.127, "Power": 45, "Voltage": 230}
+        let json = r#"{
+            "Status": {
+                "Module": 18,
+                "DeviceName": "Smart Plug",
+                "FriendlyName": ["Plug"]
+            },
+            "StatusSTS": {
+                "POWER": "ON",
+                "ENERGY": {
+                    "Total": 3.185,
+                    "Yesterday": 3.058,
+                    "Today": 0.127,
+                    "Power": 45,
+                    "Factor": 0.95,
+                    "Voltage": 230,
+                    "Current": 0.195
+                }
+            }
+        }"#;
+
+        let status: StatusResponse = serde_json::from_str(json).unwrap();
+        let caps = Capabilities::from_status(&status);
+
+        assert!(
+            caps.energy,
+            "Device with ENERGY in StatusSTS should have energy monitoring"
+        );
+    }
+
+    #[test]
+    fn from_status_detects_dimmer_capability() {
+        // Light devices report Dimmer in sensor status
+        // Reference: https://tasmota.github.io/docs/Lights/
+        // Dimmer range: 0-100%
+        let json = r#"{
+            "Status": {
+                "Module": 18,
+                "DeviceName": "Dimmable Light",
+                "FriendlyName": ["Light"]
+            },
+            "StatusSNS": {
+                "Time": "2024-01-15T12:00:00",
+                "Dimmer": 75
+            }
+        }"#;
+
+        let status: StatusResponse = serde_json::from_str(json).unwrap();
+        let caps = Capabilities::from_status(&status);
+
+        assert!(
+            caps.dimmer,
+            "Device with Dimmer in StatusSNS should have dimmer capability"
+        );
+        assert!(caps.is_light());
+    }
+
+    #[test]
+    fn from_status_detects_color_temp_capability() {
+        // CCT lights report CT (color temperature) in mireds (153-500)
+        // Reference: https://tasmota.github.io/docs/Lights/
+        // CT 153 = 6500K (cold white), CT 500 = 2000K (warm white)
+        let json = r#"{
+            "Status": {
+                "Module": 18,
+                "DeviceName": "CCT Bulb",
+                "FriendlyName": ["Bulb"]
+            },
+            "StatusSNS": {
+                "Time": "2024-01-15T12:00:00",
+                "CT": 250
+            }
+        }"#;
+
+        let status: StatusResponse = serde_json::from_str(json).unwrap();
+        let caps = Capabilities::from_status(&status);
+
+        assert!(
+            caps.color_temp,
+            "Device with CT in StatusSNS should have color temp capability"
+        );
+        assert!(caps.is_light());
+    }
+
+    #[test]
+    fn from_status_detects_rgb_capability() {
+        // RGB lights report HSBColor as "Hue,Saturation,Brightness"
+        // Reference: https://tasmota.github.io/docs/Lights/
+        // Example: "HSBColor": "180,100,100" (Hue=180°, Sat=100%, Bright=100%)
+        let json = r#"{
+            "Status": {
+                "Module": 18,
+                "DeviceName": "RGB Bulb",
+                "FriendlyName": ["Bulb"]
+            },
+            "StatusSNS": {
+                "Time": "2024-01-15T12:00:00",
+                "HSBColor": "180,100,100"
+            }
+        }"#;
+
+        let status: StatusResponse = serde_json::from_str(json).unwrap();
+        let caps = Capabilities::from_status(&status);
+
+        assert!(
+            caps.rgb,
+            "Device with HSBColor in StatusSNS should have RGB capability"
+        );
+        assert!(caps.is_light());
+    }
+
+    #[test]
+    fn from_status_detects_full_rgbcct_light() {
+        // RGBCCT lights (5-channel) have Dimmer, CT, and HSBColor
+        // Reference: https://tasmota.github.io/docs/Lights/
+        // Response format from tele/STATE or Status 11
+        let json = r#"{
+            "Status": {
+                "Module": 18,
+                "DeviceName": "RGBCCT Bulb",
+                "FriendlyName": ["Smart Bulb"]
+            },
+            "StatusSNS": {
+                "Time": "2024-01-15T12:00:00",
+                "Dimmer": 100,
+                "Color": "255,128,64,200,100",
+                "HSBColor": "20,75,100",
+                "White": 78,
+                "CT": 300,
+                "Channel": [100, 50, 25, 78, 39]
+            }
+        }"#;
+
+        let status: StatusResponse = serde_json::from_str(json).unwrap();
+        let caps = Capabilities::from_status(&status);
+
+        assert!(caps.dimmer, "RGBCCT light should have dimmer");
+        assert!(caps.color_temp, "RGBCCT light should have color temp");
+        assert!(caps.rgb, "RGBCCT light should have RGB");
+        assert!(caps.is_light());
+    }
+
+    #[test]
+    fn from_status_basic_switch_no_special_capabilities() {
+        // Basic switch/relay with no light or energy features
+        let json = r#"{
+            "Status": {
+                "Module": 1,
+                "DeviceName": "Basic Switch",
+                "FriendlyName": ["Switch"],
+                "Topic": "tasmota_switch",
+                "Power": 0
+            }
+        }"#;
+
+        let status: StatusResponse = serde_json::from_str(json).unwrap();
+        let caps = Capabilities::from_status(&status);
+
+        assert_eq!(caps.power_channels, 1);
+        assert!(!caps.dimmer);
+        assert!(!caps.color_temp);
+        assert!(!caps.rgb);
+        assert!(!caps.energy);
+        assert!(!caps.is_light());
+    }
+
+    #[test]
+    fn from_status_power_channels_clamped_to_8() {
+        // Tasmota supports max 8 relays (POWER1-POWER8)
+        // Reference: https://tasmota.github.io/docs/Commands/#power
+        let json = r#"{
+            "Status": {
+                "Module": 18,
+                "DeviceName": "Many Relays",
+                "FriendlyName": ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10"]
+            }
+        }"#;
+
+        let status: StatusResponse = serde_json::from_str(json).unwrap();
+        let caps = Capabilities::from_status(&status);
+
+        assert_eq!(
+            caps.power_channels, 8,
+            "Power channels should be clamped to max 8"
+        );
+    }
+
+    #[test]
+    fn from_status_empty_response() {
+        // Handle gracefully when status response has no data
+        let json = r#"{}"#;
+
+        let status: StatusResponse = serde_json::from_str(json).unwrap();
+        let caps = Capabilities::from_status(&status);
+
+        // Should return defaults
+        assert_eq!(caps.power_channels, 1);
+        assert!(!caps.dimmer);
+        assert!(!caps.color_temp);
+        assert!(!caps.rgb);
+        assert!(!caps.energy);
+    }
+
+    #[test]
+    fn builder_with_color_temp() {
+        let caps = CapabilitiesBuilder::new().with_color_temp().build();
+
+        assert!(caps.color_temp);
+        assert!(caps.is_light());
+    }
+
+    #[test]
+    fn builder_with_rgb() {
+        let caps = CapabilitiesBuilder::new().with_rgb().build();
+
+        assert!(caps.rgb);
+        assert!(caps.is_light());
     }
 }

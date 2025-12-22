@@ -7,7 +7,10 @@
 
 use serde::Deserialize;
 
-/// Energy monitoring response from Status 8 or Energy command.
+/// Energy monitoring response from Status 10 command.
+///
+/// Note: Status 10 replaces the deprecated Status 8 for sensor data.
+/// Reference: <https://tasmota.github.io/docs/Commands/#management>
 ///
 /// Contains power consumption data including:
 /// - Current power (Watts)

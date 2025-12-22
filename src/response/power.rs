@@ -196,4 +196,130 @@ mod tests {
         assert_eq!(states[0], (1, PowerState::On));
         assert_eq!(states[1], (2, PowerState::Off));
     }
+
+    // ========================================================================
+    // Edge case tests based on Tasmota protocol
+    // Reference: https://tasmota.github.io/docs/Commands/#power
+    // ========================================================================
+
+    #[test]
+    fn power_state_index_out_of_range() {
+        // Tasmota only supports POWER1-POWER8 (max 8 relays)
+        // Reference: https://tasmota.github.io/docs/Commands/#power
+        let json = r#"{"POWER1": "ON"}"#;
+        let response: PowerResponse = serde_json::from_str(json).unwrap();
+
+        // Index 0 returns POWER (single relay format)
+        assert!(response.power_state(0).unwrap().is_none());
+
+        // Indices 9+ should return None (out of Tasmota's range)
+        assert!(response.power_state(9).unwrap().is_none());
+        assert!(response.power_state(10).unwrap().is_none());
+        assert!(response.power_state(255).unwrap().is_none());
+    }
+
+    #[test]
+    fn first_power_state_returns_error_when_empty() {
+        // When no POWER fields are present, first_power_state should error
+        let json = r#"{"Dimmer": 100}"#;
+        let response: PowerResponse = serde_json::from_str(json).unwrap();
+
+        let result = response.first_power_state();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn relay_count_full_8_relays() {
+        // Tasmota Sonoff 4CH Pro R3 or custom builds support up to 8 relays
+        // Reference: https://tasmota.github.io/docs/Commands/#power
+        let json = r#"{
+            "POWER1": "ON",
+            "POWER2": "OFF",
+            "POWER3": "ON",
+            "POWER4": "OFF",
+            "POWER5": "ON",
+            "POWER6": "OFF",
+            "POWER7": "ON",
+            "POWER8": "OFF"
+        }"#;
+        let response: PowerResponse = serde_json::from_str(json).unwrap();
+
+        assert_eq!(response.relay_count(), 8);
+
+        // Verify all states are accessible
+        assert_eq!(response.power_state(5).unwrap().unwrap(), PowerState::On);
+        assert_eq!(response.power_state(6).unwrap().unwrap(), PowerState::Off);
+        assert_eq!(response.power_state(7).unwrap().unwrap(), PowerState::On);
+        assert_eq!(response.power_state(8).unwrap().unwrap(), PowerState::Off);
+    }
+
+    #[test]
+    fn relay_count_sparse_relays() {
+        // Some configurations may have gaps (e.g., POWER1, POWER3, POWER5)
+        let json = r#"{
+            "POWER1": "ON",
+            "POWER3": "ON",
+            "POWER5": "ON"
+        }"#;
+        let response: PowerResponse = serde_json::from_str(json).unwrap();
+
+        // relay_count counts all present POWER fields
+        assert_eq!(response.relay_count(), 3);
+
+        // Gaps return None
+        assert!(response.power_state(2).unwrap().is_none());
+        assert!(response.power_state(4).unwrap().is_none());
+    }
+
+    #[test]
+    fn all_power_states_with_8_relays() {
+        let json = r#"{
+            "POWER1": "ON",
+            "POWER2": "OFF",
+            "POWER3": "ON",
+            "POWER4": "OFF",
+            "POWER5": "ON",
+            "POWER6": "OFF",
+            "POWER7": "ON",
+            "POWER8": "OFF"
+        }"#;
+        let response: PowerResponse = serde_json::from_str(json).unwrap();
+
+        let states = response.all_power_states().unwrap();
+        assert_eq!(states.len(), 8);
+        assert_eq!(states[4], (5, PowerState::On));
+        assert_eq!(states[5], (6, PowerState::Off));
+        assert_eq!(states[6], (7, PowerState::On));
+        assert_eq!(states[7], (8, PowerState::Off));
+    }
+
+    #[test]
+    fn power_response_with_additional_fields() {
+        // Tasmota often includes other fields in RESULT responses
+        // Reference: https://tasmota.github.io/docs/MQTT/
+        // Example: {"POWER":"ON","Dimmer":100,"Color":"FFFFFF"}
+        let json = r#"{
+            "POWER": "ON",
+            "Dimmer": 100,
+            "Color": "FFFFFF",
+            "HSBColor": "0,0,100"
+        }"#;
+        let response: PowerResponse = serde_json::from_str(json).unwrap();
+
+        assert_eq!(response.first_power_state().unwrap(), PowerState::On);
+        assert_eq!(response.relay_count(), 1);
+    }
+
+    #[test]
+    fn power_response_mixed_power_formats() {
+        // Single POWER and indexed POWER1 can coexist
+        // POWER is alias for POWER1 on single-relay devices
+        let json = r#"{"POWER": "ON", "POWER1": "ON"}"#;
+        let response: PowerResponse = serde_json::from_str(json).unwrap();
+
+        // Both should represent the same relay
+        assert_eq!(response.power_state(1).unwrap().unwrap(), PowerState::On);
+        // relay_count should count as 1 (POWER and POWER1 are the same relay)
+        assert_eq!(response.relay_count(), 1);
+    }
 }
