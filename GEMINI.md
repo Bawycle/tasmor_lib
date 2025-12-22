@@ -27,6 +27,7 @@ cargo test                                       # Run all tests
 cargo test <test_name>                           # Run a specific test
 cargo test --lib                                 # Run only library tests
 cargo test --doc                                 # Run documentation tests
+cargo tarpaulin                                  # Determine code coverage achieved via tests
 cargo fmt                                        # Format code
 cargo fmt --check                                # Check formatting without modifying
 cargo clippy -- -D warnings -W clippy::pedantic # Lint with pedantic warnings as errors
