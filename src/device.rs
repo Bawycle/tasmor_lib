@@ -479,6 +479,26 @@ impl MqttDeviceBuilder {
     }
 
     /// Sets authentication credentials for the MQTT broker.
+    ///
+    /// Most MQTT brokers require authentication. Use this method to provide
+    /// the username and password configured on your broker.
+    ///
+    /// # Arguments
+    ///
+    /// * `username` - MQTT broker username
+    /// * `password` - MQTT broker password
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use tasmor_lib::{Device, Capabilities};
+    ///
+    /// let device = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_bulb")
+    ///     .with_credentials("mqtt_user", "mqtt_password")
+    ///     .with_capabilities(Capabilities::basic())
+    ///     .build()
+    ///     .await?;
+    /// ```
     #[must_use]
     pub fn with_credentials(
         mut self,

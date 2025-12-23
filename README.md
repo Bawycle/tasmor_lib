@@ -65,8 +65,9 @@ use tasmor_lib::{Device, Capabilities, HsbColor};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Connect to device via MQTT broker
+    // Connect to device via MQTT broker (with authentication)
     let device = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_bulb")
+        .with_credentials("mqtt_user", "mqtt_password")
         .with_capabilities(Capabilities::rgbcct_light())
         .build_without_probe()
         .await?;

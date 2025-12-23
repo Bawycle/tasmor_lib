@@ -247,7 +247,25 @@ impl MqttClientBuilder {
         self
     }
 
-    /// Sets authentication credentials.
+    /// Sets authentication credentials for the MQTT broker.
+    ///
+    /// # Arguments
+    ///
+    /// * `username` - MQTT broker username
+    /// * `password` - MQTT broker password
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use tasmor_lib::protocol::MqttClientBuilder;
+    ///
+    /// let client = MqttClientBuilder::new()
+    ///     .broker("mqtt://192.168.1.50:1883")
+    ///     .device_topic("tasmota_switch")
+    ///     .credentials("mqtt_user", "mqtt_password")
+    ///     .build()
+    ///     .await?;
+    /// ```
     #[must_use]
     pub fn credentials(mut self, username: impl Into<String>, password: impl Into<String>) -> Self {
         self.username = Some(username.into());
