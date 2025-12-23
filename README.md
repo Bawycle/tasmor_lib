@@ -112,7 +112,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 - [ ] Auto-discovery
 - [ ] WebSocket support for real-time updates
 - [ ] Sequence command builder
-- [ ] Additional device types (shutters, fans, sensors)
 - [ ] Stabilize API for 1.0 release
 
 ## Development
