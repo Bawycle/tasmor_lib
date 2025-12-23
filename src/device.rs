@@ -461,6 +461,8 @@ impl Device<MqttClient> {
 pub struct MqttDeviceBuilder {
     broker: String,
     topic: String,
+    username: Option<String>,
+    password: Option<String>,
     capabilities: Option<Capabilities>,
 }
 
@@ -470,8 +472,22 @@ impl MqttDeviceBuilder {
         Self {
             broker: broker.into(),
             topic: topic.into(),
+            username: None,
+            password: None,
             capabilities: None,
         }
+    }
+
+    /// Sets authentication credentials for the MQTT broker.
+    #[must_use]
+    pub fn with_credentials(
+        mut self,
+        username: impl Into<String>,
+        password: impl Into<String>,
+    ) -> Self {
+        self.username = Some(username.into());
+        self.password = Some(password.into());
+        self
     }
 
     /// Sets the device capabilities manually (skips auto-detection).
@@ -487,9 +503,7 @@ impl MqttDeviceBuilder {
     ///
     /// Returns error if connection or capability detection fails.
     pub async fn build(self) -> Result<Device<MqttClient>, Error> {
-        let client = MqttClient::connect(&self.broker, &self.topic)
-            .await
-            .map_err(Error::Protocol)?;
+        let client = self.create_client().await?;
 
         // Auto-detect capabilities
         let capabilities = if let Some(caps) = self.capabilities {
@@ -510,11 +524,24 @@ impl MqttDeviceBuilder {
     ///
     /// Returns error if the MQTT client cannot be created.
     pub async fn build_without_probe(self) -> Result<Device<MqttClient>, Error> {
-        let client = MqttClient::connect(&self.broker, &self.topic)
-            .await
-            .map_err(Error::Protocol)?;
+        let client = self.create_client().await?;
         let capabilities = self.capabilities.unwrap_or_default();
         Ok(Device::new(client, capabilities))
+    }
+
+    /// Creates the MQTT client with the configured options.
+    async fn create_client(&self) -> Result<MqttClient, Error> {
+        use crate::protocol::MqttClientBuilder;
+
+        let mut builder = MqttClientBuilder::new()
+            .broker(&self.broker)
+            .device_topic(&self.topic);
+
+        if let (Some(username), Some(password)) = (&self.username, &self.password) {
+            builder = builder.credentials(username, password);
+        }
+
+        builder.build().await.map_err(Error::Protocol)
     }
 }
 
@@ -539,5 +566,17 @@ mod tests {
 
         assert_eq!(builder.broker, "mqtt://broker:1883");
         assert_eq!(builder.topic, "tasmota_switch");
+    }
+
+    #[test]
+    fn mqtt_device_builder_with_credentials() {
+        let builder = Device::<MqttClient>::mqtt("mqtt://broker:1883", "tasmota_switch")
+            .with_credentials("mqtt_user", "mqtt_pass")
+            .with_capabilities(Capabilities::basic());
+
+        assert_eq!(builder.broker, "mqtt://broker:1883");
+        assert_eq!(builder.topic, "tasmota_switch");
+        assert_eq!(builder.username, Some("mqtt_user".to_string()));
+        assert_eq!(builder.password, Some("mqtt_pass".to_string()));
     }
 }

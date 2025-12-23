@@ -283,9 +283,46 @@ impl MqttClientBuilder {
             .device_topic
             .ok_or_else(|| ProtocolError::InvalidAddress("device_topic is required".to_string()))?;
 
-        // For now, use the simple connect method
-        // TODO: Add support for authentication and custom options
-        MqttClient::connect(broker, device_topic).await
+        // Parse broker URL
+        let (host, port) = parse_mqtt_url(&broker)?;
+
+        // Generate or use provided client ID
+        let client_id = self
+            .client_id
+            .unwrap_or_else(|| format!("tasmor_lib_{}", std::process::id()));
+
+        let mut mqtt_options = MqttOptions::new(&client_id, host, port);
+        mqtt_options.set_keep_alive(self.keep_alive.unwrap_or(Duration::from_secs(30)));
+        mqtt_options.set_clean_session(true);
+
+        // Set credentials if provided
+        if let (Some(username), Some(password)) = (self.username, self.password) {
+            mqtt_options.set_credentials(username, password);
+        }
+
+        let (client, event_loop) = AsyncClient::new(mqtt_options, 10);
+
+        // Create channel for receiving responses
+        let (response_tx, response_rx) = mpsc::channel::<String>(10);
+
+        // Subscribe to response topics
+        let stat_topic = format!("stat/{device_topic}/+");
+        client
+            .subscribe(&stat_topic, QoS::AtLeastOnce)
+            .await
+            .map_err(ProtocolError::Mqtt)?;
+
+        // Spawn event loop handler
+        let topic_clone = device_topic.clone();
+        tokio::spawn(async move {
+            handle_mqtt_events(event_loop, topic_clone, response_tx).await;
+        });
+
+        Ok(MqttClient {
+            client,
+            topic: device_topic,
+            response_rx: Arc::new(Mutex::new(response_rx)),
+        })
     }
 }
 
@@ -312,5 +349,22 @@ mod tests {
         let (host, port) = parse_mqtt_url("tcp://broker.local:8883").unwrap();
         assert_eq!(host, "broker.local");
         assert_eq!(port, 8883);
+    }
+
+    #[test]
+    fn mqtt_client_builder_with_credentials() {
+        let builder = MqttClientBuilder::new()
+            .broker("mqtt://broker:1883")
+            .device_topic("tasmota_switch")
+            .credentials("user", "pass")
+            .client_id("my_client")
+            .keep_alive(Duration::from_secs(60));
+
+        assert_eq!(builder.broker, Some("mqtt://broker:1883".to_string()));
+        assert_eq!(builder.device_topic, Some("tasmota_switch".to_string()));
+        assert_eq!(builder.username, Some("user".to_string()));
+        assert_eq!(builder.password, Some("pass".to_string()));
+        assert_eq!(builder.client_id, Some("my_client".to_string()));
+        assert_eq!(builder.keep_alive, Some(Duration::from_secs(60)));
     }
 }
