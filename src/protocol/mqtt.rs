@@ -6,7 +6,11 @@
 //! MQTT protocol implementation for Tasmota devices.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
+
+/// Global counter for generating unique client IDs.
+static CLIENT_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use rumqttc::{AsyncClient, EventLoop, MqttOptions, QoS};
 use tokio::sync::{Mutex, mpsc};
@@ -60,8 +64,9 @@ impl MqttClient {
         // Parse broker URL
         let (host, port) = parse_mqtt_url(&broker_url)?;
 
-        // Generate a unique client ID
-        let client_id = format!("tasmor_lib_{}", std::process::id());
+        // Generate a unique client ID (PID + counter to avoid conflicts)
+        let counter = CLIENT_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let client_id = format!("tasmor_{}_{}", std::process::id(), counter);
 
         let mut mqtt_options = MqttOptions::new(&client_id, host, port);
         mqtt_options.set_keep_alive(Duration::from_secs(30));
@@ -84,6 +89,12 @@ impl MqttClient {
         tokio::spawn(async move {
             handle_mqtt_events(event_loop, topic_clone, response_tx).await;
         });
+
+        // Give time for connection establishment and subscription acknowledgment
+        // This delay ensures the broker has processed our CONNECT and SUBSCRIBE
+        // before we start sending commands. 500ms is conservative but necessary
+        // for reliable operation with real brokers.
+        tokio::time::sleep(Duration::from_millis(500)).await;
 
         Ok(Self {
             client,
@@ -188,14 +199,22 @@ async fn handle_mqtt_events(
     topic: String,
     response_tx: mpsc::Sender<String>,
 ) {
-    use rumqttc::Event;
+    use rumqttc::{Event, Packet};
 
     loop {
         match event_loop.poll().await {
-            Ok(Event::Incoming(rumqttc::Packet::Publish(publish))) => {
-                // Check if this is a response for our device
-                let expected_prefix = format!("stat/{topic}/");
-                if publish.topic.starts_with(&expected_prefix)
+            Ok(Event::Incoming(Packet::ConnAck(connack))) => {
+                tracing::debug!(?connack, "MQTT connected");
+            }
+            Ok(Event::Incoming(Packet::SubAck(suback))) => {
+                tracing::debug!(?suback, "MQTT subscription acknowledged");
+            }
+            Ok(Event::Incoming(Packet::Publish(publish))) => {
+                // Check if this is a RESULT response for our device
+                // Tasmota sends responses on both stat/<topic>/RESULT (JSON) and
+                // stat/<topic>/<COMMAND> (plain text). We only want the JSON responses.
+                let result_topic = format!("stat/{topic}/RESULT");
+                if publish.topic == result_topic
                     && let Ok(payload) = String::from_utf8(publish.payload.to_vec())
                 {
                     tracing::debug!(
@@ -304,10 +323,11 @@ impl MqttClientBuilder {
         // Parse broker URL
         let (host, port) = parse_mqtt_url(&broker)?;
 
-        // Generate or use provided client ID
-        let client_id = self
-            .client_id
-            .unwrap_or_else(|| format!("tasmor_lib_{}", std::process::id()));
+        // Generate or use provided client ID (PID + counter to avoid conflicts)
+        let client_id = self.client_id.unwrap_or_else(|| {
+            let counter = CLIENT_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+            format!("tasmor_{}_{}", std::process::id(), counter)
+        });
 
         let mut mqtt_options = MqttOptions::new(&client_id, host, port);
         mqtt_options.set_keep_alive(self.keep_alive.unwrap_or(Duration::from_secs(30)));
@@ -335,6 +355,12 @@ impl MqttClientBuilder {
         tokio::spawn(async move {
             handle_mqtt_events(event_loop, topic_clone, response_tx).await;
         });
+
+        // Give time for connection establishment and subscription acknowledgment
+        // This delay ensures the broker has processed our CONNECT and SUBSCRIBE
+        // before we start sending commands. 500ms is conservative but necessary
+        // for reliable operation with real brokers.
+        tokio::time::sleep(Duration::from_millis(500)).await;
 
         Ok(MqttClient {
             client,

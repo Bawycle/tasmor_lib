@@ -33,8 +33,8 @@ async fn start_mock_broker(port: u16) {
         let _ = start_mqtt_server(config).await;
     });
 
-    // Give the broker time to start and bind to port
-    sleep(Duration::from_millis(200)).await;
+    // Give the broker time to start, bind to port, and be ready to accept connections
+    sleep(Duration::from_millis(500)).await;
 }
 
 // ============================================================================

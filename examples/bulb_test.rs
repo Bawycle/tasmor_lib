@@ -26,7 +26,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("Usage: {} <broker> <topic> <username> <password>", args[0]);
         eprintln!();
         eprintln!("Example:");
-        eprintln!("  cargo run --example bulb_test -- mqtt://192.168.1.50:1883 tasmota_ABCDEF user pass");
+        eprintln!(
+            "  cargo run --example bulb_test -- mqtt://192.168.1.50:1883 tasmota_ABCDEF user pass"
+        );
         std::process::exit(1);
     }
 
