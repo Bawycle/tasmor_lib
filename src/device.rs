@@ -32,9 +32,10 @@ use crate::types::{ColorTemp, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerStat
 ///
 /// Use [`Device::http`] or [`Device::mqtt`] to create a device builder:
 ///
-/// ```ignore
-/// use tasmor_lib::Device;
+/// ```no_run
+/// use tasmor_lib::{Device, Capabilities};
 ///
+/// # async fn example() -> tasmor_lib::Result<()> {
 /// // HTTP device with auto-detection
 /// let device = Device::http("192.168.1.100")
 ///     .build()
@@ -44,6 +45,8 @@ use crate::types::{ColorTemp, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerStat
 /// let device = Device::http("192.168.1.100")
 ///     .with_capabilities(Capabilities::rgbcct_light())
 ///     .build_without_probe()?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Device<P: Protocol> {
@@ -208,7 +211,7 @@ impl<P: Protocol> Device<P> {
     ///
     /// Returns error if the device doesn't support dimming or the command fails.
     pub async fn set_dimmer(&self, value: Dimmer) -> Result<DimmerResponse, Error> {
-        self.check_capability("dimmer", self.capabilities.dimmer)?;
+        self.check_capability("dimmer", self.capabilities.dimmer())?;
         let cmd = DimmerCommand::Set(value);
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
@@ -222,7 +225,7 @@ impl<P: Protocol> Device<P> {
     ///
     /// Returns error if the device doesn't support dimming or the command fails.
     pub async fn get_dimmer(&self) -> Result<DimmerResponse, Error> {
-        self.check_capability("dimmer", self.capabilities.dimmer)?;
+        self.check_capability("dimmer", self.capabilities.dimmer())?;
         let cmd = DimmerCommand::Get;
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
@@ -238,7 +241,7 @@ impl<P: Protocol> Device<P> {
     ///
     /// Returns error if the device doesn't support color temperature or the command fails.
     pub async fn set_color_temp(&self, value: ColorTemp) -> Result<ColorTempResponse, Error> {
-        self.check_capability("color temperature", self.capabilities.color_temp)?;
+        self.check_capability("color temperature", self.capabilities.color_temp())?;
         let cmd = ColorTempCommand::Set(value);
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
@@ -252,7 +255,7 @@ impl<P: Protocol> Device<P> {
     ///
     /// Returns error if the device doesn't support color temperature or the command fails.
     pub async fn get_color_temp(&self) -> Result<ColorTempResponse, Error> {
-        self.check_capability("color temperature", self.capabilities.color_temp)?;
+        self.check_capability("color temperature", self.capabilities.color_temp())?;
         let cmd = ColorTempCommand::Get;
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
@@ -268,7 +271,7 @@ impl<P: Protocol> Device<P> {
     ///
     /// Returns error if the device doesn't support RGB or the command fails.
     pub async fn set_hsb_color(&self, color: HsbColor) -> Result<HsbColorResponse, Error> {
-        self.check_capability("RGB color", self.capabilities.rgb)?;
+        self.check_capability("RGB color", self.capabilities.rgb())?;
         let cmd = HsbColorCommand::Set(color);
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
@@ -282,7 +285,7 @@ impl<P: Protocol> Device<P> {
     ///
     /// Returns error if the device doesn't support RGB or the command fails.
     pub async fn get_hsb_color(&self) -> Result<HsbColorResponse, Error> {
-        self.check_capability("RGB color", self.capabilities.rgb)?;
+        self.check_capability("RGB color", self.capabilities.rgb())?;
         let cmd = HsbColorCommand::Get;
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
@@ -348,7 +351,7 @@ impl<P: Protocol> Device<P> {
     ///
     /// Returns error if the device doesn't support energy monitoring or the command fails.
     pub async fn energy(&self) -> Result<EnergyResponse, Error> {
-        self.check_capability("energy monitoring", self.capabilities.energy)?;
+        self.check_capability("energy monitoring", self.capabilities.energy())?;
         let cmd = EnergyCommand::Get;
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
@@ -511,14 +514,17 @@ impl MqttDeviceBuilder {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```no_run
     /// use tasmor_lib::{Device, Capabilities};
     ///
+    /// # async fn example() -> tasmor_lib::Result<()> {
     /// let device = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_bulb")
     ///     .with_credentials("mqtt_user", "mqtt_password")
     ///     .with_capabilities(Capabilities::basic())
     ///     .build()
     ///     .await?;
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn with_credentials(

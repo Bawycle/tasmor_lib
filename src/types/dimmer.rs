@@ -36,6 +36,7 @@ use crate::error::ValueError;
 /// assert!(Dimmer::new(101).is_err());
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Dimmer(u8);
 
 impl Dimmer {
@@ -131,12 +132,6 @@ impl Dimmer {
     }
 }
 
-impl Default for Dimmer {
-    fn default() -> Self {
-        Self::MAX
-    }
-}
-
 impl fmt::Display for Dimmer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}%", self.0)
@@ -205,10 +200,5 @@ mod tests {
     fn dimmer_ordering() {
         assert!(Dimmer::MIN < Dimmer::MAX);
         assert!(Dimmer::new(50).unwrap() < Dimmer::new(75).unwrap());
-    }
-
-    #[test]
-    fn dimmer_default() {
-        assert_eq!(Dimmer::default(), Dimmer::MAX);
     }
 }

@@ -25,12 +25,15 @@ use super::broker_pool::{BrokerPool, SharedConnection};
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
 /// use tasmor_lib::protocol::PooledMqttClient;
 ///
+/// # async fn example() -> tasmor_lib::Result<()> {
 /// // Create multiple clients that share the same connection
 /// let client1 = PooledMqttClient::connect("mqtt://broker:1883", "device1", None).await?;
 /// let client2 = PooledMqttClient::connect("mqtt://broker:1883", "device2", None).await?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct PooledMqttClient {
@@ -144,7 +147,7 @@ impl Protocol for PooledMqttClient {
         // Wait for response
         let body = self.wait_response(Duration::from_secs(5)).await?;
 
-        Ok(CommandResponse { body })
+        Ok(CommandResponse::new(body))
     }
 
     async fn send_raw(&self, command: &str) -> Result<CommandResponse, ProtocolError> {
@@ -164,7 +167,7 @@ impl Protocol for PooledMqttClient {
 
         let body = self.wait_response(Duration::from_secs(5)).await?;
 
-        Ok(CommandResponse { body })
+        Ok(CommandResponse::new(body))
     }
 }
 

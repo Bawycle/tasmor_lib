@@ -32,6 +32,7 @@ use crate::error::ValueError;
 /// let slow = FadeSpeed::SLOW;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FadeSpeed(u8);
 
 impl FadeSpeed {

@@ -45,7 +45,7 @@ mod http_client {
         };
 
         let response = client.send_command(&cmd).await.unwrap();
-        assert!(response.body.contains("ON"));
+        assert!(response.body().contains("ON"));
     }
 
     #[tokio::test]
@@ -70,7 +70,7 @@ mod http_client {
         };
 
         let response = client.send_command(&cmd).await.unwrap();
-        assert!(response.body.contains("OFF"));
+        assert!(response.body().contains("OFF"));
     }
 
     #[tokio::test]
@@ -107,8 +107,8 @@ mod http_client {
         let cmd = StatusCommand::all();
         let response = client.send_command(&cmd).await.unwrap();
 
-        assert!(response.body.contains("Tasmota"));
-        assert!(response.body.contains("13.1.0"));
+        assert!(response.body().contains("Tasmota"));
+        assert!(response.body().contains("13.1.0"));
     }
 
     #[tokio::test]
@@ -131,7 +131,7 @@ mod http_client {
         let cmd = DimmerCommand::Set(Dimmer::new(75).unwrap());
         let response = client.send_command(&cmd).await.unwrap();
 
-        assert!(response.body.contains("75"));
+        assert!(response.body().contains("75"));
     }
 
     #[tokio::test]
@@ -154,7 +154,7 @@ mod http_client {
         let cmd = ColorTempCommand::Set(ColorTemp::new(250).unwrap());
         let response = client.send_command(&cmd).await.unwrap();
 
-        assert!(response.body.contains("250"));
+        assert!(response.body().contains("250"));
     }
 
     #[tokio::test]
@@ -177,7 +177,7 @@ mod http_client {
         let cmd = HsbColorCommand::Set(HsbColor::new(120, 100, 80).unwrap());
         let response = client.send_command(&cmd).await.unwrap();
 
-        assert!(response.body.contains("120,100,80"));
+        assert!(response.body().contains("120,100,80"));
     }
 
     #[tokio::test]
@@ -212,8 +212,8 @@ mod http_client {
         let cmd = EnergyCommand::Get;
         let response = client.send_command(&cmd).await.unwrap();
 
-        assert!(response.body.contains("45"));
-        assert!(response.body.contains("230"));
+        assert!(response.body().contains("45"));
+        assert!(response.body().contains("230"));
     }
 
     #[tokio::test]
@@ -236,7 +236,7 @@ mod http_client {
         let cmd = FadeCommand::Enable;
         let response = client.send_command(&cmd).await.unwrap();
 
-        assert!(response.body.contains("ON"));
+        assert!(response.body().contains("ON"));
     }
 
     #[tokio::test]
@@ -259,7 +259,7 @@ mod http_client {
         let cmd = SpeedCommand::Set(FadeSpeed::new(20).unwrap());
         let response = client.send_command(&cmd).await.unwrap();
 
-        assert!(response.body.contains("20"));
+        assert!(response.body().contains("20"));
     }
 
     #[tokio::test]
@@ -283,7 +283,7 @@ mod http_client {
         let cmd = PowerOnFadeCommand::Enable;
         let response = client.send_command(&cmd).await.unwrap();
 
-        assert!(response.body.contains("ON"));
+        assert!(response.body().contains("ON"));
     }
 
     #[tokio::test]
@@ -313,7 +313,7 @@ mod http_client {
         };
 
         let response = client.send_command(&cmd).await.unwrap();
-        assert!(response.body.contains("ON"));
+        assert!(response.body().contains("ON"));
     }
 }
 
@@ -358,7 +358,7 @@ mod device_auto_detection {
         let host = mock_server.uri().replace("http://", "");
         let device = Device::http(&host).build().await.unwrap();
 
-        assert_eq!(device.capabilities().power_channels, 1);
+        assert_eq!(device.capabilities().power_channels(), 1);
     }
 
     #[tokio::test]
@@ -387,7 +387,7 @@ mod device_auto_detection {
         let host = mock_server.uri().replace("http://", "");
         let device = Device::http(&host).build().await.unwrap();
 
-        assert!(device.capabilities().energy);
+        assert!(device.capabilities().energy());
     }
 
     #[tokio::test]
@@ -401,9 +401,9 @@ mod device_auto_detection {
             .build_without_probe()
             .unwrap();
 
-        assert!(device.capabilities().dimmer);
-        assert!(device.capabilities().color_temp);
-        assert!(device.capabilities().rgb);
+        assert!(device.capabilities().dimmer());
+        assert!(device.capabilities().color_temp());
+        assert!(device.capabilities().rgb());
     }
 }
 

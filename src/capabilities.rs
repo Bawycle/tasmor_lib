@@ -33,41 +33,100 @@ use crate::response::StatusResponse;
 ///
 /// // Default capabilities (single relay, no extras)
 /// let basic = Capabilities::default();
-/// assert_eq!(basic.power_channels, 1);
-/// assert!(!basic.dimmer);
+/// assert_eq!(basic.power_channels(), 1);
+/// assert!(!basic.dimmer());
 ///
-/// // RGB light bulb capabilities
-/// let rgb_bulb = Capabilities {
-///     power_channels: 1,
-///     dimmer: true,
-///     color_temp: true,
-///     rgb: true,
-///     energy: false,
-/// };
+/// // RGB light bulb capabilities using builder
+/// let rgb_bulb = tasmor_lib::CapabilitiesBuilder::new()
+///     .with_dimmer()
+///     .with_color_temp()
+///     .with_rgb()
+///     .build();
 ///
 /// // Neo Coolcam smart plug
 /// let neo_coolcam = Capabilities::neo_coolcam();
-/// assert!(neo_coolcam.energy);
+/// assert!(neo_coolcam.energy());
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 // Each boolean represents an independent device feature flag that cannot be
 // meaningfully combined into an enum or state machine.
 #[allow(clippy::struct_excessive_bools)]
 pub struct Capabilities {
     /// Number of power relay channels (1-8).
-    pub power_channels: u8,
+    power_channels: u8,
 
     /// Supports dimmer/brightness control.
-    pub dimmer: bool,
+    dimmer: bool,
 
     /// Supports color temperature (CCT) control.
-    pub color_temp: bool,
+    color_temp: bool,
 
     /// Supports RGB/HSB color control.
-    pub rgb: bool,
+    rgb: bool,
 
     /// Supports energy monitoring (voltage, current, power).
-    pub energy: bool,
+    energy: bool,
+}
+
+impl Capabilities {
+    /// Returns the number of power relay channels (1-8).
+    #[must_use]
+    pub const fn power_channels(&self) -> u8 {
+        self.power_channels
+    }
+
+    /// Returns whether the device supports dimmer/brightness control.
+    #[must_use]
+    pub const fn dimmer(&self) -> bool {
+        self.dimmer
+    }
+
+    /// Returns whether the device supports color temperature (CCT) control.
+    #[must_use]
+    pub const fn color_temp(&self) -> bool {
+        self.color_temp
+    }
+
+    /// Returns whether the device supports RGB/HSB color control.
+    #[must_use]
+    pub const fn rgb(&self) -> bool {
+        self.rgb
+    }
+
+    /// Returns whether the device supports energy monitoring.
+    #[must_use]
+    pub const fn energy(&self) -> bool {
+        self.energy
+    }
+
+    /// Returns an iterator over the names of enabled features.
+    ///
+    /// This is useful for introspection and debugging. The returned names
+    /// match the field names: `dimmer`, `color_temp`, `rgb`, `energy`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tasmor_lib::Capabilities;
+    ///
+    /// let caps = Capabilities::rgbcct_light();
+    /// let features: Vec<_> = caps.features().collect();
+    /// assert!(features.contains(&"dimmer"));
+    /// assert!(features.contains(&"color_temp"));
+    /// assert!(features.contains(&"rgb"));
+    /// assert!(!features.contains(&"energy"));
+    /// ```
+    pub fn features(&self) -> impl Iterator<Item = &'static str> {
+        [
+            self.dimmer.then_some("dimmer"),
+            self.color_temp.then_some("color_temp"),
+            self.rgb.then_some("rgb"),
+            self.energy.then_some("energy"),
+        ]
+        .into_iter()
+        .flatten()
+    }
 }
 
 impl Default for Capabilities {
@@ -347,6 +406,34 @@ mod tests {
 
         let multi = CapabilitiesBuilder::new().power_channels(4).build();
         assert!(multi.is_multi_relay());
+    }
+
+    #[test]
+    fn features_iterator() {
+        // No features enabled
+        let basic = Capabilities::basic();
+        assert_eq!(basic.features().count(), 0);
+
+        // Some features enabled
+        let rgb = Capabilities::rgb_light();
+        let features: Vec<_> = rgb.features().collect();
+        assert_eq!(features.len(), 2);
+        assert!(features.contains(&"dimmer"));
+        assert!(features.contains(&"rgb"));
+
+        // All features enabled
+        let full = CapabilitiesBuilder::new()
+            .with_dimmer()
+            .with_color_temp()
+            .with_rgb()
+            .with_energy()
+            .build();
+        let all_features: Vec<_> = full.features().collect();
+        assert_eq!(all_features.len(), 4);
+        assert!(all_features.contains(&"dimmer"));
+        assert!(all_features.contains(&"color_temp"));
+        assert!(all_features.contains(&"rgb"));
+        assert!(all_features.contains(&"energy"));
     }
 
     // ========================================================================

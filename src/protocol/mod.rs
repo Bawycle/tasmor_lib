@@ -36,10 +36,22 @@ use crate::error::ProtocolError;
 #[derive(Debug, Clone)]
 pub struct CommandResponse {
     /// The raw JSON response body.
-    pub body: String,
+    body: String,
 }
 
 impl CommandResponse {
+    /// Creates a new command response with the given body.
+    #[must_use]
+    pub fn new(body: String) -> Self {
+        Self { body }
+    }
+
+    /// Returns the raw JSON response body.
+    #[must_use]
+    pub fn body(&self) -> &str {
+        &self.body
+    }
+
     /// Parses the response as a specific type.
     ///
     /// # Errors
@@ -51,8 +63,11 @@ impl CommandResponse {
 }
 
 /// Trait for protocol implementations that can send commands to Tasmota devices.
+///
+/// All implementations must be `Send + Sync` to allow use in async contexts
+/// and across thread boundaries.
 #[allow(async_fn_in_trait)]
-pub trait Protocol {
+pub trait Protocol: Send + Sync {
     /// Sends a command to the device and returns the response.
     ///
     /// # Arguments

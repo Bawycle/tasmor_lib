@@ -8,6 +8,10 @@ description = "Rust library to control Tasmota devices via MQTT and HTTP"
 keywords = ["tasmota", "mqtt", "home-automation", "iot"]
 categories = ["network-programming", "api-bindings"]
 
+[features]
+default = []
+serde = []
+
 [dependencies]
 tokio = { version = "1.48", features = ["rt-multi-thread", "macros", "sync", "time"] }
 rumqttc = "0.25"
@@ -17,7 +21,7 @@ serde_json = "1.0"
 thiserror = "2.0"
 tracing = "0.1"
 urlencoding = "2.1"
-uuid = { version = "1.0", features = ["v4"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
 
 [dev-dependencies]
 tokio = { version = "1.48", features = ["rt-multi-thread", "macros", "test-util"] }

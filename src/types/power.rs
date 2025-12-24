@@ -29,6 +29,7 @@ use crate::error::ValueError;
 /// assert_eq!(toggle.as_str(), "TOGGLE");
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum PowerState {
     /// Power is off.
     Off,
@@ -117,6 +118,7 @@ impl From<bool> for PowerState {
 /// assert!(PowerIndex::new(9).is_err());
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PowerIndex(u8);
 
 impl PowerIndex {
