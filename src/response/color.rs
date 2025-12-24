@@ -8,7 +8,7 @@
 use serde::Deserialize;
 
 use crate::error::ParseError;
-use crate::types::PowerState;
+use crate::types::{ColorTemp, HsbColor, PowerState};
 
 /// Response from an `HSBColor` command.
 ///
@@ -117,6 +117,19 @@ impl HsbColorResponse {
     /// Returns `ParseError` if the HSB color string is malformed.
     pub fn as_tuple(&self) -> Result<(u16, u8, u8), ParseError> {
         self.parse_hsb()
+    }
+
+    /// Returns the HSB color as an [`HsbColor`](crate::types::HsbColor) type.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ParseError` if the HSB color string is malformed or values are out of range.
+    pub fn hsb_color(&self) -> Result<HsbColor, ParseError> {
+        let (hue, saturation, brightness) = self.parse_hsb()?;
+        HsbColor::new(hue, saturation, brightness).map_err(|e| ParseError::InvalidValue {
+            field: "HSBColor".to_string(),
+            message: e.to_string(),
+        })
     }
 
     /// Returns the raw HSB color string.
@@ -231,6 +244,18 @@ impl ColorTempResponse {
     #[must_use]
     pub fn is_on(&self) -> Option<bool> {
         self.power.as_ref().map(|s| s == "ON")
+    }
+
+    /// Returns the color temperature as a [`ColorTemp`](crate::types::ColorTemp) type.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ParseError` if the color temperature value is out of range.
+    pub fn color_temp(&self) -> Result<ColorTemp, ParseError> {
+        ColorTemp::new(self.ct).map_err(|e| ParseError::InvalidValue {
+            field: "CT".to_string(),
+            message: e.to_string(),
+        })
     }
 }
 

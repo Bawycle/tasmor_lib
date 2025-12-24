@@ -84,6 +84,7 @@ pub mod command;
 mod device;
 pub mod error;
 pub mod event;
+pub mod manager;
 pub mod protocol;
 pub mod response;
 pub mod state;

@@ -32,6 +32,18 @@ pub enum Error {
     /// Error occurred during device operations.
     #[error("device error: {0}")]
     Device(#[from] DeviceError),
+
+    /// Device was not found in the manager.
+    #[error("device not found")]
+    DeviceNotFound,
+
+    /// Device is not connected.
+    #[error("device is not connected")]
+    NotConnected,
+
+    /// Device does not support the requested capability.
+    #[error("device does not support this capability")]
+    CapabilityNotSupported,
 }
 
 /// Errors related to value validation and constraints.
