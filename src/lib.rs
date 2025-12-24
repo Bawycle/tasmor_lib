@@ -85,6 +85,7 @@ mod device;
 pub mod error;
 pub mod protocol;
 pub mod response;
+pub mod state;
 pub mod types;
 
 pub use capabilities::{Capabilities, CapabilitiesBuilder};
