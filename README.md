@@ -17,7 +17,7 @@ A modern, type-safe Rust library for controlling [Tasmota](https://tasmota.githu
 - 🎨 **Full device support** - Lights (RGB/CCT), switches, relays, energy monitors
 - 📡 **Event-driven architecture** - Subscribe to device state changes in real-time
 - 🏊 **Connection pooling** - Efficient broker connection sharing for multi-device setups
-- 🧪 **Well-tested** - Comprehensive unit and integration tests (340+ tests)
+- 🧪 **Well-tested** - Comprehensive unit and integration tests (370+ tests)
 - 📚 **Documented** - Comprehensive API documentation with examples
 
 ### Supported Capabilities
@@ -134,8 +134,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 DeviceEvent::StateChanged { device_id, change, .. } => {
                     println!("Device {:?} changed: {:?}", device_id, change);
                 }
-                DeviceEvent::ConnectionChanged { device_id, connected: true, .. } => {
+                DeviceEvent::ConnectionChanged { device_id, connected: true, initial_state, .. } => {
                     println!("Device {:?} connected", device_id);
+                    // Initial state is available immediately after connection
+                    if let Some(state) = initial_state {
+                        println!("  Power: {:?}, Dimmer: {:?}", state.power(1), state.dimmer());
+                    }
                 }
                 _ => {}
             }
@@ -182,6 +186,23 @@ fn handle_mqtt_message(topic: &str, payload: &str) {
         }
     }
 }
+```
+
+## Examples
+
+The `examples/` directory contains runnable examples:
+
+- **`bulb_test.rs`** - Simple example demonstrating basic device control
+- **`supervisor/`** - Full GUI application for managing multiple Tasmota devices
+
+Run an example with:
+
+```bash
+# Simple example
+cargo run --example bulb_test
+
+# Supervisor GUI application
+cargo run --manifest-path examples/supervisor/Cargo.toml --release
 ```
 
 ## Documentation
