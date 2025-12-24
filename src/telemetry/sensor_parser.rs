@@ -337,6 +337,36 @@ pub(crate) fn parse_sensor(payload: &str) -> Result<SensorData, ParseError> {
     serde_json::from_str(payload).map_err(ParseError::Json)
 }
 
+/// Response wrapper for `Status 10` command.
+///
+/// The `Status 10` command returns sensor data wrapped in a `StatusSNS` object:
+/// ```json
+/// {"StatusSNS":{"Time":"...","ENERGY":{"Power":150,...}}}
+/// ```
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct StatusSnsResponse {
+    /// The wrapped sensor data.
+    #[serde(rename = "StatusSNS")]
+    pub status_sns: Option<SensorData>,
+}
+
+impl StatusSnsResponse {
+    /// Returns the sensor data if present.
+    #[must_use]
+    pub fn sensor_data(&self) -> Option<&SensorData> {
+        self.status_sns.as_ref()
+    }
+
+    /// Converts to state changes.
+    #[must_use]
+    pub fn to_state_changes(&self) -> Vec<StateChange> {
+        self.status_sns
+            .as_ref()
+            .map_or_else(Vec::new, SensorData::to_state_changes)
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -501,4 +531,52 @@ mod tests {
         let result = parse_sensor("not json");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn parse_status_sns_response() {
+        // This is the format returned by Status 10 command
+        let json = r#"{
+            "StatusSNS": {
+                "Time": "2024-01-01T12:00:00",
+                "ENERGY": {
+                    "Power": 182,
+                    "Voltage": 224,
+                    "Current": 0.706,
+                    "Total": 1104.315
+                }
+            }
+        }"#;
+
+        let response: StatusSnsResponse = serde_json::from_str(json).unwrap();
+        let sensor = response.sensor_data().unwrap();
+        let energy = sensor.energy().unwrap();
+
+        assert_eq!(energy.power, Some(182));
+        assert_eq!(energy.voltage, Some(224));
+        assert!((energy.current.unwrap() - 0.706).abs() < 0.001);
+        assert!((energy.total.unwrap() - 1104.315).abs() < 0.001);
+    }
+
+    #[test]
+    fn status_sns_to_state_changes() {
+        let json = r#"{"StatusSNS":{"ENERGY":{"Power":150,"Voltage":230,"Current":0.65}}}"#;
+
+        let response: StatusSnsResponse = serde_json::from_str(json).unwrap();
+        let changes = response.to_state_changes();
+
+        assert_eq!(changes.len(), 1);
+        if let StateChange::Energy {
+            power,
+            voltage,
+            current,
+        } = &changes[0]
+        {
+            assert!((power - 150.0).abs() < f32::EPSILON);
+            assert!((voltage - 230.0).abs() < f32::EPSILON);
+            assert!((current - 0.65).abs() < f32::EPSILON);
+        } else {
+            panic!("Expected StateChange::Energy");
+        }
+    }
+
 }

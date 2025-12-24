@@ -34,7 +34,7 @@
 mod sensor_parser;
 mod state_parser;
 
-pub use sensor_parser::{EnergyReading, SensorData};
+pub use sensor_parser::{EnergyReading, SensorData, StatusSnsResponse};
 pub use state_parser::TelemetryState;
 
 use crate::error::ParseError;

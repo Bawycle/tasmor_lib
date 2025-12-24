@@ -317,34 +317,49 @@ impl DeviceManager {
             while let Some(payload) = rx.recv().await {
                 tracing::debug!(%device_id, payload = %payload, "Processing MQTT message");
 
-                // Parse the JSON payload as telemetry state
-                // This works for both tele/STATE and stat/RESULT messages
+                // Collect state changes from the payload
+                // Try parsing as:
+                // - TelemetryState (for STATE and RESULT messages)
+                // - SensorData (for SENSOR messages with energy data)
+                // - StatusSnsResponse (for STATUS10 responses with wrapped energy data)
+                let mut changes = Vec::new();
+
                 if let Ok(state) =
                     serde_json::from_str::<crate::telemetry::TelemetryState>(&payload)
                 {
-                    let changes = state.to_state_changes();
+                    changes.extend(state.to_state_changes());
+                }
 
-                    if !changes.is_empty() {
-                        let mut devices_guard = devices.write().await;
-                        if let Some(device) = devices_guard.get_mut(&device_id) {
-                            // Check if initial state has been loaded
-                            // If not, we update state but don't emit StateChanged events
-                            let emit_events = device.is_initial_state_loaded();
+                if let Ok(sensor) =
+                    serde_json::from_str::<crate::telemetry::SensorData>(&payload)
+                {
+                    changes.extend(sensor.to_state_changes());
+                }
 
-                            for change in changes {
-                                if device.apply_state_change(&change) && emit_events {
-                                    let event = DeviceEvent::state_changed(
-                                        device_id,
-                                        change,
-                                        device.state.clone(),
-                                    );
-                                    event_bus.publish(event);
-                                }
+                if let Ok(status_sns) =
+                    serde_json::from_str::<crate::telemetry::StatusSnsResponse>(&payload)
+                {
+                    changes.extend(status_sns.to_state_changes());
+                }
+
+                if !changes.is_empty() {
+                    let mut devices_guard = devices.write().await;
+                    if let Some(device) = devices_guard.get_mut(&device_id) {
+                        // Check if initial state has been loaded
+                        // If not, we update state but don't emit StateChanged events
+                        let emit_events = device.is_initial_state_loaded();
+
+                        for change in changes {
+                            if device.apply_state_change(&change) && emit_events {
+                                let event = DeviceEvent::state_changed(
+                                    device_id,
+                                    change,
+                                    device.state.clone(),
+                                );
+                                event_bus.publish(event);
                             }
                         }
                     }
-                } else {
-                    tracing::trace!(%device_id, "Could not parse message as telemetry state");
                 }
             }
 
@@ -629,45 +644,62 @@ impl DeviceManager {
     /// Queries the initial state of a device and waits for the response.
     ///
     /// For MQTT devices, this sends a `State` command and waits for the device
-    /// state to be updated by the message handler. Returns the initial state
-    /// if received within the timeout, or `None` otherwise.
+    /// state to be updated by the message handler. For devices with energy
+    /// monitoring, it also sends a `Status 10` command to get initial energy data.
+    ///
+    /// Returns the initial state if received within the timeout, or `None` otherwise.
     async fn query_and_wait_for_initial_state(
         &self,
         device_id: DeviceId,
         state_rx: Option<watch::Receiver<DeviceState>>,
     ) -> Option<DeviceState> {
-        use crate::command::StateCommand;
+        use crate::command::{EnergyCommand, StateCommand};
         use std::time::Duration;
 
         let mut state_rx = state_rx?;
 
-        tracing::debug!(%device_id, "Querying initial device state");
+        // Check if device has energy monitoring capability
+        let has_energy_monitoring = {
+            let devices = self.devices.read().await;
+            devices
+                .get(&device_id)
+                .is_some_and(|d| d.capabilities.has_energy_monitoring())
+        };
 
-        // Send the State command
+        tracing::debug!(%device_id, has_energy_monitoring, "Querying initial device state");
+
+        // Send the State command for light state (power, dimmer, color, CT)
         if let Err(e) = self.send_command(device_id, &StateCommand).await {
             tracing::warn!(%device_id, error = %e, "Failed to query initial state");
             return None;
         }
 
-        // Wait for state to be updated (with timeout)
+        // Wait for state response
         let timeout = Duration::from_secs(2);
-        match tokio::time::timeout(timeout, state_rx.changed()).await {
-            Ok(Ok(())) => {
-                let state = state_rx.borrow().clone();
-                tracing::debug!(%device_id, "Initial state received");
-                Some(state)
-            }
-            Ok(Err(_)) => {
-                // Channel closed
-                tracing::warn!(%device_id, "State channel closed while waiting for initial state");
-                None
-            }
-            Err(_) => {
-                // Timeout - return current state anyway (might be empty)
-                tracing::debug!(%device_id, "Timeout waiting for initial state");
-                None
+        let state_received = tokio::time::timeout(timeout, state_rx.changed()).await;
+
+        if let Err(_) | Ok(Err(_)) = state_received {
+            tracing::debug!(%device_id, "Timeout or error waiting for initial state");
+            return None;
+        }
+
+        // If device has energy monitoring, also query energy data
+        if has_energy_monitoring {
+            tracing::debug!(%device_id, "Querying initial energy data");
+
+            if let Err(e) = self.send_command(device_id, &EnergyCommand::Get).await {
+                tracing::warn!(%device_id, error = %e, "Failed to query initial energy");
+                // Continue anyway - we have the basic state
+            } else {
+                // Wait briefly for energy data to arrive
+                let energy_timeout = Duration::from_millis(500);
+                let _ = tokio::time::timeout(energy_timeout, state_rx.changed()).await;
             }
         }
+
+        let state = state_rx.borrow().clone();
+        tracing::debug!(%device_id, "Initial state received");
+        Some(state)
     }
 
     /// Sends a command to a device.
