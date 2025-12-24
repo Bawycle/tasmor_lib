@@ -624,27 +624,19 @@ fn render_energy_section(ui: &mut Ui, device: &DeviceState, response: &mut Devic
     if has_secondary {
         ui.horizontal(|ui| {
             if let Some(apparent) = device.apparent_power() {
-                ui.label(RichText::new(format!("{apparent:.0} VA")).small().weak());
+                ui.label(format!("{apparent:.0} VA"));
             }
 
             if let Some(reactive) = device.reactive_power() {
-                ui.label(RichText::new(format!("| {reactive:.0} VAr")).small().weak());
+                ui.label(format!("| {reactive:.0} VAr"));
             }
 
             if let Some(today) = device.energy_today() {
-                ui.label(
-                    RichText::new(format!("| Today: {today:.2} kWh"))
-                        .small()
-                        .weak(),
-                );
+                ui.label(format!("| Today: {today:.2} kWh"));
             }
 
             if let Some(yesterday) = device.energy_yesterday() {
-                ui.label(
-                    RichText::new(format!("| Yesterday: {yesterday:.2} kWh"))
-                        .small()
-                        .weak(),
-                );
+                ui.label(format!("| Yesterday: {yesterday:.2} kWh"));
             }
         });
 
@@ -652,13 +644,13 @@ fn render_energy_section(ui: &mut Ui, device: &DeviceState, response: &mut Devic
         if let Some(total) = device.energy_total() {
             ui.horizontal(|ui| {
                 let total_text = if let Some(start_time) = device.total_start_time() {
-                    // Use chrono's format for date display
-                    let formatted_date = start_time.naive().format("%Y-%m-%d");
-                    format!("Total: {total:.1} kWh (since {formatted_date})")
+                    // Use chrono's format for date and time display
+                    let formatted_datetime = start_time.naive().format("%Y-%m-%d %H:%M");
+                    format!("Total: {total:.1} kWh (since {formatted_datetime})")
                 } else {
                     format!("Total: {total:.1} kWh")
                 };
-                ui.label(RichText::new(total_text).small().weak());
+                ui.label(total_text);
 
                 // Reset button
                 if ui
