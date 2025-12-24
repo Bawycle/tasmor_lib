@@ -24,6 +24,7 @@ use uuid::Uuid;
 /// println!("Device: {}", id);
 /// ```
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DeviceId(Uuid);
 
 impl DeviceId {

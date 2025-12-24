@@ -36,6 +36,7 @@ use super::DeviceId;
 /// };
 /// ```
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum DeviceEvent {
     /// A device was added to the manager.
     DeviceAdded {
