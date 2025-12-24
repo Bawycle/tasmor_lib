@@ -63,8 +63,11 @@ impl CommandResponse {
 }
 
 /// Trait for protocol implementations that can send commands to Tasmota devices.
+///
+/// All implementations must be `Send + Sync` to allow use in async contexts
+/// and across thread boundaries.
 #[allow(async_fn_in_trait)]
-pub trait Protocol {
+pub trait Protocol: Send + Sync {
     /// Sends a command to the device and returns the response.
     ///
     /// # Arguments
