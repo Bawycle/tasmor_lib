@@ -105,13 +105,36 @@ impl std::error::Error for DateTimeParseError {}
 /// assert_eq!(dt.naive().format("%Y-%m-%d %H:%M:%S").to_string(), "2024-01-15 10:30:00");
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TasmotaDateTime {
     /// The naive datetime (without timezone).
     naive: NaiveDateTime,
     /// The timezone offset in seconds east of UTC, if known.
-    /// Stored as `i32` instead of `FixedOffset` for serde compatibility.
     offset_secs: Option<i32>,
+}
+
+impl serde::Serialize for TasmotaDateTime {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // Serialize as ISO 8601 string
+        if let Some(offset) = self.timezone_offset() {
+            let dt = self.naive.and_local_timezone(offset).unwrap();
+            serializer.serialize_str(&dt.to_rfc3339())
+        } else {
+            serializer.serialize_str(&self.naive.format("%Y-%m-%dT%H:%M:%S").to_string())
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for TasmotaDateTime {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = <String as serde::Deserialize>::deserialize(deserializer)?;
+        s.parse().map_err(serde::de::Error::custom)
+    }
 }
 
 impl TasmotaDateTime {

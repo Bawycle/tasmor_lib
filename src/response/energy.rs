@@ -5,6 +5,7 @@
 
 //! Energy monitoring response parsing.
 
+use crate::types::TasmotaDateTime;
 use serde::Deserialize;
 
 /// Energy monitoring response from Status 10 command.
@@ -121,7 +122,7 @@ pub struct SensorStatus {
 pub struct EnergyData {
     /// Start time for total energy counting.
     #[serde(default)]
-    pub total_start_time: String,
+    pub total_start_time: Option<TasmotaDateTime>,
 
     /// Total energy consumed in kWh.
     #[serde(default)]
@@ -219,7 +220,7 @@ mod tests {
     #[test]
     fn energy_helper_methods() {
         let energy = EnergyData {
-            total_start_time: String::new(),
+            total_start_time: None,
             total: 100.0,
             yesterday: 2.0,
             today: 1.0,
