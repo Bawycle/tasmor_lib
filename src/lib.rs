@@ -88,6 +88,7 @@ pub mod manager;
 pub mod protocol;
 pub mod response;
 pub mod state;
+pub mod telemetry;
 pub mod types;
 
 pub use capabilities::{Capabilities, CapabilitiesBuilder};
