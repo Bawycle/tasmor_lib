@@ -17,7 +17,10 @@ use crate::command::{
 };
 use crate::error::{DeviceError, Error};
 use crate::protocol::{CommandResponse, HttpClient, MqttClient, Protocol};
-use crate::response::{EnergyResponse, PowerResponse, StatusResponse};
+use crate::response::{
+    ColorTempResponse, DimmerResponse, EnergyResponse, HsbColorResponse, PowerResponse,
+    StatusResponse,
+};
 use crate::types::{ColorTemp, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState};
 
 /// A Tasmota device that can be controlled via HTTP or MQTT.
@@ -199,72 +202,90 @@ impl<P: Protocol> Device<P> {
 
     /// Sets the dimmer level.
     ///
+    /// Returns a typed response including the new dimmer level and power state.
+    ///
     /// # Errors
     ///
     /// Returns error if the device doesn't support dimming or the command fails.
-    pub async fn set_dimmer(&self, value: Dimmer) -> Result<CommandResponse, Error> {
+    pub async fn set_dimmer(&self, value: Dimmer) -> Result<DimmerResponse, Error> {
         self.check_capability("dimmer", self.capabilities.dimmer)?;
         let cmd = DimmerCommand::Set(value);
-        self.send_command(&cmd).await
+        let response = self.send_command(&cmd).await?;
+        response.parse().map_err(Error::Parse)
     }
 
     /// Gets the current dimmer level.
     ///
+    /// Returns a typed response including the current dimmer level and power state.
+    ///
     /// # Errors
     ///
     /// Returns error if the device doesn't support dimming or the command fails.
-    pub async fn get_dimmer(&self) -> Result<CommandResponse, Error> {
+    pub async fn get_dimmer(&self) -> Result<DimmerResponse, Error> {
         self.check_capability("dimmer", self.capabilities.dimmer)?;
         let cmd = DimmerCommand::Get;
-        self.send_command(&cmd).await
+        let response = self.send_command(&cmd).await?;
+        response.parse().map_err(Error::Parse)
     }
 
     // ========== Color Temperature ==========
 
     /// Sets the color temperature.
     ///
+    /// Returns a typed response including the new color temperature and power state.
+    ///
     /// # Errors
     ///
     /// Returns error if the device doesn't support color temperature or the command fails.
-    pub async fn set_color_temp(&self, value: ColorTemp) -> Result<CommandResponse, Error> {
+    pub async fn set_color_temp(&self, value: ColorTemp) -> Result<ColorTempResponse, Error> {
         self.check_capability("color temperature", self.capabilities.color_temp)?;
         let cmd = ColorTempCommand::Set(value);
-        self.send_command(&cmd).await
+        let response = self.send_command(&cmd).await?;
+        response.parse().map_err(Error::Parse)
     }
 
     /// Gets the current color temperature.
     ///
+    /// Returns a typed response including the current color temperature and power state.
+    ///
     /// # Errors
     ///
     /// Returns error if the device doesn't support color temperature or the command fails.
-    pub async fn get_color_temp(&self) -> Result<CommandResponse, Error> {
+    pub async fn get_color_temp(&self) -> Result<ColorTempResponse, Error> {
         self.check_capability("color temperature", self.capabilities.color_temp)?;
         let cmd = ColorTempCommand::Get;
-        self.send_command(&cmd).await
+        let response = self.send_command(&cmd).await?;
+        response.parse().map_err(Error::Parse)
     }
 
     // ========== HSB Color ==========
 
     /// Sets the HSB color.
     ///
+    /// Returns a typed response including the new HSB color, dimmer level, and power state.
+    ///
     /// # Errors
     ///
     /// Returns error if the device doesn't support RGB or the command fails.
-    pub async fn set_hsb_color(&self, color: HsbColor) -> Result<CommandResponse, Error> {
+    pub async fn set_hsb_color(&self, color: HsbColor) -> Result<HsbColorResponse, Error> {
         self.check_capability("RGB color", self.capabilities.rgb)?;
         let cmd = HsbColorCommand::Set(color);
-        self.send_command(&cmd).await
+        let response = self.send_command(&cmd).await?;
+        response.parse().map_err(Error::Parse)
     }
 
     /// Gets the current HSB color.
     ///
+    /// Returns a typed response including the current HSB color, dimmer level, and power state.
+    ///
     /// # Errors
     ///
     /// Returns error if the device doesn't support RGB or the command fails.
-    pub async fn get_hsb_color(&self) -> Result<CommandResponse, Error> {
+    pub async fn get_hsb_color(&self) -> Result<HsbColorResponse, Error> {
         self.check_capability("RGB color", self.capabilities.rgb)?;
         let cmd = HsbColorCommand::Get;
-        self.send_command(&cmd).await
+        let response = self.send_command(&cmd).await?;
+        response.parse().map_err(Error::Parse)
     }
 
     // ========== Fade ==========
