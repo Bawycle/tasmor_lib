@@ -32,9 +32,10 @@ use crate::types::{ColorTemp, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerStat
 ///
 /// Use [`Device::http`] or [`Device::mqtt`] to create a device builder:
 ///
-/// ```ignore
-/// use tasmor_lib::Device;
+/// ```no_run
+/// use tasmor_lib::{Device, Capabilities};
 ///
+/// # async fn example() -> tasmor_lib::Result<()> {
 /// // HTTP device with auto-detection
 /// let device = Device::http("192.168.1.100")
 ///     .build()
@@ -44,6 +45,8 @@ use crate::types::{ColorTemp, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerStat
 /// let device = Device::http("192.168.1.100")
 ///     .with_capabilities(Capabilities::rgbcct_light())
 ///     .build_without_probe()?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Device<P: Protocol> {
@@ -511,14 +514,17 @@ impl MqttDeviceBuilder {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```no_run
     /// use tasmor_lib::{Device, Capabilities};
     ///
+    /// # async fn example() -> tasmor_lib::Result<()> {
     /// let device = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_bulb")
     ///     .with_credentials("mqtt_user", "mqtt_password")
     ///     .with_capabilities(Capabilities::basic())
     ///     .build()
     ///     .await?;
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn with_credentials(

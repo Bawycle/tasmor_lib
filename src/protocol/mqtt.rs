@@ -28,13 +28,16 @@ use crate::protocol::{CommandResponse, Protocol};
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use tasmor_lib::protocol::MqttClient;
+/// ```no_run
+/// use tasmor_lib::protocol::{MqttClient, Protocol};
 /// use tasmor_lib::command::PowerCommand;
 /// use tasmor_lib::types::PowerIndex;
 ///
+/// # async fn example() -> tasmor_lib::Result<()> {
 /// let client = MqttClient::connect("mqtt://broker:1883", "tasmota_switch").await?;
-/// let response = client.send_command(&PowerCommand::Get { index: PowerIndex::one() }).await?;
+/// let response = client.send_command(&PowerCommand::query(PowerIndex::one())).await?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct MqttClient {
@@ -275,15 +278,18 @@ impl MqttClientBuilder {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```no_run
     /// use tasmor_lib::protocol::MqttClientBuilder;
     ///
+    /// # async fn example() -> tasmor_lib::Result<()> {
     /// let client = MqttClientBuilder::new()
     ///     .broker("mqtt://192.168.1.50:1883")
     ///     .device_topic("tasmota_switch")
     ///     .credentials("mqtt_user", "mqtt_password")
     ///     .build()
     ///     .await?;
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn credentials(mut self, username: impl Into<String>, password: impl Into<String>) -> Self {

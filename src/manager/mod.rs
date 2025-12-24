@@ -23,7 +23,7 @@
 //!
 //! ## Basic Usage
 //!
-//! ```ignore
+//! ```no_run
 //! use tasmor_lib::manager::{DeviceManager, DeviceConfig};
 //! use tasmor_lib::Dimmer;
 //!
@@ -49,10 +49,11 @@
 //!
 //! ## Event Subscription
 //!
-//! ```ignore
+//! ```no_run
 //! use tasmor_lib::manager::DeviceManager;
 //! use tasmor_lib::event::DeviceEvent;
 //!
+//! # fn example() {
 //! let manager = DeviceManager::new();
 //! let mut events = manager.subscribe();
 //!
@@ -69,13 +70,15 @@
 //!         }
 //!     }
 //! });
+//! # }
 //! ```
 //!
 //! ## Watching Device State
 //!
-//! ```ignore
+//! ```no_run
 //! use tasmor_lib::manager::{DeviceManager, DeviceConfig};
 //!
+//! # async fn example() {
 //! let manager = DeviceManager::new();
 //! let config = DeviceConfig::mqtt("mqtt://broker:1883", "device");
 //! let device_id = manager.add_device(config).await;
@@ -89,6 +92,7 @@
 //!         }
 //!     });
 //! }
+//! # }
 //! ```
 
 mod device_config;

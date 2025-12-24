@@ -132,9 +132,10 @@ impl std::fmt::Debug for SharedConnection {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
 /// use tasmor_lib::protocol::BrokerPool;
 ///
+/// # async fn example() -> tasmor_lib::Result<()> {
 /// let pool = BrokerPool::global();
 ///
 /// // Get or create a connection to a broker
@@ -142,6 +143,8 @@ impl std::fmt::Debug for SharedConnection {
 ///
 /// // Multiple calls with the same broker URL return the same connection
 /// let conn2 = pool.get_connection("mqtt://192.168.1.50:1883", None).await?;
+/// # Ok(())
+/// # }
 /// ```
 pub struct BrokerPool {
     /// Active connections, keyed by broker key.

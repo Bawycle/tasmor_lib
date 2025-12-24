@@ -35,7 +35,7 @@ use super::managed_device::{ConnectionState, DeviceClient, ManagedDevice};
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
 /// use tasmor_lib::manager::{DeviceManager, DeviceConfig};
 ///
 /// #[tokio::main]
@@ -52,7 +52,7 @@ use super::managed_device::{ConnectionState, DeviceClient, ManagedDevice};
 ///
 ///     // Add and connect a device
 ///     let config = DeviceConfig::mqtt("mqtt://192.168.1.50:1883", "tasmota_bulb");
-///     let device_id = manager.add_device(config).await?;
+///     let device_id = manager.add_device(config).await;
 ///     manager.connect(device_id).await?;
 ///
 ///     // Control the device
@@ -147,12 +147,14 @@ impl DeviceManager {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```no_run
     /// use tasmor_lib::manager::{DeviceManager, DeviceConfig};
     ///
+    /// # async fn example() {
     /// let manager = DeviceManager::new();
     /// let config = DeviceConfig::mqtt("mqtt://localhost:1883", "tasmota_bulb");
     /// let device_id = manager.add_device(config).await;
+    /// # }
     /// ```
     pub async fn add_device(&self, config: DeviceConfig) -> DeviceId {
         let device = ManagedDevice::new(config);

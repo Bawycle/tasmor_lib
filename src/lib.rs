@@ -24,7 +24,7 @@
 //!
 //! ## HTTP Device with Auto-Detection
 //!
-//! ```ignore
+//! ```no_run
 //! use tasmor_lib::Device;
 //!
 //! #[tokio::main]
@@ -38,7 +38,7 @@
 //!     device.power_on().await?;
 //!
 //!     // Check capabilities before using features
-//!     if device.capabilities().dimmer {
+//!     if device.capabilities().dimmer() {
 //!         device.set_dimmer(tasmor_lib::Dimmer::new(75)?).await?;
 //!     }
 //!
@@ -48,7 +48,7 @@
 //!
 //! ## HTTP Device with Manual Capabilities
 //!
-//! ```ignore
+//! ```no_run
 //! use tasmor_lib::{Device, Capabilities};
 //!
 //! #[tokio::main]
@@ -65,7 +65,7 @@
 //!
 //! ## MQTT Device
 //!
-//! ```ignore
+//! ```no_run
 //! use tasmor_lib::Device;
 //!
 //! #[tokio::main]

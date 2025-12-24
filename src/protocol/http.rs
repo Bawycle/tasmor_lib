@@ -19,13 +19,16 @@ use crate::protocol::{CommandResponse, Protocol};
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use tasmor_lib::protocol::HttpClient;
+/// ```no_run
+/// use tasmor_lib::protocol::{HttpClient, Protocol};
 /// use tasmor_lib::command::PowerCommand;
 /// use tasmor_lib::types::PowerIndex;
 ///
+/// # async fn example() -> tasmor_lib::Result<()> {
 /// let client = HttpClient::new("192.168.1.100")?;
 /// let response = client.send_command(&PowerCommand::query(PowerIndex::one())).await?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone)]
 pub struct HttpClient {
