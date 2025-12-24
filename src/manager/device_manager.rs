@@ -219,6 +219,9 @@ impl DeviceManager {
 
     /// Connects to a device.
     ///
+    /// For MQTT devices, this also spawns a background task to process incoming
+    /// messages (telemetry and command responses) and update the device state.
+    ///
     /// # Errors
     ///
     /// Returns an error if the device is not found or connection fails.
@@ -243,9 +246,45 @@ impl DeviceManager {
 
         match result {
             Ok(client) => {
+                // For MQTT clients, take the message receiver and spawn a handler task
+                let is_mqtt = matches!(client, DeviceClient::Mqtt(_));
+                let state_rx = if is_mqtt {
+                    Some(device.watch_state())
+                } else {
+                    None
+                };
+
+                if let DeviceClient::Mqtt(ref mqtt_client) = client
+                    && let Some(rx) = mqtt_client.take_message_receiver().await
+                {
+                    self.spawn_mqtt_message_handler(device_id, rx);
+                }
+
                 device.set_client(client);
                 drop(devices);
-                self.event_bus.publish(DeviceEvent::connected(device_id));
+
+                // Query initial state and wait for it (MQTT only)
+                let initial_state = if is_mqtt {
+                    self.query_and_wait_for_initial_state(device_id, state_rx)
+                        .await
+                } else {
+                    None
+                };
+
+                // Mark initial state as loaded so future updates emit StateChanged
+                {
+                    let mut devices = self.devices.write().await;
+                    if let Some(device) = devices.get_mut(&device_id) {
+                        device.mark_initial_state_loaded();
+                    }
+                }
+
+                // Emit connected event with initial state
+                let event = match initial_state {
+                    Some(state) => DeviceEvent::connected_with_state(device_id, state),
+                    None => DeviceEvent::connected(device_id),
+                };
+                self.event_bus.publish(event);
                 Ok(())
             }
             Err(e) => {
@@ -257,6 +296,60 @@ impl DeviceManager {
                 Err(e)
             }
         }
+    }
+
+    /// Spawns a background task to handle incoming MQTT messages.
+    ///
+    /// The handler updates device state for all messages, but only emits
+    /// `StateChanged` events after `initial_state_loaded` is set to true.
+    /// This prevents spurious change events during initial state loading.
+    fn spawn_mqtt_message_handler(
+        &self,
+        device_id: DeviceId,
+        mut rx: tokio::sync::mpsc::Receiver<String>,
+    ) {
+        let devices = Arc::clone(&self.devices);
+        let event_bus = self.event_bus.clone();
+
+        tokio::spawn(async move {
+            tracing::debug!(%device_id, "Starting MQTT message handler");
+
+            while let Some(payload) = rx.recv().await {
+                tracing::debug!(%device_id, payload = %payload, "Processing MQTT message");
+
+                // Parse the JSON payload as telemetry state
+                // This works for both tele/STATE and stat/RESULT messages
+                if let Ok(state) =
+                    serde_json::from_str::<crate::telemetry::TelemetryState>(&payload)
+                {
+                    let changes = state.to_state_changes();
+
+                    if !changes.is_empty() {
+                        let mut devices_guard = devices.write().await;
+                        if let Some(device) = devices_guard.get_mut(&device_id) {
+                            // Check if initial state has been loaded
+                            // If not, we update state but don't emit StateChanged events
+                            let emit_events = device.is_initial_state_loaded();
+
+                            for change in changes {
+                                if device.apply_state_change(&change) && emit_events {
+                                    let event = DeviceEvent::state_changed(
+                                        device_id,
+                                        change,
+                                        device.state.clone(),
+                                    );
+                                    event_bus.publish(event);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    tracing::trace!(%device_id, "Could not parse message as telemetry state");
+                }
+            }
+
+            tracing::debug!(%device_id, "MQTT message handler stopped");
+        });
     }
 
     /// Disconnects from a device.
@@ -532,6 +625,50 @@ impl DeviceManager {
     // =========================================================================
     // Internal Helpers
     // =========================================================================
+
+    /// Queries the initial state of a device and waits for the response.
+    ///
+    /// For MQTT devices, this sends a `State` command and waits for the device
+    /// state to be updated by the message handler. Returns the initial state
+    /// if received within the timeout, or `None` otherwise.
+    async fn query_and_wait_for_initial_state(
+        &self,
+        device_id: DeviceId,
+        state_rx: Option<watch::Receiver<DeviceState>>,
+    ) -> Option<DeviceState> {
+        use crate::command::StateCommand;
+        use std::time::Duration;
+
+        let mut state_rx = state_rx?;
+
+        tracing::debug!(%device_id, "Querying initial device state");
+
+        // Send the State command
+        if let Err(e) = self.send_command(device_id, &StateCommand).await {
+            tracing::warn!(%device_id, error = %e, "Failed to query initial state");
+            return None;
+        }
+
+        // Wait for state to be updated (with timeout)
+        let timeout = Duration::from_secs(2);
+        match tokio::time::timeout(timeout, state_rx.changed()).await {
+            Ok(Ok(())) => {
+                let state = state_rx.borrow().clone();
+                tracing::debug!(%device_id, "Initial state received");
+                Some(state)
+            }
+            Ok(Err(_)) => {
+                // Channel closed
+                tracing::warn!(%device_id, "State channel closed while waiting for initial state");
+                None
+            }
+            Err(_) => {
+                // Timeout - return current state anyway (might be empty)
+                tracing::debug!(%device_id, "Timeout waiting for initial state");
+                None
+            }
+        }
+    }
 
     /// Sends a command to a device.
     async fn send_command<C: crate::command::Command + Sync>(

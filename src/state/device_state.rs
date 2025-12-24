@@ -429,4 +429,86 @@ mod tests {
         assert!(state.power(1).is_none());
         assert!(state.dimmer().is_none());
     }
+
+    #[test]
+    fn apply_batch_with_hsb_color() {
+        use crate::types::HsbColor;
+
+        let mut state = DeviceState::new();
+        let hsb = HsbColor::new(360, 100, 100).unwrap();
+
+        let changes = StateChange::Batch(vec![
+            StateChange::Power {
+                index: 1,
+                state: PowerState::Off,
+            },
+            StateChange::Dimmer(Dimmer::new(100).unwrap()),
+            StateChange::HsbColor(hsb),
+        ]);
+
+        assert!(state.apply(&changes));
+        assert_eq!(state.power(1), Some(PowerState::Off));
+        assert_eq!(state.dimmer(), Some(Dimmer::new(100).unwrap()));
+
+        // Verify HsbColor was applied
+        let applied_hsb = state.hsb_color().expect("HsbColor should be set");
+        assert_eq!(applied_hsb.hue(), 360);
+        assert_eq!(applied_hsb.saturation(), 100);
+        assert_eq!(applied_hsb.brightness(), 100);
+    }
+
+    #[test]
+    fn apply_state_from_tasmota_telemetry() {
+        use crate::telemetry::TelemetryState;
+
+        // Real Tasmota RESULT JSON from logs
+        let json = r#"{
+            "Time":"2025-12-24T14:24:03",
+            "Uptime":"1T23:46:58",
+            "UptimeSec":172018,
+            "Heap":25,
+            "SleepMode":"Dynamic",
+            "Sleep":50,
+            "LoadAvg":19,
+            "MqttCount":1,
+            "POWER":"OFF",
+            "Dimmer":100,
+            "Color":"FF00000000",
+            "HSBColor":"360,100,100",
+            "White":0,
+            "CT":153,
+            "Channel":[100,0,0,0,0],
+            "Scheme":0,
+            "Fade":"ON",
+            "Speed":2,
+            "LedTable":"ON",
+            "Wifi":{"AP":1}
+        }"#;
+
+        // Parse telemetry
+        let telemetry: TelemetryState = serde_json::from_str(json).unwrap();
+        let changes = telemetry.to_state_changes();
+
+        // Apply to DeviceState
+        let mut state = DeviceState::new();
+        for change in changes {
+            state.apply(&change);
+        }
+
+        // Verify all fields are correctly set
+        assert_eq!(state.power(1), Some(PowerState::Off));
+        assert_eq!(state.dimmer(), Some(Dimmer::new(100).unwrap()));
+
+        // This is the key assertion - HSBColor must be set
+        let hsb = state
+            .hsb_color()
+            .expect("HSBColor should be set from telemetry");
+        assert_eq!(hsb.hue(), 360);
+        assert_eq!(hsb.saturation(), 100);
+        assert_eq!(hsb.brightness(), 100);
+
+        // Color temp should also be set
+        assert!(state.color_temp().is_some());
+        assert_eq!(state.color_temp().unwrap().value(), 153);
+    }
 }

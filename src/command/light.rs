@@ -259,6 +259,40 @@ impl Command for SpeedCommand {
     }
 }
 
+/// Command to query the current device state.
+///
+/// The `State` command returns all current light settings including:
+/// - Power state
+/// - Dimmer level
+/// - Color temperature (CT)
+/// - HSB color
+/// - Fade/Speed settings
+///
+/// This is useful for synchronizing local state with the device,
+/// especially after establishing a connection.
+///
+/// # Examples
+///
+/// ```
+/// use tasmor_lib::command::{Command, StateCommand};
+///
+/// let cmd = StateCommand;
+/// assert_eq!(cmd.name(), "State");
+/// assert_eq!(cmd.payload(), None);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct StateCommand;
+
+impl Command for StateCommand {
+    fn name(&self) -> String {
+        "State".to_string()
+    }
+
+    fn payload(&self) -> Option<String> {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,5 +365,15 @@ mod tests {
     fn speed_command_adjustments() {
         assert_eq!(SpeedCommand::Increase.payload(), Some("+".to_string()));
         assert_eq!(SpeedCommand::Decrease.payload(), Some("-".to_string()));
+    }
+
+    #[test]
+    fn state_command() {
+        let cmd = StateCommand;
+        assert_eq!(cmd.name(), "State");
+        assert_eq!(cmd.payload(), None);
+        assert_eq!(cmd.to_http_command(), "State");
+        assert_eq!(cmd.mqtt_topic_suffix(), "State");
+        assert_eq!(cmd.mqtt_payload(), "");
     }
 }

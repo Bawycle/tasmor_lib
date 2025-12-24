@@ -59,6 +59,9 @@ pub(crate) struct ManagedDevice {
     pub state_tx: watch::Sender<DeviceState>,
     /// Protocol client (if connected).
     pub client: Option<DeviceClient>,
+    /// Whether initial state has been loaded after connection.
+    /// When false, state updates should not emit `StateChanged` events.
+    pub initial_state_loaded: bool,
 }
 
 /// Protocol client for a managed device.
@@ -101,6 +104,7 @@ impl ManagedDevice {
             state,
             state_tx,
             client: None,
+            initial_state_loaded: false,
         }
     }
 
@@ -119,6 +123,7 @@ impl ManagedDevice {
             state,
             state_tx,
             client: None,
+            initial_state_loaded: false,
         }
     }
 
@@ -184,6 +189,17 @@ impl ManagedDevice {
     pub fn clear_client(&mut self) {
         self.client = None;
         self.connection_state = ConnectionState::Disconnected;
+        self.initial_state_loaded = false;
+    }
+
+    /// Marks the initial state as loaded.
+    pub fn mark_initial_state_loaded(&mut self) {
+        self.initial_state_loaded = true;
+    }
+
+    /// Returns true if initial state has been loaded.
+    pub fn is_initial_state_loaded(&self) -> bool {
+        self.initial_state_loaded
     }
 }
 
@@ -194,6 +210,7 @@ impl std::fmt::Debug for ManagedDevice {
             .field("display_name", &self.display_name())
             .field("connection_state", &self.connection_state)
             .field("capabilities", &self.capabilities)
+            .field("initial_state_loaded", &self.initial_state_loaded)
             .finish_non_exhaustive()
     }
 }

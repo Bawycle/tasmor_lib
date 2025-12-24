@@ -33,6 +33,7 @@ use super::DeviceId;
 ///     device_id,
 ///     connected: true,
 ///     error: None,
+///     initial_state: None,
 /// };
 /// ```
 #[derive(Debug, Clone)]
@@ -51,6 +52,11 @@ pub enum DeviceEvent {
     },
 
     /// Device connection state changed.
+    ///
+    /// When `connected` is true, `initial_state` contains the device's current
+    /// state if it was successfully queried during connection. This allows
+    /// subscribers to immediately display the correct state without waiting
+    /// for separate `StateChanged` events.
     ConnectionChanged {
         /// The ID of the device.
         device_id: DeviceId,
@@ -58,6 +64,8 @@ pub enum DeviceEvent {
         connected: bool,
         /// Error message if disconnection was due to an error.
         error: Option<String>,
+        /// Initial device state when connecting (only present when `connected` is true).
+        initial_state: Option<DeviceState>,
     },
 
     /// Device state changed.
@@ -116,13 +124,31 @@ impl DeviceEvent {
         Self::DeviceRemoved { device_id }
     }
 
-    /// Creates a connected event.
+    /// Creates a connected event without initial state.
+    ///
+    /// Prefer [`connected_with_state`](Self::connected_with_state) when the
+    /// initial device state is available.
     #[must_use]
     pub fn connected(device_id: DeviceId) -> Self {
         Self::ConnectionChanged {
             device_id,
             connected: true,
             error: None,
+            initial_state: None,
+        }
+    }
+
+    /// Creates a connected event with initial state.
+    ///
+    /// This is the preferred way to signal a successful connection, as it
+    /// provides the device's current state to subscribers immediately.
+    #[must_use]
+    pub fn connected_with_state(device_id: DeviceId, state: DeviceState) -> Self {
+        Self::ConnectionChanged {
+            device_id,
+            connected: true,
+            error: None,
+            initial_state: Some(state),
         }
     }
 
@@ -133,6 +159,7 @@ impl DeviceEvent {
             device_id,
             connected: false,
             error: None,
+            initial_state: None,
         }
     }
 
@@ -143,6 +170,7 @@ impl DeviceEvent {
             device_id,
             connected: false,
             error: Some(error.into()),
+            initial_state: None,
         }
     }
 
@@ -220,6 +248,48 @@ mod tests {
         {
             assert!(!connected);
             assert_eq!(error, Some("Connection lost".to_string()));
+        } else {
+            panic!("Expected ConnectionChanged event");
+        }
+    }
+
+    #[test]
+    fn connected_with_state() {
+        let id = DeviceId::new();
+        let mut state = DeviceState::new();
+        state.set_power(1, PowerState::On);
+
+        let event = DeviceEvent::connected_with_state(id, state.clone());
+
+        if let DeviceEvent::ConnectionChanged {
+            connected,
+            error,
+            initial_state,
+            ..
+        } = event
+        {
+            assert!(connected);
+            assert!(error.is_none());
+            assert!(initial_state.is_some());
+            assert_eq!(initial_state.unwrap().power(1), Some(PowerState::On));
+        } else {
+            panic!("Expected ConnectionChanged event");
+        }
+    }
+
+    #[test]
+    fn connected_without_state() {
+        let id = DeviceId::new();
+        let event = DeviceEvent::connected(id);
+
+        if let DeviceEvent::ConnectionChanged {
+            connected,
+            initial_state,
+            ..
+        } = event
+        {
+            assert!(connected);
+            assert!(initial_state.is_none());
         } else {
             panic!("Expected ConnectionChanged event");
         }
