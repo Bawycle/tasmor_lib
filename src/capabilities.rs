@@ -99,6 +99,34 @@ impl Capabilities {
     pub const fn energy(&self) -> bool {
         self.energy
     }
+
+    /// Returns an iterator over the names of enabled features.
+    ///
+    /// This is useful for introspection and debugging. The returned names
+    /// match the field names: `dimmer`, `color_temp`, `rgb`, `energy`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tasmor_lib::Capabilities;
+    ///
+    /// let caps = Capabilities::rgbcct_light();
+    /// let features: Vec<_> = caps.features().collect();
+    /// assert!(features.contains(&"dimmer"));
+    /// assert!(features.contains(&"color_temp"));
+    /// assert!(features.contains(&"rgb"));
+    /// assert!(!features.contains(&"energy"));
+    /// ```
+    pub fn features(&self) -> impl Iterator<Item = &'static str> {
+        [
+            self.dimmer.then_some("dimmer"),
+            self.color_temp.then_some("color_temp"),
+            self.rgb.then_some("rgb"),
+            self.energy.then_some("energy"),
+        ]
+        .into_iter()
+        .flatten()
+    }
 }
 
 impl Default for Capabilities {
@@ -378,6 +406,34 @@ mod tests {
 
         let multi = CapabilitiesBuilder::new().power_channels(4).build();
         assert!(multi.is_multi_relay());
+    }
+
+    #[test]
+    fn features_iterator() {
+        // No features enabled
+        let basic = Capabilities::basic();
+        assert_eq!(basic.features().count(), 0);
+
+        // Some features enabled
+        let rgb = Capabilities::rgb_light();
+        let features: Vec<_> = rgb.features().collect();
+        assert_eq!(features.len(), 2);
+        assert!(features.contains(&"dimmer"));
+        assert!(features.contains(&"rgb"));
+
+        // All features enabled
+        let full = CapabilitiesBuilder::new()
+            .with_dimmer()
+            .with_color_temp()
+            .with_rgb()
+            .with_energy()
+            .build();
+        let all_features: Vec<_> = full.features().collect();
+        assert_eq!(all_features.len(), 4);
+        assert!(all_features.contains(&"dimmer"));
+        assert!(all_features.contains(&"color_temp"));
+        assert!(all_features.contains(&"rgb"));
+        assert!(all_features.contains(&"energy"));
     }
 
     // ========================================================================
