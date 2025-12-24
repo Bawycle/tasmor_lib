@@ -234,9 +234,7 @@ impl ManagedDevice {
     /// Returns whether the device is powered on (checks POWER1).
     #[must_use]
     pub fn is_power_on(&self) -> Option<bool> {
-        self.state
-            .power(1)
-            .map(|p| p == tasmor_lib::PowerState::On)
+        self.state.power(1).map(|p| p == tasmor_lib::PowerState::On)
     }
 
     /// Returns the dimmer value (0-100).
@@ -263,6 +261,62 @@ impl ManagedDevice {
     #[must_use]
     pub fn power_consumption_watts(&self) -> Option<f32> {
         self.state.power_consumption()
+    }
+
+    /// Returns the voltage in volts.
+    #[must_use]
+    pub fn voltage(&self) -> Option<f32> {
+        self.state.voltage()
+    }
+
+    /// Returns the current in amperes.
+    #[must_use]
+    pub fn current(&self) -> Option<f32> {
+        self.state.current()
+    }
+
+    /// Returns the apparent power in VA.
+    #[must_use]
+    pub fn apparent_power(&self) -> Option<f32> {
+        self.state.apparent_power()
+    }
+
+    /// Returns the reactive power in `VAr`.
+    #[must_use]
+    pub fn reactive_power(&self) -> Option<f32> {
+        self.state.reactive_power()
+    }
+
+    /// Returns the power factor (0-1).
+    #[must_use]
+    pub fn power_factor(&self) -> Option<f32> {
+        self.state.power_factor()
+    }
+
+    /// Returns the energy consumed today in kWh.
+    #[must_use]
+    pub fn energy_today(&self) -> Option<f32> {
+        self.state.energy_today()
+    }
+
+    /// Returns the energy consumed yesterday in kWh.
+    #[must_use]
+    pub fn energy_yesterday(&self) -> Option<f32> {
+        self.state.energy_yesterday()
+    }
+
+    /// Returns the total energy consumed in kWh.
+    #[must_use]
+    pub fn energy_total(&self) -> Option<f32> {
+        self.state.energy_total()
+    }
+
+    /// Returns the timestamp when total energy counting started.
+    ///
+    /// The format depends on the Tasmota device configuration (ISO 8601, epoch, etc.).
+    #[must_use]
+    pub fn total_start_time(&self) -> Option<&str> {
+        self.state.total_start_time()
     }
 }
 

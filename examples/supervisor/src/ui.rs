@@ -100,12 +100,7 @@ pub fn device_card(ui: &mut Ui, device: &DeviceState) -> DeviceCardResponse {
                     // Show device capabilities
                     let features: Vec<&str> = device.model().capabilities().features().collect();
                     if !features.is_empty() {
-                        ui.label(
-                            RichText::new(features.join(" · "))
-                                .small()
-                                .weak()
-                                .italics(),
-                        );
+                        ui.label(RichText::new(features.join(" · ")).small().weak().italics());
                     }
                 });
 
@@ -151,8 +146,10 @@ pub fn device_card(ui: &mut Ui, device: &DeviceState) -> DeviceCardResponse {
                     let mut power_state = power_on;
 
                     // Custom styled toggle
-                    let toggle_response =
-                        ui.add(power_toggle(&mut power_state, device.is_power_on().is_some()));
+                    let toggle_response = ui.add(power_toggle(
+                        &mut power_state,
+                        device.is_power_on().is_some(),
+                    ));
 
                     if toggle_response.clicked() && device.is_power_on().is_some() {
                         response.power_toggle_clicked = true;
@@ -177,14 +174,12 @@ pub fn device_card(ui: &mut Ui, device: &DeviceState) -> DeviceCardResponse {
                             response.dimmer_changed = Some(dimmer);
                         }
                     }
-
-                    // Energy monitoring for plugs
-                    if device.model().supports_energy_monitoring() {
-                        if let Some(power_consumption) = device.power_consumption_watts() {
-                            ui.label(format!("⚡ {power_consumption} W"));
-                        }
-                    }
                 });
+
+                // Energy monitoring for plugs (on separate row for better readability)
+                if device.model().supports_energy_monitoring() {
+                    render_energy_section(ui, device);
+                }
 
                 // Color controls on a separate row
                 if device.model().supports_color() {
@@ -594,6 +589,89 @@ pub struct EditDeviceDialogResponse {
     pub save_clicked: bool,
     /// Cancel button was clicked
     pub cancel_clicked: bool,
+}
+
+/// Renders the energy monitoring section for devices that support it.
+fn render_energy_section(ui: &mut Ui, device: &DeviceState) {
+    ui.horizontal(|ui| {
+        // Main power readings
+        if let Some(power) = device.power_consumption_watts() {
+            ui.label(format!("⚡ {power:.0} W"));
+        }
+
+        if let Some(voltage) = device.voltage() {
+            ui.label(format!("| {voltage:.0} V"));
+        }
+
+        if let Some(current) = device.current() {
+            ui.label(format!("| {current:.2} A"));
+        }
+
+        if let Some(pf) = device.power_factor() {
+            ui.label(format!("| PF: {pf:.2}"));
+        }
+    });
+
+    // Secondary readings (apparent/reactive power and consumption)
+    let has_secondary = device.apparent_power().is_some()
+        || device.reactive_power().is_some()
+        || device.energy_today().is_some()
+        || device.energy_yesterday().is_some()
+        || device.energy_total().is_some();
+
+    if has_secondary {
+        ui.horizontal(|ui| {
+            if let Some(apparent) = device.apparent_power() {
+                ui.label(RichText::new(format!("{apparent:.0} VA")).small().weak());
+            }
+
+            if let Some(reactive) = device.reactive_power() {
+                ui.label(RichText::new(format!("| {reactive:.0} VAr")).small().weak());
+            }
+
+            if let Some(today) = device.energy_today() {
+                ui.label(
+                    RichText::new(format!("| Today: {today:.2} kWh"))
+                        .small()
+                        .weak(),
+                );
+            }
+
+            if let Some(yesterday) = device.energy_yesterday() {
+                ui.label(
+                    RichText::new(format!("| Yesterday: {yesterday:.2} kWh"))
+                        .small()
+                        .weak(),
+                );
+            }
+        });
+
+        // Total energy on its own line (with start time for context)
+        if let Some(total) = device.energy_total() {
+            ui.horizontal(|ui| {
+                let total_text = if let Some(start_time) = device.total_start_time() {
+                    // Try to format the start time more nicely
+                    let formatted_time = format_start_time(start_time);
+                    format!("Total: {total:.1} kWh (since {formatted_time})")
+                } else {
+                    format!("Total: {total:.1} kWh")
+                };
+                ui.label(RichText::new(total_text).small().weak());
+            });
+        }
+    }
+}
+
+/// Formats the start time for display.
+///
+/// Tries to extract just the date part from ISO 8601 format.
+fn format_start_time(time: &str) -> String {
+    // If it looks like ISO 8601 (e.g., "2024-01-15T10:30:00"), extract date
+    if time.len() >= 10 && time.chars().nth(4) == Some('-') && time.chars().nth(7) == Some('-') {
+        time[..10].to_string()
+    } else {
+        time.to_string()
+    }
 }
 
 #[cfg(test)]

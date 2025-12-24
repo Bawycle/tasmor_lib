@@ -330,9 +330,7 @@ impl DeviceManager {
                     changes.extend(state.to_state_changes());
                 }
 
-                if let Ok(sensor) =
-                    serde_json::from_str::<crate::telemetry::SensorData>(&payload)
-                {
+                if let Ok(sensor) = serde_json::from_str::<crate::telemetry::SensorData>(&payload) {
                     changes.extend(sensor.to_state_changes());
                 }
 

@@ -43,18 +43,30 @@ pub enum StateChange {
 
     /// Energy monitoring data updated.
     ///
-    /// Contains instantaneous power, voltage, and current readings.
+    /// Contains all energy-related readings. All fields are optional
+    /// to allow partial updates from different telemetry sources.
     Energy {
         /// Power consumption in Watts.
-        power: f32,
+        power: Option<f32>,
         /// Voltage in Volts.
-        voltage: f32,
+        voltage: Option<f32>,
         /// Current in Amperes.
-        current: f32,
+        current: Option<f32>,
+        /// Apparent power in VA.
+        apparent_power: Option<f32>,
+        /// Reactive power in `VAr`.
+        reactive_power: Option<f32>,
+        /// Power factor (0-1).
+        power_factor: Option<f32>,
+        /// Energy consumed today in kWh.
+        energy_today: Option<f32>,
+        /// Energy consumed yesterday in kWh.
+        energy_yesterday: Option<f32>,
+        /// Total energy consumed in kWh.
+        energy_total: Option<f32>,
+        /// Timestamp when total energy counting started (ISO 8601 format).
+        total_start_time: Option<String>,
     },
-
-    /// Total energy consumption updated.
-    EnergyTotal(f32),
 
     /// Multiple changes at once.
     ///
@@ -105,13 +117,49 @@ impl StateChange {
         Self::ColorTemp(ct)
     }
 
-    /// Creates an energy reading change.
+    /// Creates an energy reading change with basic power data.
     #[must_use]
     pub fn energy(power: f32, voltage: f32, current: f32) -> Self {
+        Self::Energy {
+            power: Some(power),
+            voltage: Some(voltage),
+            current: Some(current),
+            apparent_power: None,
+            reactive_power: None,
+            power_factor: None,
+            energy_today: None,
+            energy_yesterday: None,
+            energy_total: None,
+            total_start_time: None,
+        }
+    }
+
+    /// Creates an energy reading change with all fields.
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn energy_full(
+        power: Option<f32>,
+        voltage: Option<f32>,
+        current: Option<f32>,
+        apparent_power: Option<f32>,
+        reactive_power: Option<f32>,
+        power_factor: Option<f32>,
+        energy_today: Option<f32>,
+        energy_yesterday: Option<f32>,
+        energy_total: Option<f32>,
+        total_start_time: Option<String>,
+    ) -> Self {
         Self::Energy {
             power,
             voltage,
             current,
+            apparent_power,
+            reactive_power,
+            power_factor,
+            energy_today,
+            energy_yesterday,
+            energy_total,
+            total_start_time,
         }
     }
 
@@ -139,7 +187,7 @@ impl StateChange {
     /// Returns `true` if this is an energy-related change.
     #[must_use]
     pub fn is_energy(&self) -> bool {
-        matches!(self, Self::Energy { .. } | Self::EnergyTotal(_))
+        matches!(self, Self::Energy { .. })
     }
 
     /// Returns `true` if this is a batch of changes.
@@ -209,7 +257,6 @@ mod tests {
     #[test]
     fn is_energy() {
         assert!(StateChange::energy(100.0, 230.0, 0.5).is_energy());
-        assert!(StateChange::EnergyTotal(1.5).is_energy());
         assert!(!StateChange::power_on().is_energy());
     }
 

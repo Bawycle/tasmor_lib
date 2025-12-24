@@ -47,8 +47,20 @@ pub struct DeviceState {
     voltage: Option<f32>,
     /// Current in Amperes.
     current: Option<f32>,
+    /// Apparent power in VA.
+    apparent_power: Option<f32>,
+    /// Reactive power in `VAr`.
+    reactive_power: Option<f32>,
+    /// Power factor (0-1).
+    power_factor: Option<f32>,
+    /// Energy consumed today in kWh.
+    energy_today: Option<f32>,
+    /// Energy consumed yesterday in kWh.
+    energy_yesterday: Option<f32>,
     /// Energy total in kWh.
     energy_total: Option<f32>,
+    /// Timestamp when total energy counting started (ISO 8601 format).
+    total_start_time: Option<String>,
 }
 
 impl DeviceState {
@@ -222,6 +234,74 @@ impl DeviceState {
         self.energy_total = Some(kwh);
     }
 
+    /// Gets the apparent power in VA.
+    #[must_use]
+    pub fn apparent_power(&self) -> Option<f32> {
+        self.apparent_power
+    }
+
+    /// Sets the apparent power.
+    pub fn set_apparent_power(&mut self, va: f32) {
+        self.apparent_power = Some(va);
+    }
+
+    /// Gets the reactive power in `VAr`.
+    #[must_use]
+    pub fn reactive_power(&self) -> Option<f32> {
+        self.reactive_power
+    }
+
+    /// Sets the reactive power.
+    pub fn set_reactive_power(&mut self, var: f32) {
+        self.reactive_power = Some(var);
+    }
+
+    /// Gets the power factor (0-1).
+    #[must_use]
+    pub fn power_factor(&self) -> Option<f32> {
+        self.power_factor
+    }
+
+    /// Sets the power factor.
+    pub fn set_power_factor(&mut self, factor: f32) {
+        self.power_factor = Some(factor);
+    }
+
+    /// Gets the energy consumed today in kWh.
+    #[must_use]
+    pub fn energy_today(&self) -> Option<f32> {
+        self.energy_today
+    }
+
+    /// Sets the energy consumed today.
+    pub fn set_energy_today(&mut self, kwh: f32) {
+        self.energy_today = Some(kwh);
+    }
+
+    /// Gets the energy consumed yesterday in kWh.
+    #[must_use]
+    pub fn energy_yesterday(&self) -> Option<f32> {
+        self.energy_yesterday
+    }
+
+    /// Sets the energy consumed yesterday.
+    pub fn set_energy_yesterday(&mut self, kwh: f32) {
+        self.energy_yesterday = Some(kwh);
+    }
+
+    /// Gets the timestamp when total energy counting started.
+    ///
+    /// Returns the timestamp in ISO 8601 format (e.g., "2024-01-15T10:30:00").
+    #[must_use]
+    pub fn total_start_time(&self) -> Option<&str> {
+        self.total_start_time.as_deref()
+    }
+
+    /// Sets the timestamp when total energy counting started.
+    pub fn set_total_start_time(&mut self, time: String) {
+        self.total_start_time = Some(time);
+    }
+
     // ========== State Changes ==========
 
     /// Applies a state change and returns whether the state actually changed.
@@ -269,22 +349,47 @@ impl DeviceState {
                 power,
                 voltage,
                 current,
+                apparent_power,
+                reactive_power,
+                power_factor,
+                energy_today,
+                energy_yesterday,
+                energy_total,
+                total_start_time,
             } => {
-                let changed = self.power_consumption != Some(*power)
-                    || self.voltage != Some(*voltage)
-                    || self.current != Some(*current);
-                self.power_consumption = Some(*power);
-                self.voltage = Some(*voltage);
-                self.current = Some(*current);
-                changed
-            }
-            StateChange::EnergyTotal(kwh) => {
-                if self.energy_total == Some(*kwh) {
-                    false
-                } else {
-                    self.energy_total = Some(*kwh);
-                    true
+                let mut changed = false;
+
+                // Helper macro to update optional numeric fields
+                macro_rules! update_if_some {
+                    ($field:ident, $value:expr) => {
+                        if let Some(v) = $value {
+                            if self.$field != Some(*v) {
+                                self.$field = Some(*v);
+                                changed = true;
+                            }
+                        }
+                    };
                 }
+
+                update_if_some!(power_consumption, power);
+                update_if_some!(voltage, voltage);
+                update_if_some!(current, current);
+                update_if_some!(apparent_power, apparent_power);
+                update_if_some!(reactive_power, reactive_power);
+                update_if_some!(power_factor, power_factor);
+                update_if_some!(energy_today, energy_today);
+                update_if_some!(energy_yesterday, energy_yesterday);
+                update_if_some!(energy_total, energy_total);
+
+                // Handle string field separately
+                if let Some(time) = total_start_time
+                    && self.total_start_time.as_ref() != Some(time)
+                {
+                    self.total_start_time = Some(time.clone());
+                    changed = true;
+                }
+
+                changed
             }
             StateChange::Batch(changes) => {
                 let mut any_changed = false;

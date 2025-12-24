@@ -74,6 +74,12 @@ pub struct SensorData {
 /// All fields are optional as not all devices report all values.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct EnergyReading {
+    /// Timestamp when total energy counting started.
+    ///
+    /// Format: ISO 8601 datetime string (e.g., "2024-01-15T10:30:00").
+    #[serde(rename = "TotalStartTime", default)]
+    pub total_start_time: Option<String>,
+
     /// Total energy consumed today (in kWh).
     #[serde(rename = "Today", default)]
     pub today: Option<f32>,
@@ -302,16 +308,23 @@ impl SensorData {
     pub fn to_state_changes(&self) -> Vec<StateChange> {
         let mut changes = Vec::new();
 
-        if let Some(energy) = &self.energy
-            && let (Some(power), Some(voltage), Some(current)) =
-                (energy.power, energy.voltage, energy.current)
-        {
-            // Safe: power and voltage values from Tasmota are well within f32 precision range
-            changes.push(StateChange::Energy {
-                power: power as f32,
-                voltage: f32::from(voltage),
-                current,
-            });
+        if let Some(energy) = &self.energy {
+            // Only emit energy change if at least one field is present
+            if energy.has_power_data() || energy.has_consumption_data() {
+                // Safe: power and voltage values from Tasmota are well within f32 precision range
+                changes.push(StateChange::Energy {
+                    power: energy.power.map(|p| p as f32),
+                    voltage: energy.voltage.map(f32::from),
+                    current: energy.current,
+                    apparent_power: energy.apparent_power.map(|p| p as f32),
+                    reactive_power: energy.reactive_power.map(|p| p as f32),
+                    power_factor: energy.factor,
+                    energy_today: energy.today,
+                    energy_yesterday: energy.yesterday,
+                    energy_total: energy.total,
+                    total_start_time: energy.total_start_time.clone(),
+                });
+            }
         }
 
         changes
@@ -365,7 +378,6 @@ impl StatusSnsResponse {
             .map_or_else(Vec::new, SensorData::to_state_changes)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -497,11 +509,12 @@ mod tests {
             power,
             voltage,
             current,
+            ..
         } = &changes[0]
         {
-            assert!((power - 150.0).abs() < f32::EPSILON);
-            assert!((voltage - 230.0).abs() < f32::EPSILON);
-            assert!((current - 0.65).abs() < f32::EPSILON);
+            assert!((power.unwrap() - 150.0).abs() < f32::EPSILON);
+            assert!((voltage.unwrap() - 230.0).abs() < f32::EPSILON);
+            assert!((current.unwrap() - 0.65).abs() < f32::EPSILON);
         } else {
             panic!("Expected StateChange::Energy");
         }
@@ -569,14 +582,86 @@ mod tests {
             power,
             voltage,
             current,
+            ..
         } = &changes[0]
         {
-            assert!((power - 150.0).abs() < f32::EPSILON);
-            assert!((voltage - 230.0).abs() < f32::EPSILON);
-            assert!((current - 0.65).abs() < f32::EPSILON);
+            assert!((power.unwrap() - 150.0).abs() < f32::EPSILON);
+            assert!((voltage.unwrap() - 230.0).abs() < f32::EPSILON);
+            assert!((current.unwrap() - 0.65).abs() < f32::EPSILON);
         } else {
             panic!("Expected StateChange::Energy");
         }
     }
 
+    #[test]
+    fn to_state_changes_with_full_energy() {
+        let json = r#"{
+            "ENERGY": {
+                "Power": 182,
+                "Voltage": 224,
+                "Current": 0.706,
+                "ApparentPower": 195,
+                "ReactivePower": 50,
+                "Factor": 0.93,
+                "Today": 1.5,
+                "Yesterday": 2.3,
+                "Total": 1104.315
+            }
+        }"#;
+        let data: SensorData = serde_json::from_str(json).unwrap();
+
+        let changes = data.to_state_changes();
+        assert_eq!(changes.len(), 1);
+        if let StateChange::Energy {
+            power,
+            voltage,
+            current,
+            apparent_power,
+            reactive_power,
+            power_factor,
+            energy_today,
+            energy_yesterday,
+            energy_total,
+            total_start_time,
+        } = &changes[0]
+        {
+            assert!((power.unwrap() - 182.0).abs() < f32::EPSILON);
+            assert!((voltage.unwrap() - 224.0).abs() < f32::EPSILON);
+            assert!((current.unwrap() - 0.706).abs() < 0.001);
+            assert!((apparent_power.unwrap() - 195.0).abs() < f32::EPSILON);
+            assert!((reactive_power.unwrap() - 50.0).abs() < f32::EPSILON);
+            assert!((power_factor.unwrap() - 0.93).abs() < 0.01);
+            assert!((energy_today.unwrap() - 1.5).abs() < 0.01);
+            assert!((energy_yesterday.unwrap() - 2.3).abs() < 0.01);
+            assert!((energy_total.unwrap() - 1104.315).abs() < 0.01);
+            assert!(total_start_time.is_none()); // Not in test JSON
+        } else {
+            panic!("Expected StateChange::Energy");
+        }
+    }
+
+    #[test]
+    fn to_state_changes_with_total_start_time() {
+        let json = r#"{
+            "ENERGY": {
+                "TotalStartTime": "2024-01-15T10:30:00",
+                "Power": 100,
+                "Voltage": 230,
+                "Current": 0.5,
+                "Total": 500.0
+            }
+        }"#;
+        let data: SensorData = serde_json::from_str(json).unwrap();
+
+        let changes = data.to_state_changes();
+        assert_eq!(changes.len(), 1);
+        if let StateChange::Energy {
+            total_start_time, ..
+        } = &changes[0]
+        {
+            assert_eq!(total_start_time.as_deref(), Some("2024-01-15T10:30:00"));
+        } else {
+            panic!("Expected StateChange::Energy");
+        }
+    }
 }

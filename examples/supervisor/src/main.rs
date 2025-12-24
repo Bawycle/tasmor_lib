@@ -198,7 +198,10 @@ impl TasmotaSupervisor {
                         ConnectionStatus::Disconnected
                     };
 
-                    rt.block_on(self.device_manager.update_connection_status(device_id, status));
+                    rt.block_on(
+                        self.device_manager
+                            .update_connection_status(device_id, status),
+                    );
 
                     if let Some(err) = error {
                         rt.block_on(self.device_manager.set_device_error(device_id, Some(err)));
@@ -219,7 +222,10 @@ impl TasmotaSupervisor {
                     ..
                 } => {
                     // Update device state
-                    rt.block_on(self.device_manager.update_device_state(device_id, new_state));
+                    rt.block_on(
+                        self.device_manager
+                            .update_device_state(device_id, new_state),
+                    );
 
                     // Refresh our local device list
                     self.devices = rt.block_on(self.device_manager.devices());
