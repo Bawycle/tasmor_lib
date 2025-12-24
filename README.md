@@ -15,7 +15,9 @@ A modern, type-safe Rust library for controlling [Tasmota](https://tasmota.githu
 - 🔌 **Dual protocol support** - Control devices via MQTT or HTTP
 - ⚡ **Async/await** - Built on [Tokio](https://tokio.rs) for efficient async I/O
 - 🎨 **Full device support** - Lights (RGB/CCT), switches, relays, energy monitors
-- 🧪 **Well-tested** - Comprehensive unit and integration tests
+- 📡 **Event-driven architecture** - Subscribe to device state changes in real-time
+- 🏊 **Connection pooling** - Efficient broker connection sharing for multi-device setups
+- 🧪 **Well-tested** - Comprehensive unit and integration tests (280+ tests)
 - 📚 **Documented** - Comprehensive API documentation with examples
 
 ### Supported Capabilities
@@ -102,6 +104,77 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+### Multi-Device Management
+
+For applications controlling multiple devices, use the `DeviceManager`:
+
+```rust
+use tasmor_lib::manager::{DeviceManager, DeviceConfig};
+use tasmor_lib::event::DeviceEvent;
+use tasmor_lib::{Capabilities, Dimmer};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let manager = DeviceManager::new();
+
+    // Subscribe to device events
+    let mut events = manager.subscribe();
+    tokio::spawn(async move {
+        while let Ok(event) = events.recv().await {
+            match event {
+                DeviceEvent::StateChanged { device_id, change, .. } => {
+                    println!("Device {:?} changed: {:?}", device_id, change);
+                }
+                DeviceEvent::Connected { device_id } => {
+                    println!("Device {:?} connected", device_id);
+                }
+                _ => {}
+            }
+        }
+    });
+
+    // Add devices
+    let config = DeviceConfig::mqtt("mqtt://192.168.1.50:1883", "living_room")
+        .with_capabilities(Capabilities::rgbcct_light())
+        .with_friendly_name("Living Room Light");
+
+    let device_id = manager.add_device(config).await;
+
+    // Control devices by ID
+    manager.set_dimmer(device_id, Dimmer::new(75)?).await?;
+
+    Ok(())
+}
+```
+
+### Telemetry Parsing
+
+Parse MQTT telemetry messages from Tasmota devices:
+
+```rust
+use tasmor_lib::telemetry::{parse_telemetry, TelemetryMessage};
+
+fn handle_mqtt_message(topic: &str, payload: &str) {
+    if let Ok(msg) = parse_telemetry(topic, payload) {
+        match msg {
+            TelemetryMessage::State { device_topic, state } => {
+                println!("Device {} power: {:?}", device_topic, state.power());
+                println!("Dimmer: {:?}", state.dimmer());
+            }
+            TelemetryMessage::Sensor { device_topic, data } => {
+                if let Some(energy) = data.energy() {
+                    println!("Device {} power: {:?} W", device_topic, energy.power);
+                }
+            }
+            TelemetryMessage::LastWill { device_topic, online } => {
+                println!("Device {} is {}", device_topic, if online { "online" } else { "offline" });
+            }
+            _ => {}
+        }
+    }
+}
+```
+
 ## Documentation
 
 - 📖 [API Documentation](https://docs.rs/tasmor_lib) - Full API reference
@@ -109,8 +182,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Roadmap
 
-- [ ] Auto-discovery
-- [ ] WebSocket support for real-time updates
+- [ ] Auto-discovery via mDNS
 - [ ] Sequence command builder
 - [ ] Stabilize API for 1.0 release
 

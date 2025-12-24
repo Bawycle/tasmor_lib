@@ -83,8 +83,12 @@ mod capabilities;
 pub mod command;
 mod device;
 pub mod error;
+pub mod event;
+pub mod manager;
 pub mod protocol;
 pub mod response;
+pub mod state;
+pub mod telemetry;
 pub mod types;
 
 pub use capabilities::{Capabilities, CapabilitiesBuilder};

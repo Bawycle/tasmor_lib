@@ -9,10 +9,14 @@
 //! Tasmota devices. Each response type corresponds to a specific command
 //! or status query.
 
+mod color;
+mod dimmer;
 mod energy;
 mod power;
 mod status;
 
+pub use color::{ColorTempResponse, HsbColorResponse};
+pub use dimmer::DimmerResponse;
 pub use energy::EnergyResponse;
 pub use power::PowerResponse;
 pub use status::{

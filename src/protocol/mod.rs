@@ -12,12 +12,22 @@
 //!
 //! - [`HttpClient`]: HTTP-based communication using REST API
 //! - [`MqttClient`]: MQTT-based communication for real-time updates
+//! - [`PooledMqttClient`]: MQTT with connection pooling for multi-device scenarios
+//!
+//! # Connection Pooling
+//!
+//! When managing multiple Tasmota devices on the same MQTT broker, use
+//! [`PooledMqttClient`] or [`BrokerPool`] to share connections efficiently.
 
+mod broker_pool;
 mod http;
 mod mqtt;
+mod mqtt_pooled;
 
+pub use broker_pool::BrokerPool;
 pub use http::{HttpClient, HttpClientBuilder};
 pub use mqtt::{MqttClient, MqttClientBuilder};
+pub use mqtt_pooled::PooledMqttClient;
 
 use crate::command::Command;
 use crate::error::ProtocolError;

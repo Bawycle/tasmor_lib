@@ -3111,6 +3111,7 @@ dependencies = [
  "tokio",
  "tracing",
  "urlencoding",
+ "uuid",
  "wiremock",
 ]
 

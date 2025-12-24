@@ -1,0 +1,431 @@
+// SPDX-License-Identifier: MPL-2.0
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! Device state tracking.
+
+use crate::types::{ColorTemp, Dimmer, HsbColor, PowerState};
+
+use super::StateChange;
+
+/// Tracked state of a Tasmota device.
+///
+/// This struct maintains the current state of a device, including power states,
+/// dimmer level, color settings, and energy readings. All fields are optional
+/// because state may not be known until the device reports it.
+///
+/// # Maximum Relays
+///
+/// Tasmota supports up to 8 relays (POWER1-POWER8). The state tracks each
+/// relay independently.
+///
+/// # Examples
+///
+/// ```
+/// use tasmor_lib::state::DeviceState;
+/// use tasmor_lib::types::PowerState;
+///
+/// let mut state = DeviceState::new();
+/// state.set_power(1, PowerState::On);
+/// assert_eq!(state.power(1), Some(PowerState::On));
+/// ```
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct DeviceState {
+    /// Power state for each relay (indexed 0-7 for POWER1-POWER8).
+    power: [Option<PowerState>; 8],
+    /// Dimmer level (0-100).
+    dimmer: Option<Dimmer>,
+    /// HSB color (hue, saturation, brightness).
+    hsb_color: Option<HsbColor>,
+    /// Color temperature in mireds (153-500).
+    color_temp: Option<ColorTemp>,
+    /// Current power consumption in Watts.
+    power_consumption: Option<f32>,
+    /// Current voltage in Volts.
+    voltage: Option<f32>,
+    /// Current in Amperes.
+    current: Option<f32>,
+    /// Energy total in kWh.
+    energy_total: Option<f32>,
+}
+
+impl DeviceState {
+    /// Creates a new empty device state.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    // ========== Power State ==========
+
+    /// Gets the power state for a specific relay.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The relay index (1-8)
+    ///
+    /// # Returns
+    ///
+    /// Returns `None` if the index is out of range (0 or >8) or if the
+    /// power state is unknown.
+    #[must_use]
+    pub fn power(&self, index: u8) -> Option<PowerState> {
+        if index == 0 || index > 8 {
+            return None;
+        }
+        self.power[usize::from(index - 1)]
+    }
+
+    /// Sets the power state for a specific relay.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The relay index (1-8)
+    /// * `state` - The power state to set
+    ///
+    /// Does nothing if index is 0 or greater than 8.
+    pub fn set_power(&mut self, index: u8, state: PowerState) {
+        if index > 0 && index <= 8 {
+            self.power[usize::from(index - 1)] = Some(state);
+        }
+    }
+
+    /// Clears the power state for a specific relay.
+    pub fn clear_power(&mut self, index: u8) {
+        if index > 0 && index <= 8 {
+            self.power[usize::from(index - 1)] = None;
+        }
+    }
+
+    /// Returns all known power states as (index, state) pairs.
+    #[must_use]
+    pub fn all_power_states(&self) -> Vec<(u8, PowerState)> {
+        self.power
+            .iter()
+            .enumerate()
+            .filter_map(|(i, state)| {
+                state.map(|s| {
+                    // Safe: i is 0-7, so i+1 fits in u8
+                    #[allow(clippy::cast_possible_truncation)]
+                    let index = (i + 1) as u8;
+                    (index, s)
+                })
+            })
+            .collect()
+    }
+
+    /// Returns `true` if any relay is on.
+    #[must_use]
+    pub fn is_any_on(&self) -> bool {
+        self.power.iter().any(|s| matches!(s, Some(PowerState::On)))
+    }
+
+    // ========== Dimmer ==========
+
+    /// Gets the dimmer level.
+    #[must_use]
+    pub fn dimmer(&self) -> Option<Dimmer> {
+        self.dimmer
+    }
+
+    /// Sets the dimmer level.
+    pub fn set_dimmer(&mut self, value: Dimmer) {
+        self.dimmer = Some(value);
+    }
+
+    /// Clears the dimmer level.
+    pub fn clear_dimmer(&mut self) {
+        self.dimmer = None;
+    }
+
+    // ========== HSB Color ==========
+
+    /// Gets the HSB color.
+    #[must_use]
+    pub fn hsb_color(&self) -> Option<HsbColor> {
+        self.hsb_color
+    }
+
+    /// Sets the HSB color.
+    pub fn set_hsb_color(&mut self, color: HsbColor) {
+        self.hsb_color = Some(color);
+    }
+
+    /// Clears the HSB color.
+    pub fn clear_hsb_color(&mut self) {
+        self.hsb_color = None;
+    }
+
+    // ========== Color Temperature ==========
+
+    /// Gets the color temperature.
+    #[must_use]
+    pub fn color_temp(&self) -> Option<ColorTemp> {
+        self.color_temp
+    }
+
+    /// Sets the color temperature.
+    pub fn set_color_temp(&mut self, ct: ColorTemp) {
+        self.color_temp = Some(ct);
+    }
+
+    /// Clears the color temperature.
+    pub fn clear_color_temp(&mut self) {
+        self.color_temp = None;
+    }
+
+    // ========== Energy Monitoring ==========
+
+    /// Gets the current power consumption in Watts.
+    #[must_use]
+    pub fn power_consumption(&self) -> Option<f32> {
+        self.power_consumption
+    }
+
+    /// Sets the power consumption.
+    pub fn set_power_consumption(&mut self, watts: f32) {
+        self.power_consumption = Some(watts);
+    }
+
+    /// Gets the current voltage in Volts.
+    #[must_use]
+    pub fn voltage(&self) -> Option<f32> {
+        self.voltage
+    }
+
+    /// Sets the voltage.
+    pub fn set_voltage(&mut self, volts: f32) {
+        self.voltage = Some(volts);
+    }
+
+    /// Gets the current in Amperes.
+    #[must_use]
+    pub fn current(&self) -> Option<f32> {
+        self.current
+    }
+
+    /// Sets the current.
+    pub fn set_current(&mut self, amps: f32) {
+        self.current = Some(amps);
+    }
+
+    /// Gets the total energy consumption in kWh.
+    #[must_use]
+    pub fn energy_total(&self) -> Option<f32> {
+        self.energy_total
+    }
+
+    /// Sets the total energy.
+    pub fn set_energy_total(&mut self, kwh: f32) {
+        self.energy_total = Some(kwh);
+    }
+
+    // ========== State Changes ==========
+
+    /// Applies a state change and returns whether the state actually changed.
+    ///
+    /// # Returns
+    ///
+    /// Returns `true` if the state was modified, `false` if it was already
+    /// at the target value.
+    pub fn apply(&mut self, change: &StateChange) -> bool {
+        match change {
+            StateChange::Power { index, state } => {
+                let current = self.power(*index);
+                if current == Some(*state) {
+                    false
+                } else {
+                    self.set_power(*index, *state);
+                    true
+                }
+            }
+            StateChange::Dimmer(value) => {
+                if self.dimmer == Some(*value) {
+                    false
+                } else {
+                    self.dimmer = Some(*value);
+                    true
+                }
+            }
+            StateChange::HsbColor(color) => {
+                if self.hsb_color == Some(*color) {
+                    false
+                } else {
+                    self.hsb_color = Some(*color);
+                    true
+                }
+            }
+            StateChange::ColorTemp(ct) => {
+                if self.color_temp == Some(*ct) {
+                    false
+                } else {
+                    self.color_temp = Some(*ct);
+                    true
+                }
+            }
+            StateChange::Energy {
+                power,
+                voltage,
+                current,
+            } => {
+                let changed = self.power_consumption != Some(*power)
+                    || self.voltage != Some(*voltage)
+                    || self.current != Some(*current);
+                self.power_consumption = Some(*power);
+                self.voltage = Some(*voltage);
+                self.current = Some(*current);
+                changed
+            }
+            StateChange::EnergyTotal(kwh) => {
+                if self.energy_total == Some(*kwh) {
+                    false
+                } else {
+                    self.energy_total = Some(*kwh);
+                    true
+                }
+            }
+            StateChange::Batch(changes) => {
+                let mut any_changed = false;
+                for c in changes {
+                    if self.apply(c) {
+                        any_changed = true;
+                    }
+                }
+                any_changed
+            }
+        }
+    }
+
+    /// Clears all state, resetting to unknown.
+    pub fn clear(&mut self) {
+        *self = Self::new();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_state_is_empty() {
+        let state = DeviceState::new();
+        assert!(state.power(1).is_none());
+        assert!(state.dimmer().is_none());
+        assert!(state.hsb_color().is_none());
+        assert!(state.color_temp().is_none());
+        assert!(state.power_consumption().is_none());
+    }
+
+    #[test]
+    fn power_state_management() {
+        let mut state = DeviceState::new();
+
+        state.set_power(1, PowerState::On);
+        assert_eq!(state.power(1), Some(PowerState::On));
+        assert!(state.power(2).is_none());
+
+        state.set_power(2, PowerState::Off);
+        assert_eq!(state.power(2), Some(PowerState::Off));
+
+        state.clear_power(1);
+        assert!(state.power(1).is_none());
+    }
+
+    #[test]
+    fn power_index_bounds() {
+        let mut state = DeviceState::new();
+
+        // Index 0 is invalid
+        state.set_power(0, PowerState::On);
+        assert!(state.power(0).is_none());
+
+        // Index 9 is out of range
+        state.set_power(9, PowerState::On);
+        assert!(state.power(9).is_none());
+
+        // Index 8 is valid
+        state.set_power(8, PowerState::On);
+        assert_eq!(state.power(8), Some(PowerState::On));
+    }
+
+    #[test]
+    fn all_power_states() {
+        let mut state = DeviceState::new();
+        state.set_power(1, PowerState::On);
+        state.set_power(3, PowerState::Off);
+        state.set_power(5, PowerState::On);
+
+        let states = state.all_power_states();
+        assert_eq!(states.len(), 3);
+        assert!(states.contains(&(1, PowerState::On)));
+        assert!(states.contains(&(3, PowerState::Off)));
+        assert!(states.contains(&(5, PowerState::On)));
+    }
+
+    #[test]
+    fn is_any_on() {
+        let mut state = DeviceState::new();
+        assert!(!state.is_any_on());
+
+        state.set_power(1, PowerState::Off);
+        assert!(!state.is_any_on());
+
+        state.set_power(2, PowerState::On);
+        assert!(state.is_any_on());
+    }
+
+    #[test]
+    fn apply_power_change() {
+        let mut state = DeviceState::new();
+
+        let change = StateChange::Power {
+            index: 1,
+            state: PowerState::On,
+        };
+        assert!(state.apply(&change));
+        assert_eq!(state.power(1), Some(PowerState::On));
+
+        // Applying same state returns false
+        assert!(!state.apply(&change));
+    }
+
+    #[test]
+    fn apply_dimmer_change() {
+        let mut state = DeviceState::new();
+        let dimmer = Dimmer::new(75).unwrap();
+
+        let change = StateChange::Dimmer(dimmer);
+        assert!(state.apply(&change));
+        assert_eq!(state.dimmer(), Some(dimmer));
+    }
+
+    #[test]
+    fn apply_batch_changes() {
+        let mut state = DeviceState::new();
+
+        let changes = StateChange::Batch(vec![
+            StateChange::Power {
+                index: 1,
+                state: PowerState::On,
+            },
+            StateChange::Dimmer(Dimmer::new(50).unwrap()),
+        ]);
+
+        assert!(state.apply(&changes));
+        assert_eq!(state.power(1), Some(PowerState::On));
+        assert_eq!(state.dimmer(), Some(Dimmer::new(50).unwrap()));
+    }
+
+    #[test]
+    fn clear_resets_state() {
+        let mut state = DeviceState::new();
+        state.set_power(1, PowerState::On);
+        state.set_dimmer(Dimmer::new(75).unwrap());
+
+        state.clear();
+
+        assert!(state.power(1).is_none());
+        assert!(state.dimmer().is_none());
+    }
+}
