@@ -14,7 +14,7 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use rumqttc::{AsyncClient, EventLoop, MqttOptions, QoS};
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{RwLock, mpsc, oneshot};
 
 use crate::error::ProtocolError;
 
@@ -66,17 +66,32 @@ impl SharedConnection {
     }
 
     /// Adds a subscription for a device topic.
+    ///
+    /// Subscribes to both `stat/<topic>/+` (command responses) and `tele/<topic>/+` (telemetry).
     pub(crate) async fn add_subscription(
         &self,
         device_topic: String,
         response_tx: mpsc::Sender<String>,
     ) -> Result<(), ProtocolError> {
-        // Subscribe to stat/<topic>/+ for responses
+        // Subscribe to stat/<topic>/+ for command responses
         let stat_topic = format!("stat/{device_topic}/+");
         self.client
             .subscribe(&stat_topic, QoS::AtLeastOnce)
             .await
             .map_err(ProtocolError::Mqtt)?;
+
+        // Subscribe to tele/<topic>/+ for telemetry (STATE, SENSOR, LWT, etc.)
+        let tele_topic = format!("tele/{device_topic}/+");
+        self.client
+            .subscribe(&tele_topic, QoS::AtLeastOnce)
+            .await
+            .map_err(ProtocolError::Mqtt)?;
+
+        tracing::debug!(
+            stat = %stat_topic,
+            tele = %tele_topic,
+            "Subscribed to device topics"
+        );
 
         // Register the subscription
         let subscription = TopicSubscription { response_tx };
@@ -89,25 +104,67 @@ impl SharedConnection {
     }
 
     /// Removes a subscription for a device topic.
+    ///
+    /// Unsubscribes from both `stat/<topic>/+` and `tele/<topic>/+` MQTT topics.
     pub(crate) async fn remove_subscription(&self, device_topic: &str) {
+        // Remove from our tracking
         self.subscriptions.write().await.remove(device_topic);
-        // Note: We don't unsubscribe from MQTT as other code might still be interested
-        // and it doesn't hurt to receive messages we ignore
+
+        // Unsubscribe from MQTT topics
+        let stat_topic = format!("stat/{device_topic}/+");
+        let tele_topic = format!("tele/{device_topic}/+");
+
+        if let Err(e) = self.client.unsubscribe(&stat_topic).await {
+            tracing::warn!(topic = %stat_topic, error = %e, "Failed to unsubscribe from stat topic");
+        }
+
+        if let Err(e) = self.client.unsubscribe(&tele_topic).await {
+            tracing::warn!(topic = %tele_topic, error = %e, "Failed to unsubscribe from tele topic");
+        }
+
+        tracing::debug!(
+            stat = %stat_topic,
+            tele = %tele_topic,
+            "Unsubscribed from device topics"
+        );
     }
 
     /// Routes an incoming message to the appropriate subscriber.
-    pub(crate) async fn route_message(&self, topic: &str, payload: String) {
+    ///
+    /// Handles both `stat/<topic>/+` (command responses) and `tele/<topic>/+` (telemetry) messages.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the subscriber channel is closed.
+    pub(crate) async fn route_message(
+        &self,
+        topic: &str,
+        payload: String,
+    ) -> Result<(), ProtocolError> {
         // Parse the topic to extract device topic
-        // Format: stat/<device_topic>/RESULT
+        // Formats:
+        // - stat/<device_topic>/<command> (e.g., POWER, DIMMER, RESULT)
+        // - tele/<device_topic>/<type> (e.g., STATE, SENSOR, LWT)
         let parts: Vec<&str> = topic.split('/').collect();
-        if parts.len() >= 3 && parts[0] == "stat" && parts[2] == "RESULT" {
+        if parts.len() >= 3 && (parts[0] == "stat" || parts[0] == "tele") {
             let device_topic = parts[1];
 
             let subscriptions = self.subscriptions.read().await;
             if let Some(sub) = subscriptions.get(device_topic) {
-                let _ = sub.response_tx.send(payload).await;
+                tracing::debug!(
+                    topic = %topic,
+                    device = %device_topic,
+                    prefix = %parts[0],
+                    "Routing message to subscriber"
+                );
+                sub.response_tx.send(payload).await.map_err(|e| {
+                    ProtocolError::ChannelClosed(format!(
+                        "Failed to send message to subscriber for {device_topic}: {e}"
+                    ))
+                })?;
             }
         }
+        Ok(())
     }
 
     /// Returns the number of active subscriptions.
@@ -205,8 +262,7 @@ impl BrokerPool {
 
         // Create new connection
         tracing::debug!(?key, "Creating new broker connection");
-        let conn = self.create_connection(&key, credentials).await?;
-        let arc = Arc::new(conn);
+        let arc = self.create_connection(&key, credentials).await?;
 
         // Store weak reference
         {
@@ -222,7 +278,7 @@ impl BrokerPool {
         &self,
         key: &BrokerKey,
         credentials: Option<(&str, &str)>,
-    ) -> Result<SharedConnection, ProtocolError> {
+    ) -> Result<Arc<SharedConnection>, ProtocolError> {
         // Generate unique client ID
         let counter = POOL_CLIENT_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
         let client_id = format!("tasmor_pool_{}_{}", std::process::id(), counter);
@@ -244,27 +300,40 @@ impl BrokerPool {
             broker_key: key.clone(),
         };
 
-        // Spawn event loop handler
-        let conn_arc_for_task = Arc::new(conn);
-        let conn_weak = Arc::downgrade(&conn_arc_for_task);
+        // Create Arc that will be shared between caller and event loop
+        let conn_arc = Arc::new(conn);
+        let conn_weak = Arc::downgrade(&conn_arc);
 
+        // Channel to signal when ConnAck is received
+        let (connack_tx, connack_rx) = oneshot::channel();
+
+        // Spawn event loop handler
         tokio::spawn(async move {
-            handle_pooled_mqtt_events(event_loop, conn_weak).await;
+            handle_pooled_mqtt_events(event_loop, conn_weak, Some(connack_tx)).await;
         });
 
-        // Wait for connection to be established
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
-        // Extract the inner value - this is safe because we just created it
-        // and the only other reference is the weak one in the spawned task
-        Ok(Arc::try_unwrap(conn_arc_for_task).unwrap_or_else(|arc| {
-            // If we can't unwrap, clone the inner value
-            SharedConnection {
-                client: arc.client.clone(),
-                subscriptions: RwLock::new(HashMap::new()),
-                broker_key: arc.broker_key.clone(),
+        // Wait for ConnAck with timeout
+        let timeout = Duration::from_secs(10);
+        match tokio::time::timeout(timeout, connack_rx).await {
+            Ok(Ok(())) => {
+                tracing::debug!(?key, "MQTT connection established");
             }
-        }))
+            Ok(Err(_)) => {
+                // Channel closed without signal - event loop crashed
+                return Err(ProtocolError::ConnectionFailed(
+                    "MQTT event loop terminated unexpectedly".to_string(),
+                ));
+            }
+            Err(_) => {
+                // Timeout
+                return Err(ProtocolError::ConnectionFailed(format!(
+                    "MQTT connection timeout after {}s",
+                    timeout.as_secs()
+                )));
+            }
+        }
+
+        Ok(conn_arc)
     }
 
     /// Removes stale connections from the pool.
@@ -298,13 +367,30 @@ impl std::fmt::Debug for BrokerPool {
 }
 
 /// Handles MQTT events for a pooled connection.
-async fn handle_pooled_mqtt_events(mut event_loop: EventLoop, conn: Weak<SharedConnection>) {
+async fn handle_pooled_mqtt_events(
+    mut event_loop: EventLoop,
+    conn: Weak<SharedConnection>,
+    connack_tx: Option<oneshot::Sender<()>>,
+) {
     use rumqttc::{Event, Packet};
 
+    let mut connack_tx = connack_tx;
+
     loop {
+        // Check if all clients have disconnected
+        // If so, exit the loop to allow the connection to be cleaned up
+        if conn.strong_count() == 0 {
+            tracing::debug!("All clients disconnected, stopping MQTT event loop");
+            break;
+        }
+
         match event_loop.poll().await {
             Ok(Event::Incoming(Packet::ConnAck(connack))) => {
                 tracing::debug!(?connack, "Pooled MQTT connected");
+                // Signal that connection is established
+                if let Some(tx) = connack_tx.take() {
+                    let _ = tx.send(());
+                }
             }
             Ok(Event::Incoming(Packet::SubAck(suback))) => {
                 tracing::debug!(?suback, "Pooled MQTT subscription acknowledged");
@@ -318,10 +404,17 @@ async fn handle_pooled_mqtt_events(mut event_loop: EventLoop, conn: Weak<SharedC
                             payload = %payload,
                             "Pooled MQTT received message"
                         );
-                        conn.route_message(&publish.topic, payload).await;
+                        if let Err(e) = conn.route_message(&publish.topic, payload).await {
+                            tracing::warn!(
+                                topic = %publish.topic,
+                                error = %e,
+                                "Failed to route message to subscriber"
+                            );
+                        }
                     }
                 } else {
                     // Connection dropped, exit loop
+                    tracing::debug!("SharedConnection dropped, stopping event loop");
                     break;
                 }
             }
@@ -484,9 +577,11 @@ mod tests {
             broker_key: key,
         };
 
-        // Should not panic when no subscribers
-        conn.route_message("stat/device/RESULT", "{}".to_string())
+        // Should not error when no subscribers (message is just not routed)
+        let result = conn
+            .route_message("stat/device/RESULT", "{}".to_string())
             .await;
+        assert!(result.is_ok());
         assert_eq!(conn.subscription_count().await, 0);
     }
 
@@ -504,12 +599,55 @@ mod tests {
             broker_key: key,
         };
 
-        // Wrong topic format - should not panic
-        conn.route_message("wrong/format", "{}".to_string()).await;
-        conn.route_message("stat/device/POWER", "{}".to_string())
-            .await; // Not RESULT
-        conn.route_message("cmnd/device/RESULT", "{}".to_string())
-            .await; // Not stat/
+        // Wrong topic format - should return Ok (just not routed)
+        assert!(
+            conn.route_message("wrong/format", "{}".to_string())
+                .await
+                .is_ok()
+        );
+        assert!(
+            conn.route_message("cmnd/device/POWER", "{}".to_string())
+                .await
+                .is_ok()
+        ); // cmnd/ not supported
+    }
+
+    #[tokio::test]
+    async fn shared_connection_route_message_stat_and_tele() {
+        use rumqttc::MqttOptions;
+
+        let options = MqttOptions::new("test_client_stat_tele", "localhost", 1883);
+        let (client, _event_loop) = AsyncClient::new(options, 10);
+
+        let key = BrokerKey::new("mqtt://localhost:1883", None).unwrap();
+        let conn = SharedConnection {
+            client,
+            subscriptions: RwLock::new(HashMap::new()),
+            broker_key: key,
+        };
+
+        // Add a subscription with a receiver
+        let (tx, mut rx) = mpsc::channel(10);
+        conn.subscriptions
+            .write()
+            .await
+            .insert("device".to_string(), TopicSubscription { response_tx: tx });
+
+        // Both stat/ and tele/ should be routed
+        assert!(
+            conn.route_message("stat/device/RESULT", r#"{"POWER":"ON"}"#.to_string())
+                .await
+                .is_ok()
+        );
+        assert!(
+            conn.route_message("tele/device/STATE", r#"{"Wifi":{}}"#.to_string())
+                .await
+                .is_ok()
+        );
+
+        // Verify messages were received
+        assert_eq!(rx.recv().await, Some(r#"{"POWER":"ON"}"#.to_string()));
+        assert_eq!(rx.recv().await, Some(r#"{"Wifi":{}}"#.to_string()));
     }
 
     #[tokio::test]
