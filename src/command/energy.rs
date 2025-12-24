@@ -40,9 +40,10 @@ use crate::command::Command;
 /// assert_eq!(cmd.name(), "Status");
 /// assert_eq!(cmd.payload(), Some("10".to_string()));
 ///
-/// // Reset energy counters
+/// // Reset energy counters (uses modern EnergyTotal command)
 /// let reset = EnergyCommand::ResetTotal;
-/// assert_eq!(reset.name(), "EnergyReset3");
+/// assert_eq!(reset.name(), "EnergyTotal");
+/// assert_eq!(reset.payload(), Some("0".to_string()));
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnergyCommand {
@@ -89,11 +90,10 @@ impl Command for EnergyCommand {
     fn name(&self) -> String {
         match self {
             Self::Get => "Status".to_string(),
-            Self::ResetToday => "EnergyReset1".to_string(),
-            Self::ResetYesterday => "EnergyReset2".to_string(),
-            Self::ResetTotal => "EnergyReset3".to_string(),
-            Self::SetToday(_) => "EnergyToday".to_string(),
-            Self::SetTotal(_) => "EnergyTotal".to_string(),
+            // Use modern commands (EnergyReset1/2/3 deprecated in Tasmota v10+)
+            Self::ResetToday | Self::SetToday(_) => "EnergyToday".to_string(),
+            Self::ResetYesterday => "EnergyYesterday".to_string(),
+            Self::ResetTotal | Self::SetTotal(_) => "EnergyTotal".to_string(),
         }
     }
 
@@ -123,9 +123,18 @@ mod tests {
 
     #[test]
     fn energy_command_reset() {
-        assert_eq!(EnergyCommand::ResetToday.name(), "EnergyReset1");
-        assert_eq!(EnergyCommand::ResetYesterday.name(), "EnergyReset2");
-        assert_eq!(EnergyCommand::ResetTotal.name(), "EnergyReset3");
+        // Modern commands (EnergyReset1/2/3 deprecated in Tasmota v10+)
+        assert_eq!(EnergyCommand::ResetToday.name(), "EnergyToday");
+        assert_eq!(EnergyCommand::ResetToday.payload(), Some("0".to_string()));
+
+        assert_eq!(EnergyCommand::ResetYesterday.name(), "EnergyYesterday");
+        assert_eq!(
+            EnergyCommand::ResetYesterday.payload(),
+            Some("0".to_string())
+        );
+
+        assert_eq!(EnergyCommand::ResetTotal.name(), "EnergyTotal");
+        assert_eq!(EnergyCommand::ResetTotal.payload(), Some("0".to_string()));
     }
 
     #[test]
