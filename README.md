@@ -17,7 +17,7 @@ A modern, type-safe Rust library for controlling [Tasmota](https://tasmota.githu
 - 🎨 **Full device support** - Lights (RGB/CCT), switches, relays, energy monitors
 - 📡 **Event-driven architecture** - Subscribe to device state changes in real-time
 - 🏊 **Connection pooling** - Efficient broker connection sharing for multi-device setups
-- 🧪 **Well-tested** - Comprehensive unit and integration tests (280+ tests)
+- 🧪 **Well-tested** - Comprehensive unit and integration tests (340+ tests)
 - 📚 **Documented** - Comprehensive API documentation with examples
 
 ### Supported Capabilities
@@ -35,6 +35,15 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 tasmor_lib = "0.1"
+```
+
+### Optional Features
+
+- **`serde`** - Enable `Serialize`/`Deserialize` for all public types (device state, events, capabilities)
+
+```toml
+[dependencies]
+tasmor_lib = { version = "0.1", features = ["serde"] }
 ```
 
 ## Quick Start
@@ -125,7 +134,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 DeviceEvent::StateChanged { device_id, change, .. } => {
                     println!("Device {:?} changed: {:?}", device_id, change);
                 }
-                DeviceEvent::Connected { device_id } => {
+                DeviceEvent::ConnectionChanged { device_id, connected: true, .. } => {
                     println!("Device {:?} connected", device_id);
                 }
                 _ => {}
@@ -192,11 +201,14 @@ fn handle_mqtt_message(topic: &str, payload: &str) {
 # Run tests
 cargo test
 
+# Run tests with serde feature
+cargo test --features serde
+
 # Check code coverage
 cargo tarpaulin --out Stdout
 
 # Run all verification checks
-cargo check && cargo build && cargo test && cargo fmt --check && cargo clippy -- -D warnings
+cargo check && cargo build && cargo test && cargo fmt --check && cargo clippy -- -D warnings -W clippy::pedantic
 ```
 
 ## Contributing
