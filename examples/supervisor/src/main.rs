@@ -48,7 +48,7 @@ struct TasmotaSupervisor {
 
 impl TasmotaSupervisor {
     /// Creates a new application instance.
-    fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let device_manager = DeviceManager::new();
         let event_rx = device_manager.subscribe();
         let app_config = AppConfig::load();
@@ -63,6 +63,9 @@ impl TasmotaSupervisor {
         // Get initial device list
         let devices = rt.block_on(device_manager.devices());
 
+        // Spawn background task to wake UI when events arrive
+        Self::spawn_event_waker(cc.egui_ctx.clone(), device_manager.subscribe());
+
         Self {
             device_manager,
             event_rx,
@@ -73,6 +76,29 @@ impl TasmotaSupervisor {
             edit_dialog_state: None,
             error_message: None,
         }
+    }
+
+    /// Spawns a background task that wakes the UI when device events arrive.
+    fn spawn_event_waker(ctx: egui::Context, mut event_rx: broadcast::Receiver<DeviceEvent>) {
+        tokio::spawn(async move {
+            loop {
+                match event_rx.recv().await {
+                    Ok(_) => {
+                        // Wake up the UI to process the event
+                        ctx.request_repaint();
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        // Channel closed, exit the task
+                        break;
+                    }
+                    Err(broadcast::error::RecvError::Lagged(n)) => {
+                        // Some messages were missed due to slow processing
+                        tracing::warn!(missed = n, "Event waker lagged behind");
+                        ctx.request_repaint();
+                    }
+                }
+            }
+        });
     }
 
     /// Handles device card interactions.
