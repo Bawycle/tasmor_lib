@@ -286,6 +286,19 @@ impl DeviceManager {
             .map_err(|e| e.to_string())
     }
 
+    /// Resets the total energy counter.
+    pub async fn reset_energy_total(&self, config_id: Uuid) -> Result<(), String> {
+        let device_id = self
+            .get_device_id(config_id)
+            .await
+            .ok_or("Device not found")?;
+
+        self.library_manager
+            .reset_energy_total(device_id)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     /// Refreshes the device status by querying the library's current state.
     pub async fn refresh_status(&self, config_id: Uuid) -> Result<(), String> {
         let device_id = self

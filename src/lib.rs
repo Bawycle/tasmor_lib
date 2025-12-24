@@ -99,4 +99,7 @@ pub use command::{
 pub use device::{Device, HttpDeviceBuilder, MqttDeviceBuilder};
 pub use error::{DeviceError, Error, ParseError, ProtocolError, Result, ValueError};
 pub use response::{EnergyResponse, PowerResponse, StatusResponse};
-pub use types::{ColorTemp, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState};
+pub use types::{
+    ColorTemp, DateTimeParseError, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState,
+    TasmotaDateTime,
+};

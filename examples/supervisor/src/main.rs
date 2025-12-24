@@ -169,6 +169,13 @@ impl TasmotaSupervisor {
                 self.error_message = Some(e);
             }
         }
+
+        if response.energy_reset_clicked {
+            let dm = &self.device_manager;
+            if let Err(e) = rt.block_on(dm.reset_energy_total(device_id)) {
+                self.error_message = Some(e);
+            }
+        }
     }
 
     /// Processes pending device events from the library.

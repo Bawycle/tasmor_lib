@@ -178,7 +178,7 @@ pub fn device_card(ui: &mut Ui, device: &DeviceState) -> DeviceCardResponse {
 
                 // Energy monitoring for plugs (on separate row for better readability)
                 if device.model().supports_energy_monitoring() {
-                    render_energy_section(ui, device);
+                    render_energy_section(ui, device, &mut response);
                 }
 
                 // Color controls on a separate row
@@ -254,6 +254,8 @@ pub struct DeviceCardResponse {
     pub hue_changed: Option<(u16, u8, u8)>,
     /// Color temperature changed (in mireds)
     pub color_temp_changed: Option<u16>,
+    /// Energy reset button was clicked
+    pub energy_reset_clicked: bool,
 }
 
 /// Renders the add device dialog.
@@ -592,7 +594,7 @@ pub struct EditDeviceDialogResponse {
 }
 
 /// Renders the energy monitoring section for devices that support it.
-fn render_energy_section(ui: &mut Ui, device: &DeviceState) {
+fn render_energy_section(ui: &mut Ui, device: &DeviceState, response: &mut DeviceCardResponse) {
     ui.horizontal(|ui| {
         // Main power readings
         if let Some(power) = device.power_consumption_watts() {
@@ -657,6 +659,15 @@ fn render_energy_section(ui: &mut Ui, device: &DeviceState) {
                     format!("Total: {total:.1} kWh")
                 };
                 ui.label(RichText::new(total_text).small().weak());
+
+                // Reset button
+                if ui
+                    .small_button("Reset")
+                    .on_hover_text("Reset total energy counter")
+                    .clicked()
+                {
+                    response.energy_reset_clicked = true;
+                }
             });
         }
     }

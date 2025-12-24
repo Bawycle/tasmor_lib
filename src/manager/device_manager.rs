@@ -635,6 +635,32 @@ impl DeviceManager {
         Ok(())
     }
 
+    /// Resets the total energy counter.
+    ///
+    /// Sends the `EnergyReset3` command to the device, which clears the
+    /// accumulated energy consumption value and resets the start time.
+    ///
+    /// The local state is not modified immediately. The new values will be
+    /// reflected in the next telemetry update from the device, or you can
+    /// call `refresh_energy()` to query the updated values.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the device is not found, not connected, or doesn't
+    /// have energy monitoring capability.
+    pub async fn reset_energy_total(&self, device_id: DeviceId) -> Result<(), Error> {
+        self.check_capability(device_id, Capabilities::energy)
+            .await?;
+
+        let command = crate::command::EnergyCommand::ResetTotal;
+        self.send_command(device_id, &command).await?;
+
+        // Don't modify local state - let the device's response or next
+        // telemetry update provide the actual values
+
+        Ok(())
+    }
+
     // =========================================================================
     // Internal Helpers
     // =========================================================================
