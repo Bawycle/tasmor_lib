@@ -213,19 +213,26 @@ async fn handle_mqtt_events(
                 tracing::debug!(?suback, "MQTT subscription acknowledged");
             }
             Ok(Event::Incoming(Packet::Publish(publish))) => {
-                // Check if this is a RESULT response for our device
-                // Tasmota sends responses on both stat/<topic>/RESULT (JSON) and
-                // stat/<topic>/<COMMAND> (plain text). We only want the JSON responses.
-                let result_topic = format!("stat/{topic}/RESULT");
-                if publish.topic == result_topic
-                    && let Ok(payload) = String::from_utf8(publish.payload.to_vec())
-                {
-                    tracing::debug!(
-                        topic = %publish.topic,
-                        payload = %payload,
-                        "Received MQTT message"
-                    );
-                    let _ = response_tx.send(payload).await;
+                // Check if this is a response for our device
+                // Tasmota sends responses on:
+                // - stat/<topic>/RESULT (JSON) for most commands
+                // - stat/<topic>/STATUS<n> (JSON) for Status commands
+                // - stat/<topic>/<COMMAND> (plain text) which we ignore
+                let stat_prefix = format!("stat/{topic}/");
+                if publish.topic.starts_with(&stat_prefix) {
+                    let suffix = &publish.topic[stat_prefix.len()..];
+                    // Accept RESULT and STATUS* responses (both are JSON)
+                    let is_json_response = suffix == "RESULT" || suffix.starts_with("STATUS");
+                    if is_json_response
+                        && let Ok(payload) = String::from_utf8(publish.payload.to_vec())
+                    {
+                        tracing::debug!(
+                            topic = %publish.topic,
+                            payload = %payload,
+                            "Received MQTT message"
+                        );
+                        let _ = response_tx.send(payload).await;
+                    }
                 }
             }
             Ok(_) => {}
