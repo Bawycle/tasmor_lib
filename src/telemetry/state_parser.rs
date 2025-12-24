@@ -6,10 +6,77 @@
 //! Parser for Tasmota STATE telemetry messages.
 
 use serde::Deserialize;
+use serde::de::{self, Deserializer};
 
 use crate::error::ParseError;
 use crate::state::StateChange;
 use crate::types::{ColorTemp, Dimmer, HsbColor, PowerState};
+
+/// Deserializes a boolean from either "ON"/"OFF" string or 0/1 integer.
+fn deserialize_bool_or_int<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Visitor;
+
+    struct BoolOrIntVisitor;
+
+    impl Visitor<'_> for BoolOrIntVisitor {
+        type Value = Option<bool>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("a boolean, string 'ON'/'OFF', or integer 0/1")
+        }
+
+        fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(v))
+        }
+
+        fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(v != 0))
+        }
+
+        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(v != 0))
+        }
+
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            match v.to_uppercase().as_str() {
+                "ON" | "TRUE" | "1" => Ok(Some(true)),
+                "OFF" | "FALSE" | "0" => Ok(Some(false)),
+                _ => Err(de::Error::invalid_value(de::Unexpected::Str(v), &self)),
+            }
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+    }
+
+    deserializer.deserialize_any(BoolOrIntVisitor)
+}
 
 /// Parsed state from a `tele/<topic>/STATE` message.
 ///
@@ -86,9 +153,9 @@ pub struct TelemetryState {
     #[serde(rename = "White", default)]
     white: Option<u8>,
 
-    /// Fade setting (0 = off, 1 = on).
-    #[serde(rename = "Fade", default)]
-    fade: Option<u8>,
+    /// Fade setting ("ON"/"OFF" or 0/1).
+    #[serde(rename = "Fade", default, deserialize_with = "deserialize_bool_or_int")]
+    fade: Option<bool>,
 
     /// Transition speed (1-40).
     #[serde(rename = "Speed", default)]
@@ -213,7 +280,7 @@ impl TelemetryState {
     /// Returns whether fade is enabled.
     #[must_use]
     pub fn fade_enabled(&self) -> Option<bool> {
-        self.fade.map(|v| v != 0)
+        self.fade
     }
 
     /// Returns the transition speed (1-40).
@@ -441,5 +508,83 @@ mod tests {
         let state: TelemetryState = serde_json::from_str(json).unwrap();
 
         assert_eq!(state.uptime_seconds(), Some(1_483_374));
+    }
+
+    #[test]
+    fn parse_fade_as_string() {
+        // Tasmota can send Fade as "ON"/"OFF" string
+        let json = r#"{"POWER":"ON","Fade":"ON","Speed":2}"#;
+        let state: TelemetryState = serde_json::from_str(json).unwrap();
+
+        assert_eq!(state.fade_enabled(), Some(true));
+        assert_eq!(state.speed(), Some(2));
+    }
+
+    #[test]
+    fn parse_fade_as_int() {
+        // Tasmota can also send Fade as 0/1 integer
+        let json = r#"{"POWER":"ON","Fade":1,"Speed":2}"#;
+        let state: TelemetryState = serde_json::from_str(json).unwrap();
+
+        assert_eq!(state.fade_enabled(), Some(true));
+    }
+
+    #[test]
+    fn parse_real_tasmota_result() {
+        // This is the actual format from a real Tasmota device
+        let json = r#"{
+            "Time":"2025-12-24T12:52:52",
+            "Uptime":"1T22:15:47",
+            "UptimeSec":166547,
+            "Heap":25,
+            "SleepMode":"Dynamic",
+            "Sleep":50,
+            "LoadAvg":19,
+            "MqttCount":1,
+            "POWER":"OFF",
+            "Dimmer":100,
+            "Color":"FF00000000",
+            "HSBColor":"360,100,100",
+            "White":0,
+            "CT":153,
+            "Channel":[100,0,0,0,0],
+            "Scheme":0,
+            "Fade":"ON",
+            "Speed":2,
+            "LedTable":"ON",
+            "Wifi":{"AP":1,"SSId":"test","Channel":11}
+        }"#;
+        let state: TelemetryState = serde_json::from_str(json).unwrap();
+
+        assert_eq!(state.power(), Some(PowerState::Off));
+        assert_eq!(state.dimmer(), Some(100));
+        assert_eq!(state.color_temp(), Some(153));
+
+        // Verify HSBColor parsing
+        let hsb = state.hsb_color().expect("HSBColor should be present");
+        assert_eq!(hsb.hue(), 360);
+        assert_eq!(hsb.saturation(), 100);
+        assert_eq!(hsb.brightness(), 100);
+
+        assert_eq!(state.fade_enabled(), Some(true));
+        assert_eq!(state.speed(), Some(2));
+
+        // Should produce state changes (wrapped in batch since multiple)
+        let changes = state.to_state_changes();
+        assert_eq!(changes.len(), 1);
+        if let StateChange::Batch(batch) = &changes[0] {
+            // Should contain: power, dimmer, color_temp, hsb_color
+            assert!(
+                batch.len() >= 4,
+                "Expected at least 4 changes, got {}",
+                batch.len()
+            );
+
+            // Verify HsbColor is in the batch
+            let has_hsb = batch.iter().any(|c| matches!(c, StateChange::HsbColor(_)));
+            assert!(has_hsb, "HsbColor should be in the batch");
+        } else {
+            panic!("Expected batch with multiple changes");
+        }
     }
 }

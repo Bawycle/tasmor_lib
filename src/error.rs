@@ -106,6 +106,10 @@ pub enum ProtocolError {
     /// Authentication failed.
     #[error("authentication failed")]
     AuthenticationFailed,
+
+    /// Internal channel was closed.
+    #[error("channel closed: {0}")]
+    ChannelClosed(String),
 }
 
 /// Errors related to parsing Tasmota responses.

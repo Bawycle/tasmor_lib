@@ -94,7 +94,7 @@ pub mod types;
 pub use capabilities::{Capabilities, CapabilitiesBuilder};
 pub use command::{
     ColorTempCommand, Command, DimmerCommand, EnergyCommand, FadeCommand, HsbColorCommand,
-    PowerCommand, PowerOnFadeCommand, SpeedCommand, StatusCommand,
+    PowerCommand, PowerOnFadeCommand, SpeedCommand, StateCommand, StatusCommand,
 };
 pub use device::{Device, HttpDeviceBuilder, MqttDeviceBuilder};
 pub use error::{DeviceError, Error, ParseError, ProtocolError, Result, ValueError};

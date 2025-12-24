@@ -80,11 +80,11 @@ mod tests {
         let model = DeviceModel::AthomBulb5W7W;
         let caps = model.capabilities();
 
-        assert_eq!(caps.power_channels, 1);
-        assert!(caps.rgb);
-        assert!(caps.color_temp);
-        assert!(caps.dimmer);
-        assert!(!caps.energy);
+        assert_eq!(caps.power_channels(), 1);
+        assert!(caps.rgb());
+        assert!(caps.color_temp());
+        assert!(caps.dimmer());
+        assert!(!caps.energy());
     }
 
     #[test]
@@ -92,11 +92,11 @@ mod tests {
         let model = DeviceModel::AthomBulb15W;
         let caps = model.capabilities();
 
-        assert_eq!(caps.power_channels, 1);
-        assert!(caps.rgb);
-        assert!(caps.color_temp);
-        assert!(caps.dimmer);
-        assert!(!caps.energy);
+        assert_eq!(caps.power_channels(), 1);
+        assert!(caps.rgb());
+        assert!(caps.color_temp());
+        assert!(caps.dimmer());
+        assert!(!caps.energy());
     }
 
     #[test]
@@ -104,11 +104,11 @@ mod tests {
         let model = DeviceModel::NousA1T;
         let caps = model.capabilities();
 
-        assert_eq!(caps.power_channels, 1);
-        assert!(!caps.rgb);
-        assert!(!caps.color_temp);
-        assert!(!caps.dimmer);
-        assert!(caps.energy);
+        assert_eq!(caps.power_channels(), 1);
+        assert!(!caps.rgb());
+        assert!(!caps.color_temp());
+        assert!(!caps.dimmer());
+        assert!(caps.energy());
     }
 
     #[test]

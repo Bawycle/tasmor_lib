@@ -3,699 +3,319 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Device manager handling communication with Tasmota devices.
+//! Device manager wrapping the library's `DeviceManager`.
 //!
-//! This module manages persistent connections to Tasmota devices and handles
-//! all communication through a command/event pattern.
+//! This module provides a thin wrapper around `tasmor_lib::manager::DeviceManager`
+//! that maintains the mapping between supervisor's `DeviceConfig` (with model info)
+//! and the library's device management system.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tasmor_lib::protocol::{HttpClient, MqttClient};
-use tasmor_lib::Device;
-use tokio::sync::{mpsc, RwLock};
+use tasmor_lib::event::DeviceId;
+use tasmor_lib::manager::DeviceManager as LibraryDeviceManager;
+use tokio::sync::{broadcast, RwLock};
 use uuid::Uuid;
 
-use crate::device_config::{ConnectionStatus, DeviceConfig, DeviceState, Protocol};
+use crate::device_config::{ConnectionStatus, DeviceConfig, ManagedDevice};
 
-/// Commands sent to the device manager.
-#[derive(Debug)]
-pub enum DeviceCommand {
-    /// Add a new device
-    AddDevice(DeviceConfig),
-    /// Remove a device by ID
-    RemoveDevice(Uuid),
-    /// Connect to a device
-    Connect(Uuid),
-    /// Disconnect from a device
-    Disconnect(Uuid),
-    /// Toggle device power
-    TogglePower(Uuid),
-    /// Set dimmer level (0-100)
-    SetDimmer(Uuid, u8),
-    /// Set HSB color (hue 0-360, saturation 0-100, brightness 0-100)
-    SetHsbColor(Uuid, u16, u8, u8),
-    /// Set color temperature in mireds (153-500)
-    SetColorTemp(Uuid, u16),
-    /// Refresh device status
-    RefreshStatus(Uuid),
+/// Device entry tracking supervisor config and library device ID.
+struct DeviceEntry {
+    /// Library's device ID (used for all library operations)
+    device_id: DeviceId,
+    /// Supervisor's managed device (with config and UI state)
+    managed: ManagedDevice,
 }
 
-/// Events emitted by the device manager.
-#[derive(Debug, Clone)]
-pub enum DeviceEvent {
-    /// Device added
-    DeviceAdded,
-    /// Device removed
-    DeviceRemoved,
-    /// Device state updated
-    StateUpdated,
-    /// Error occurred
-    Error(String),
-}
-
-/// Connected device handle - either HTTP or MQTT.
-enum ConnectedDevice {
-    Http(Device<HttpClient>),
-    Mqtt(Device<MqttClient>),
-}
-
-/// Internal managed device with state and optional connection.
-struct ManagedDevice {
-    state: DeviceState,
-    connection: Option<ConnectedDevice>,
-}
-
-impl ManagedDevice {
-    fn new(config: DeviceConfig) -> Self {
-        Self {
-            state: DeviceState::new(config),
-            connection: None,
-        }
-    }
-}
-
-/// Manager for Tasmota devices with async communication.
+/// Manager for Tasmota devices wrapping the library's `DeviceManager`.
+///
+/// This wrapper maintains the mapping between supervisor's configuration
+/// (with model info for UI) and the library's device management.
 pub struct DeviceManager {
-    devices: Arc<RwLock<HashMap<Uuid, ManagedDevice>>>,
-    command_tx: mpsc::UnboundedSender<DeviceCommand>,
-    event_rx: Arc<RwLock<mpsc::UnboundedReceiver<DeviceEvent>>>,
+    /// The library's device manager (handles connections, pooling, events)
+    library_manager: LibraryDeviceManager,
+    /// Mapping from supervisor config ID to device entry
+    devices: Arc<RwLock<HashMap<Uuid, DeviceEntry>>>,
 }
 
 impl DeviceManager {
     /// Creates a new device manager.
     #[must_use]
     pub fn new() -> Self {
-        let (command_tx, command_rx) = mpsc::unbounded_channel();
-        let (event_tx, event_rx) = mpsc::unbounded_channel();
-        let devices = Arc::new(RwLock::new(HashMap::new()));
-
-        let manager = Self {
-            devices: Arc::clone(&devices),
-            command_tx,
-            event_rx: Arc::new(RwLock::new(event_rx)),
-        };
-
-        // Spawn background task to process commands
-        tokio::spawn(Self::process_commands(
-            command_rx,
-            event_tx,
-            Arc::clone(&devices),
-        ));
-
-        manager
+        Self {
+            library_manager: LibraryDeviceManager::new(),
+            devices: Arc::new(RwLock::new(HashMap::new())),
+        }
     }
 
-    /// Sends a command to the device manager.
+    /// Subscribes to device events from the library.
     ///
-    /// # Errors
-    ///
-    /// Returns error if the command cannot be sent.
-    pub fn send_command(&self, command: DeviceCommand) -> Result<(), String> {
-        self.command_tx
-            .send(command)
-            .map_err(|e| format!("Failed to send command: {e}"))
+    /// Returns a receiver for the library's rich `DeviceEvent` type which includes
+    /// `StateChanged`, `ConnectionChanged`, `DeviceAdded`, and `DeviceRemoved` events.
+    #[must_use]
+    pub fn subscribe(&self) -> broadcast::Receiver<DeviceEvent> {
+        self.library_manager.subscribe()
     }
 
-    /// Gets a snapshot of all devices.
-    pub async fn devices(&self) -> Vec<DeviceState> {
+    /// Gets a snapshot of all managed devices for UI display.
+    pub async fn devices(&self) -> Vec<ManagedDevice> {
         self.devices
             .read()
             .await
             .values()
-            .map(|m| m.state.clone())
+            .map(|entry| entry.managed.clone())
             .collect()
     }
 
-    /// Polls for the next event (non-blocking).
-    pub async fn poll_event(&self) -> Option<DeviceEvent> {
-        self.event_rx.write().await.try_recv().ok()
+    /// Looks up the library `DeviceId` for a config ID.
+    async fn get_device_id(&self, config_id: Uuid) -> Option<DeviceId> {
+        self.devices
+            .read()
+            .await
+            .get(&config_id)
+            .map(|e| e.device_id)
     }
 
-    /// Background task processing commands.
-    async fn process_commands(
-        mut command_rx: mpsc::UnboundedReceiver<DeviceCommand>,
-        event_tx: mpsc::UnboundedSender<DeviceEvent>,
-        devices: Arc<RwLock<HashMap<Uuid, ManagedDevice>>>,
-    ) {
-        while let Some(command) = command_rx.recv().await {
-            match command {
-                DeviceCommand::AddDevice(config) => {
-                    let id = config.id;
-                    let managed = ManagedDevice::new(config);
-                    devices.write().await.insert(id, managed);
-                    let _ = event_tx.send(DeviceEvent::DeviceAdded);
-                    let _ = event_tx.send(DeviceEvent::StateUpdated);
+    /// Updates connection status for a device.
+    pub async fn update_connection_status(&self, device_id: DeviceId, status: ConnectionStatus) {
+        let mut devices = self.devices.write().await;
+        for entry in devices.values_mut() {
+            if entry.device_id == device_id {
+                entry.managed.status = status;
+                if status == ConnectionStatus::Connected {
+                    entry.managed.error = None;
                 }
-
-                DeviceCommand::RemoveDevice(id) => {
-                    // Connection will be dropped automatically
-                    if devices.write().await.remove(&id).is_some() {
-                        let _ = event_tx.send(DeviceEvent::DeviceRemoved);
-                    }
-                }
-
-                DeviceCommand::Connect(id) => {
-                    Self::handle_connect(id, &devices, &event_tx).await;
-                }
-
-                DeviceCommand::Disconnect(id) => {
-                    Self::handle_disconnect(id, &devices, &event_tx).await;
-                }
-
-                DeviceCommand::TogglePower(id) => {
-                    Self::handle_toggle_power(id, &devices, &event_tx).await;
-                }
-
-                DeviceCommand::SetDimmer(id, level) => {
-                    Self::handle_set_dimmer(id, level, &devices, &event_tx).await;
-                }
-
-                DeviceCommand::SetHsbColor(id, hue, sat, bri) => {
-                    Self::handle_set_hsb_color(id, hue, sat, bri, &devices, &event_tx).await;
-                }
-
-                DeviceCommand::SetColorTemp(id, ct) => {
-                    Self::handle_set_color_temp(id, ct, &devices, &event_tx).await;
-                }
-
-                DeviceCommand::RefreshStatus(id) => {
-                    Self::handle_refresh_status(id, &devices, &event_tx).await;
-                }
+                break;
             }
         }
     }
 
-    /// Handles connect command - establishes persistent connection.
-    async fn handle_connect(
-        id: Uuid,
-        devices: &Arc<RwLock<HashMap<Uuid, ManagedDevice>>>,
-        event_tx: &mpsc::UnboundedSender<DeviceEvent>,
+    /// Updates the full state for a device from a library event.
+    pub async fn update_device_state(
+        &self,
+        device_id: DeviceId,
+        new_state: tasmor_lib::state::DeviceState,
     ) {
-        // Get config and set connecting status
-        let config = {
-            let mut guard = devices.write().await;
-            if let Some(managed) = guard.get_mut(&id) {
-                managed.state.status = ConnectionStatus::Connecting;
-                let _ = event_tx.send(DeviceEvent::StateUpdated);
-                Some(managed.state.config.clone())
-            } else {
-                None
-            }
-        };
-
-        let Some(config) = config else {
-            return;
-        };
-
-        // Try to establish connection
-        let result = match config.protocol {
-            Protocol::Http => Self::create_http_device(&config).map(ConnectedDevice::Http),
-            Protocol::Mqtt => Self::create_mqtt_device(&config)
-                .await
-                .map(ConnectedDevice::Mqtt),
-        };
-
-        // Update state based on result
-        let mut guard = devices.write().await;
-        if let Some(managed) = guard.get_mut(&id) {
-            match result {
-                Ok(connection) => {
-                    managed.connection = Some(connection);
-                    managed.state.status = ConnectionStatus::Connected;
-                    managed.state.error = None;
-                    let _ = event_tx.send(DeviceEvent::StateUpdated);
-
-                    // Drop the lock before refreshing status
-                    drop(guard);
-
-                    // Refresh status after successful connection
-                    Self::handle_refresh_status(id, devices, event_tx).await;
-                }
-                Err(e) => {
-                    managed.connection = None;
-                    managed.state.status = ConnectionStatus::Error;
-                    managed.state.error = Some(e.clone());
-                    let _ = event_tx.send(DeviceEvent::StateUpdated);
-                    let _ = event_tx.send(DeviceEvent::Error(e));
-                }
+        let mut devices = self.devices.write().await;
+        for entry in devices.values_mut() {
+            if entry.device_id == device_id {
+                entry.managed.state = new_state;
+                break;
             }
         }
     }
 
-    /// Handles disconnect command.
-    async fn handle_disconnect(
-        id: Uuid,
-        devices: &Arc<RwLock<HashMap<Uuid, ManagedDevice>>>,
-        event_tx: &mpsc::UnboundedSender<DeviceEvent>,
-    ) {
-        let mut guard = devices.write().await;
-        if let Some(managed) = guard.get_mut(&id) {
-            // Drop the connection
-            managed.connection = None;
-            managed.state.status = ConnectionStatus::Disconnected;
-            managed.state.power = None;
-            managed.state.dimmer = None;
-            managed.state.hsb_color = None;
-            managed.state.color_temp = None;
-            managed.state.power_consumption = None;
-            managed.state.error = None;
-            let _ = event_tx.send(DeviceEvent::StateUpdated);
+    /// Sets an error message for a device.
+    pub async fn set_device_error(&self, device_id: DeviceId, error: Option<String>) {
+        let mut devices = self.devices.write().await;
+        for entry in devices.values_mut() {
+            if entry.device_id == device_id {
+                entry.managed.error.clone_from(&error);
+                if error.is_some() {
+                    entry.managed.status = ConnectionStatus::Error;
+                }
+                break;
+            }
         }
     }
 
-    /// Handles toggle power using existing connection.
-    async fn handle_toggle_power(
-        id: Uuid,
-        devices: &Arc<RwLock<HashMap<Uuid, ManagedDevice>>>,
-        event_tx: &mpsc::UnboundedSender<DeviceEvent>,
-    ) {
-        let result = {
-            let guard = devices.read().await;
-            let Some(managed) = guard.get(&id) else {
-                return;
-            };
-            let Some(conn) = &managed.connection else {
-                let _ = event_tx.send(DeviceEvent::Error("Device not connected".to_string()));
-                return;
-            };
+    // =========================================================================
+    // Device Management
+    // =========================================================================
 
-            match conn {
-                ConnectedDevice::Http(device) => device.power_toggle().await,
-                ConnectedDevice::Mqtt(device) => device.power_toggle().await,
-            }
+    /// Adds a device to the manager.
+    pub async fn add_device(&self, config: DeviceConfig) {
+        let config_id = config.id;
+        let lib_config = config.to_library_config();
+
+        // Add to library manager (this generates the DeviceId)
+        let device_id = self.library_manager.add_device(lib_config).await;
+
+        // Create our managed device entry
+        let mut managed = ManagedDevice::new(config);
+        managed.id = device_id;
+
+        let entry = DeviceEntry { device_id, managed };
+
+        self.devices.write().await.insert(config_id, entry);
+    }
+
+    /// Removes a device from the manager.
+    pub async fn remove_device(&self, config_id: Uuid) -> bool {
+        let device_id = {
+            let devices = self.devices.read().await;
+            devices.get(&config_id).map(|e| e.device_id)
         };
 
-        match result {
-            Ok(response) => {
-                if let Ok(power_state) = response.first_power_state() {
-                    let power = power_state == tasmor_lib::PowerState::On;
-                    let mut guard = devices.write().await;
-                    if let Some(managed) = guard.get_mut(&id) {
-                        managed.state.power = Some(power);
-                        let _ = event_tx.send(DeviceEvent::StateUpdated);
-                    }
+        if let Some(device_id) = device_id {
+            self.library_manager.remove_device(device_id).await;
+            self.devices.write().await.remove(&config_id);
+            true
+        } else {
+            false
+        }
+    }
+
+    // =========================================================================
+    // Connection Management
+    // =========================================================================
+
+    /// Connects to a device.
+    pub async fn connect(&self, config_id: Uuid) -> Result<(), String> {
+        // Set connecting status
+        {
+            let mut devices = self.devices.write().await;
+            if let Some(entry) = devices.get_mut(&config_id) {
+                entry.managed.status = ConnectionStatus::Connecting;
+            }
+        }
+
+        let device_id = self
+            .get_device_id(config_id)
+            .await
+            .ok_or("Device not found")?;
+
+        match self.library_manager.connect(device_id).await {
+            Ok(()) => {
+                let mut devices = self.devices.write().await;
+                if let Some(entry) = devices.get_mut(&config_id) {
+                    entry.managed.status = ConnectionStatus::Connected;
+                    entry.managed.error = None;
                 }
+                Ok(())
             }
             Err(e) => {
-                Self::handle_connection_error(id, devices, event_tx, &e.to_string()).await;
-            }
-        }
-    }
-
-    /// Handles set dimmer using existing connection.
-    async fn handle_set_dimmer(
-        id: Uuid,
-        level: u8,
-        devices: &Arc<RwLock<HashMap<Uuid, ManagedDevice>>>,
-        event_tx: &mpsc::UnboundedSender<DeviceEvent>,
-    ) {
-        let result = {
-            let guard = devices.read().await;
-            let Some(managed) = guard.get(&id) else {
-                return;
-            };
-            let Some(conn) = &managed.connection else {
-                let _ = event_tx.send(DeviceEvent::Error("Device not connected".to_string()));
-                return;
-            };
-
-            let Ok(dimmer) = tasmor_lib::Dimmer::new(level) else {
-                let _ = event_tx.send(DeviceEvent::Error("Invalid dimmer value".to_string()));
-                return;
-            };
-
-            match conn {
-                ConnectedDevice::Http(device) => device.set_dimmer(dimmer).await,
-                ConnectedDevice::Mqtt(device) => device.set_dimmer(dimmer).await,
-            }
-        };
-
-        match result {
-            Ok(response) => {
-                let mut guard = devices.write().await;
-                if let Some(managed) = guard.get_mut(&id) {
-                    managed.state.dimmer = Some(level);
-                    // Tasmota includes power state in dimmer response - update it too
-                    if let Some(power) = parse_power_from_response(&response.body) {
-                        managed.state.power = Some(power);
-                    }
-                    let _ = event_tx.send(DeviceEvent::StateUpdated);
+                let error_msg = e.to_string();
+                let mut devices = self.devices.write().await;
+                if let Some(entry) = devices.get_mut(&config_id) {
+                    entry.managed.status = ConnectionStatus::Error;
+                    entry.managed.error = Some(error_msg.clone());
                 }
-            }
-            Err(e) => {
-                Self::handle_connection_error(id, devices, event_tx, &e.to_string()).await;
+                Err(error_msg)
             }
         }
     }
 
-    /// Handles set HSB color using existing connection.
-    async fn handle_set_hsb_color(
-        id: Uuid,
+    /// Disconnects from a device.
+    pub async fn disconnect(&self, config_id: Uuid) -> Result<(), String> {
+        let device_id = self
+            .get_device_id(config_id)
+            .await
+            .ok_or("Device not found")?;
+
+        self.library_manager
+            .disconnect(device_id)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let mut devices = self.devices.write().await;
+        if let Some(entry) = devices.get_mut(&config_id) {
+            entry.managed.status = ConnectionStatus::Disconnected;
+            entry.managed.state.clear();
+            entry.managed.error = None;
+        }
+
+        Ok(())
+    }
+
+    // =========================================================================
+    // Device Commands
+    // =========================================================================
+
+    /// Toggles the power state.
+    pub async fn toggle_power(&self, config_id: Uuid) -> Result<(), String> {
+        let device_id = self
+            .get_device_id(config_id)
+            .await
+            .ok_or("Device not found")?;
+
+        self.library_manager
+            .power_toggle(device_id)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Sets the dimmer level.
+    pub async fn set_dimmer(&self, config_id: Uuid, level: u8) -> Result<(), String> {
+        let device_id = self
+            .get_device_id(config_id)
+            .await
+            .ok_or("Device not found")?;
+
+        let dimmer = tasmor_lib::Dimmer::new(level).map_err(|e| e.to_string())?;
+
+        self.library_manager
+            .set_dimmer(device_id, dimmer)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Sets the HSB color.
+    pub async fn set_hsb_color(
+        &self,
+        config_id: Uuid,
         hue: u16,
         sat: u8,
         bri: u8,
-        devices: &Arc<RwLock<HashMap<Uuid, ManagedDevice>>>,
-        event_tx: &mpsc::UnboundedSender<DeviceEvent>,
-    ) {
-        let result = {
-            let guard = devices.read().await;
-            let Some(managed) = guard.get(&id) else {
-                return;
-            };
-            let Some(conn) = &managed.connection else {
-                let _ = event_tx.send(DeviceEvent::Error("Device not connected".to_string()));
-                return;
-            };
-
-            let Ok(color) = tasmor_lib::HsbColor::new(hue, sat, bri) else {
-                let _ = event_tx.send(DeviceEvent::Error("Invalid color value".to_string()));
-                return;
-            };
-
-            match conn {
-                ConnectedDevice::Http(device) => device.set_hsb_color(color).await,
-                ConnectedDevice::Mqtt(device) => device.set_hsb_color(color).await,
-            }
-        };
-
-        match result {
-            Ok(response) => {
-                let mut guard = devices.write().await;
-                if let Some(managed) = guard.get_mut(&id) {
-                    managed.state.hsb_color = Some((hue, sat, bri));
-                    // Tasmota includes power state in color response - update it too
-                    if let Some(power) = parse_power_from_response(&response.body) {
-                        managed.state.power = Some(power);
-                    }
-                    let _ = event_tx.send(DeviceEvent::StateUpdated);
-                }
-            }
-            Err(e) => {
-                Self::handle_connection_error(id, devices, event_tx, &e.to_string()).await;
-            }
-        }
-    }
-
-    /// Handles set color temperature using existing connection.
-    async fn handle_set_color_temp(
-        id: Uuid,
-        ct: u16,
-        devices: &Arc<RwLock<HashMap<Uuid, ManagedDevice>>>,
-        event_tx: &mpsc::UnboundedSender<DeviceEvent>,
-    ) {
-        let result = {
-            let guard = devices.read().await;
-            let Some(managed) = guard.get(&id) else {
-                return;
-            };
-            let Some(conn) = &managed.connection else {
-                let _ = event_tx.send(DeviceEvent::Error("Device not connected".to_string()));
-                return;
-            };
-
-            let Ok(color_temp) = tasmor_lib::ColorTemp::new(ct) else {
-                let _ = event_tx.send(DeviceEvent::Error("Invalid color temperature".to_string()));
-                return;
-            };
-
-            match conn {
-                ConnectedDevice::Http(device) => device.set_color_temp(color_temp).await,
-                ConnectedDevice::Mqtt(device) => device.set_color_temp(color_temp).await,
-            }
-        };
-
-        match result {
-            Ok(response) => {
-                let mut guard = devices.write().await;
-                if let Some(managed) = guard.get_mut(&id) {
-                    managed.state.color_temp = Some(ct);
-                    // Tasmota may include power state in color temp response - update it too
-                    if let Some(power) = parse_power_from_response(&response.body) {
-                        managed.state.power = Some(power);
-                    }
-                    let _ = event_tx.send(DeviceEvent::StateUpdated);
-                }
-            }
-            Err(e) => {
-                Self::handle_connection_error(id, devices, event_tx, &e.to_string()).await;
-            }
-        }
-    }
-
-    /// Handles refresh status using existing connection.
-    async fn handle_refresh_status(
-        id: Uuid,
-        devices: &Arc<RwLock<HashMap<Uuid, ManagedDevice>>>,
-        event_tx: &mpsc::UnboundedSender<DeviceEvent>,
-    ) {
-        // Get connection info
-        let (supports_dimming, supports_color, supports_color_temp, supports_energy) = {
-            let guard = devices.read().await;
-            let Some(managed) = guard.get(&id) else {
-                return;
-            };
-            if managed.connection.is_none() {
-                let _ = event_tx.send(DeviceEvent::Error("Device not connected".to_string()));
-                return;
-            }
-            let model = managed.state.config.model;
-            (
-                model.supports_dimming(),
-                model.supports_color(),
-                model.capabilities().color_temp,
-                model.supports_energy_monitoring(),
-            )
-        };
-
-        // Get power state
-        let power_result = {
-            let guard = devices.read().await;
-            let Some(managed) = guard.get(&id) else {
-                return;
-            };
-            let Some(conn) = &managed.connection else {
-                return;
-            };
-            match conn {
-                ConnectedDevice::Http(device) => device.get_power().await,
-                ConnectedDevice::Mqtt(device) => device.get_power().await,
-            }
-        };
-
-        let power = match power_result {
-            Ok(response) => response
-                .first_power_state()
-                .ok()
-                .map(|s| s == tasmor_lib::PowerState::On),
-            Err(e) => {
-                Self::handle_connection_error(id, devices, event_tx, &e.to_string()).await;
-                return;
-            }
-        };
-
-        // Get dimmer if supported
-        let dimmer = if supports_dimming {
-            let guard = devices.read().await;
-            let Some(managed) = guard.get(&id) else {
-                return;
-            };
-            let Some(conn) = &managed.connection else {
-                return;
-            };
-            let result = match conn {
-                ConnectedDevice::Http(device) => device.get_dimmer().await,
-                ConnectedDevice::Mqtt(device) => device.get_dimmer().await,
-            };
-            result.ok().and_then(|r| parse_dimmer_response(&r.body))
-        } else {
-            None
-        };
-
-        // Get HSB color if supported
-        let hsb_color = if supports_color {
-            let guard = devices.read().await;
-            let Some(managed) = guard.get(&id) else {
-                return;
-            };
-            let Some(conn) = &managed.connection else {
-                return;
-            };
-            let result = match conn {
-                ConnectedDevice::Http(device) => device.get_hsb_color().await,
-                ConnectedDevice::Mqtt(device) => device.get_hsb_color().await,
-            };
-            result.ok().and_then(|r| parse_hsb_color_response(&r.body))
-        } else {
-            None
-        };
-
-        // Get color temperature if supported
-        let color_temp = if supports_color_temp {
-            let guard = devices.read().await;
-            let Some(managed) = guard.get(&id) else {
-                return;
-            };
-            let Some(conn) = &managed.connection else {
-                return;
-            };
-            let result = match conn {
-                ConnectedDevice::Http(device) => device.get_color_temp().await,
-                ConnectedDevice::Mqtt(device) => device.get_color_temp().await,
-            };
-            result.ok().and_then(|r| parse_color_temp_response(&r.body))
-        } else {
-            None
-        };
-
-        // Get energy if supported
-        let power_consumption = if supports_energy {
-            let guard = devices.read().await;
-            let Some(managed) = guard.get(&id) else {
-                return;
-            };
-            let Some(conn) = &managed.connection else {
-                return;
-            };
-            let result = match conn {
-                ConnectedDevice::Http(device) => device.energy().await,
-                ConnectedDevice::Mqtt(device) => device.energy().await,
-            };
-            result.ok().and_then(|e| e.power())
-        } else {
-            None
-        };
-
-        // Update state
-        let mut guard = devices.write().await;
-        if let Some(managed) = guard.get_mut(&id) {
-            managed.state.power = power;
-            managed.state.dimmer = dimmer;
-            managed.state.hsb_color = hsb_color;
-            managed.state.color_temp = color_temp;
-            managed.state.power_consumption = power_consumption;
-            let _ = event_tx.send(DeviceEvent::StateUpdated);
-        }
-    }
-
-    /// Handles connection errors by updating device state.
-    async fn handle_connection_error(
-        id: Uuid,
-        devices: &Arc<RwLock<HashMap<Uuid, ManagedDevice>>>,
-        event_tx: &mpsc::UnboundedSender<DeviceEvent>,
-        error: &str,
-    ) {
-        let mut guard = devices.write().await;
-        if let Some(managed) = guard.get_mut(&id) {
-            // Mark as error but keep connection for retry
-            managed.state.status = ConnectionStatus::Error;
-            managed.state.error = Some(error.to_string());
-            let _ = event_tx.send(DeviceEvent::StateUpdated);
-            let _ = event_tx.send(DeviceEvent::Error(error.to_string()));
-        }
-    }
-
-    /// Creates an HTTP device connection.
-    fn create_http_device(config: &DeviceConfig) -> Result<Device<HttpClient>, String> {
-        let mut builder =
-            Device::http(&config.host).with_capabilities(config.model.capabilities());
-
-        if let (Some(username), Some(password)) = (&config.username, &config.password) {
-            builder = builder.with_credentials(username, password);
-        }
-
-        builder
-            .build_without_probe()
-            .map_err(|e| format!("HTTP connection failed: {e}"))
-    }
-
-    /// Creates an MQTT device connection.
-    async fn create_mqtt_device(config: &DeviceConfig) -> Result<Device<MqttClient>, String> {
-        let topic = config.topic.as_ref().ok_or("MQTT topic not configured")?;
-
-        let mut builder =
-            Device::mqtt(&config.host, topic).with_capabilities(config.model.capabilities());
-
-        if let (Some(username), Some(password)) = (&config.username, &config.password) {
-            builder = builder.with_credentials(username, password);
-        }
-
-        let device = builder
-            .build_without_probe()
+    ) -> Result<(), String> {
+        let device_id = self
+            .get_device_id(config_id)
             .await
-            .map_err(|e| format!("MQTT connection failed: {e}"))?;
+            .ok_or("Device not found")?;
 
-        // Test the connection by querying power state
-        device
-            .get_power()
+        let color = tasmor_lib::HsbColor::new(hue, sat, bri).map_err(|e| e.to_string())?;
+
+        self.library_manager
+            .set_hsb_color(device_id, color)
             .await
-            .map_err(|e| format!("MQTT connection test failed: {e}"))?;
-
-        Ok(device)
-    }
-}
-
-/// Parses the power state from a JSON response.
-/// Tasmota often includes POWER in responses to other commands (like Dimmer).
-fn parse_power_from_response(body: &str) -> Option<bool> {
-    #[derive(serde::Deserialize)]
-    struct PowerResponse {
-        #[serde(rename = "POWER")]
-        power: String,
+            .map_err(|e| e.to_string())
     }
 
-    serde_json::from_str::<PowerResponse>(body)
-        .ok()
-        .map(|r| r.power == "ON")
-}
+    /// Sets the color temperature.
+    pub async fn set_color_temp(&self, config_id: Uuid, ct: u16) -> Result<(), String> {
+        let device_id = self
+            .get_device_id(config_id)
+            .await
+            .ok_or("Device not found")?;
 
-/// Parses the dimmer response JSON to extract the dimmer value.
-fn parse_dimmer_response(body: &str) -> Option<u8> {
-    #[derive(serde::Deserialize)]
-    struct DimmerResponse {
-        #[serde(rename = "Dimmer")]
-        dimmer: u8,
+        let color_temp = tasmor_lib::ColorTemp::new(ct).map_err(|e| e.to_string())?;
+
+        self.library_manager
+            .set_color_temp(device_id, color_temp)
+            .await
+            .map_err(|e| e.to_string())
     }
 
-    serde_json::from_str::<DimmerResponse>(body)
-        .ok()
-        .map(|r| r.dimmer)
-}
+    /// Refreshes the device status by querying the library's current state.
+    pub async fn refresh_status(&self, config_id: Uuid) -> Result<(), String> {
+        let device_id = self
+            .get_device_id(config_id)
+            .await
+            .ok_or("Device not found")?;
 
-/// Parses the HSB color response JSON to extract the color values.
-fn parse_hsb_color_response(body: &str) -> Option<(u16, u8, u8)> {
-    #[derive(serde::Deserialize)]
-    struct HsbColorResponse {
-        #[serde(rename = "HSBColor")]
-        hsb_color: String,
-    }
-
-    serde_json::from_str::<HsbColorResponse>(body)
-        .ok()
-        .and_then(|r| {
-            let parts: Vec<&str> = r.hsb_color.split(',').collect();
-            if parts.len() == 3 {
-                let hue = parts[0].parse().ok()?;
-                let sat = parts[1].parse().ok()?;
-                let bri = parts[2].parse().ok()?;
-                Some((hue, sat, bri))
-            } else {
-                None
+        // Get the current state from the library manager
+        if let Some(state) = self.library_manager.get_state(device_id).await {
+            let mut devices = self.devices.write().await;
+            if let Some(entry) = devices.get_mut(&config_id) {
+                entry.managed.state = state;
             }
-        })
-}
+        }
 
-/// Parses the color temperature response JSON to extract the CT value.
-fn parse_color_temp_response(body: &str) -> Option<u16> {
-    #[derive(serde::Deserialize)]
-    struct ColorTempResponse {
-        #[serde(rename = "CT")]
-        ct: u16,
+        Ok(())
     }
 
-    serde_json::from_str::<ColorTempResponse>(body)
-        .ok()
-        .map(|r| r.ct)
+    /// Finds the config ID for a library device ID.
+    ///
+    /// Kept for potential future use (e.g., reverse lookup from library events).
+    #[allow(dead_code)]
+    pub async fn config_id_for_device(&self, device_id: DeviceId) -> Option<Uuid> {
+        self.devices
+            .read()
+            .await
+            .iter()
+            .find(|(_, entry)| entry.device_id == device_id)
+            .map(|(config_id, _)| *config_id)
+    }
 }
 
 impl Default for DeviceManager {
@@ -703,6 +323,34 @@ impl Default for DeviceManager {
         Self::new()
     }
 }
+
+impl DeviceManager {
+    /// Shuts down the device manager, disconnecting all devices.
+    ///
+    /// This should be called when the application is closing to ensure
+    /// proper cleanup of MQTT connections.
+    pub async fn shutdown(&self) {
+        tracing::info!("Shutting down device manager");
+
+        // Get all config IDs
+        let config_ids: Vec<Uuid> = self.devices.read().await.keys().copied().collect();
+
+        // Disconnect all devices
+        for config_id in config_ids {
+            if let Err(e) = self.disconnect(config_id).await {
+                tracing::warn!(config_id = %config_id, error = %e, "Failed to disconnect device during shutdown");
+            }
+        }
+
+        // Clear all devices
+        self.devices.write().await.clear();
+
+        tracing::info!("Device manager shutdown complete");
+    }
+}
+
+// Re-export library event types for convenience
+pub use tasmor_lib::event::DeviceEvent;
 
 #[cfg(test)]
 mod tests {
@@ -726,12 +374,7 @@ mod tests {
             "192.168.1.100".to_string(),
         );
 
-        manager
-            .send_command(DeviceCommand::AddDevice(config))
-            .unwrap();
-
-        // Wait for processing
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        manager.add_device(config).await;
 
         let devices = manager.devices().await;
         assert_eq!(devices.len(), 1);
@@ -749,25 +392,18 @@ mod tests {
         );
         let id = config.id;
 
-        manager
-            .send_command(DeviceCommand::AddDevice(config))
-            .unwrap();
+        manager.add_device(config).await;
+        assert_eq!(manager.devices().await.len(), 1);
 
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-
-        manager
-            .send_command(DeviceCommand::RemoveDevice(id))
-            .unwrap();
-
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-
-        let devices = manager.devices().await;
-        assert!(devices.is_empty());
+        let removed = manager.remove_device(id).await;
+        assert!(removed);
+        assert!(manager.devices().await.is_empty());
     }
 
     #[tokio::test]
-    async fn poll_events() {
+    async fn subscribe_to_events() {
         let manager = DeviceManager::new();
+        let mut event_rx = manager.subscribe();
 
         let config = DeviceConfig::new_http(
             "Test Bulb".to_string(),
@@ -775,20 +411,33 @@ mod tests {
             "192.168.1.100".to_string(),
         );
 
-        manager
-            .send_command(DeviceCommand::AddDevice(config))
-            .unwrap();
+        manager.add_device(config).await;
 
-        // Wait and check for events
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        // Should receive DeviceAdded event from library
+        let event = event_rx.try_recv();
+        assert!(event.is_ok());
+        assert!(matches!(event.unwrap(), DeviceEvent::DeviceAdded { .. }));
+    }
 
-        let event = manager.poll_event().await;
-        assert!(event.is_some());
+    #[tokio::test]
+    async fn config_id_mapping() {
+        let manager = DeviceManager::new();
 
-        if let Some(DeviceEvent::DeviceAdded) = event {
-            // Event received successfully
-        } else {
-            panic!("Expected DeviceAdded event");
-        }
+        let config = DeviceConfig::new_http(
+            "Test Bulb".to_string(),
+            DeviceModel::AthomBulb5W7W,
+            "192.168.1.100".to_string(),
+        );
+        let config_id = config.id;
+
+        manager.add_device(config).await;
+
+        // Get the device ID from our devices
+        let device_id = manager.get_device_id(config_id).await;
+        assert!(device_id.is_some());
+
+        // Verify reverse lookup works
+        let found_config_id = manager.config_id_for_device(device_id.unwrap()).await;
+        assert_eq!(found_config_id, Some(config_id));
     }
 }

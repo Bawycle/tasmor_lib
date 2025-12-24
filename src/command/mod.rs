@@ -36,7 +36,7 @@ mod power;
 mod status;
 
 pub use energy::EnergyCommand;
-pub use light::{ColorTempCommand, DimmerCommand, HsbColorCommand, SpeedCommand};
+pub use light::{ColorTempCommand, DimmerCommand, HsbColorCommand, SpeedCommand, StateCommand};
 pub use power::{FadeCommand, PowerCommand, PowerOnFadeCommand};
 pub use status::{StatusCommand, StatusType};
 

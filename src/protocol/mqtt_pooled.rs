@@ -41,8 +41,8 @@ pub struct PooledMqttClient {
     connection: Arc<SharedConnection>,
     /// The device topic (e.g., `tasmota_bulb`).
     topic: String,
-    /// Channel for receiving responses.
-    response_rx: Arc<Mutex<mpsc::Receiver<String>>>,
+    /// Channel for receiving responses (can be taken for async processing).
+    response_rx: Arc<Mutex<Option<mpsc::Receiver<String>>>>,
 }
 
 impl PooledMqttClient {
@@ -82,8 +82,21 @@ impl PooledMqttClient {
         Ok(Self {
             connection,
             topic: device_topic,
-            response_rx: Arc::new(Mutex::new(response_rx)),
+            response_rx: Arc::new(Mutex::new(Some(response_rx))),
         })
+    }
+
+    /// Takes ownership of the message receiver for async processing.
+    ///
+    /// This allows a background task to consume all incoming messages
+    /// (both command responses and telemetry). After calling this method,
+    /// `send_command` will no longer wait for responses.
+    ///
+    /// # Returns
+    ///
+    /// Returns the receiver if it hasn't been taken yet, `None` otherwise.
+    pub async fn take_message_receiver(&self) -> Option<mpsc::Receiver<String>> {
+        self.response_rx.lock().await.take()
     }
 
     /// Returns the device topic.
@@ -106,8 +119,18 @@ impl PooledMqttClient {
     }
 
     /// Waits for a response with timeout.
+    ///
+    /// If the message receiver has been taken via `take_message_receiver`,
+    /// this will return an error immediately since responses are handled
+    /// asynchronously by the consumer.
     async fn wait_response(&self, timeout: Duration) -> Result<String, ProtocolError> {
-        let mut rx = self.response_rx.lock().await;
+        let mut guard = self.response_rx.lock().await;
+
+        let rx = guard.as_mut().ok_or_else(|| {
+            ProtocolError::ChannelClosed(
+                "Message receiver taken - responses handled asynchronously".to_string(),
+            )
+        })?;
 
         // Safe: timeout in practical use will never exceed u64::MAX milliseconds
         #[allow(clippy::cast_possible_truncation)]
@@ -144,10 +167,17 @@ impl Protocol for PooledMqttClient {
 
         self.publish_command(&cmd_name, &payload).await?;
 
-        // Wait for response
-        let body = self.wait_response(Duration::from_secs(5)).await?;
-
-        Ok(CommandResponse::new(body))
+        // Try to wait for response, but if receiver is taken, return empty response
+        // The actual response will be handled by the message consumer task
+        match self.wait_response(Duration::from_secs(5)).await {
+            Ok(body) => Ok(CommandResponse::new(body)),
+            Err(ProtocolError::ChannelClosed(_)) => {
+                // Receiver taken - response will be handled asynchronously
+                tracing::debug!(command = %cmd_name, "Command sent, response handled async");
+                Ok(CommandResponse::new("{}".to_string()))
+            }
+            Err(e) => Err(e),
+        }
     }
 
     async fn send_raw(&self, command: &str) -> Result<CommandResponse, ProtocolError> {
@@ -165,9 +195,15 @@ impl Protocol for PooledMqttClient {
 
         self.publish_command(cmd_name, payload).await?;
 
-        let body = self.wait_response(Duration::from_secs(5)).await?;
-
-        Ok(CommandResponse::new(body))
+        // Try to wait for response, but if receiver is taken, return empty response
+        match self.wait_response(Duration::from_secs(5)).await {
+            Ok(body) => Ok(CommandResponse::new(body)),
+            Err(ProtocolError::ChannelClosed(_)) => {
+                tracing::debug!(command = %cmd_name, "Raw command sent, response handled async");
+                Ok(CommandResponse::new("{}".to_string()))
+            }
+            Err(e) => Err(e),
+        }
     }
 }
 

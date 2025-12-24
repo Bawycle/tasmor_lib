@@ -97,6 +97,16 @@ pub fn device_card(ui: &mut Ui, device: &DeviceState) -> DeviceCardResponse {
                     // Device name and model
                     ui.heading(&device.config.name);
                     ui.label(RichText::new(device.model().name()).small().weak());
+                    // Show device capabilities
+                    let features: Vec<&str> = device.model().capabilities().features().collect();
+                    if !features.is_empty() {
+                        ui.label(
+                            RichText::new(features.join(" · "))
+                                .small()
+                                .weak()
+                                .italics(),
+                        );
+                    }
                 });
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -137,26 +147,26 @@ pub fn device_card(ui: &mut Ui, device: &DeviceState) -> DeviceCardResponse {
 
                 ui.horizontal(|ui| {
                     // Power toggle with state indicator
-                    let power_on = device.power.unwrap_or(false);
+                    let power_on = device.is_power_on().unwrap_or(false);
                     let mut power_state = power_on;
 
                     // Custom styled toggle
                     let toggle_response =
-                        ui.add(power_toggle(&mut power_state, device.power.is_some()));
+                        ui.add(power_toggle(&mut power_state, device.is_power_on().is_some()));
 
-                    if toggle_response.clicked() && device.power.is_some() {
+                    if toggle_response.clicked() && device.is_power_on().is_some() {
                         response.power_toggle_clicked = true;
                     }
 
                     // Show unknown state indicator if power state is not known
-                    if device.power.is_none() {
+                    if device.is_power_on().is_none() {
                         ui.label(RichText::new("?").color(Color32::GRAY).strong());
                     }
 
                     // Dimmer control for lights
                     if device.model().supports_dimming() {
                         ui.label("Brightness:");
-                        let mut dimmer_value = f32::from(device.dimmer.unwrap_or(100));
+                        let mut dimmer_value = f32::from(device.dimmer_value().unwrap_or(100));
                         let slider_response =
                             ui.add(egui::Slider::new(&mut dimmer_value, 0.0..=100.0).suffix("%"));
                         // Only send command when slider is released, not during dragging
@@ -170,7 +180,7 @@ pub fn device_card(ui: &mut Ui, device: &DeviceState) -> DeviceCardResponse {
 
                     // Energy monitoring for plugs
                     if device.model().supports_energy_monitoring() {
-                        if let Some(power_consumption) = device.power_consumption {
+                        if let Some(power_consumption) = device.power_consumption_watts() {
                             ui.label(format!("⚡ {power_consumption} W"));
                         }
                     }
@@ -181,7 +191,7 @@ pub fn device_card(ui: &mut Ui, device: &DeviceState) -> DeviceCardResponse {
                     ui.horizontal(|ui| {
                         // Hue slider for color selection
                         ui.label("Color:");
-                        let (h, s, b) = device.hsb_color.unwrap_or((0, 100, 100));
+                        let (h, s, b) = device.hsb_color_values().unwrap_or((0, 100, 100));
                         let mut hue_value = f32::from(h);
                         let hue_response =
                             ui.add(egui::Slider::new(&mut hue_value, 0.0..=360.0).suffix("°"));
@@ -194,9 +204,9 @@ pub fn device_card(ui: &mut Ui, device: &DeviceState) -> DeviceCardResponse {
                         }
 
                         // Color temperature slider (for RGBCCT lights)
-                        if device.model().capabilities().color_temp {
+                        if device.model().capabilities().color_temp() {
                             ui.label("Temp:");
-                            let mut ct_value = f32::from(device.color_temp.unwrap_or(326));
+                            let mut ct_value = f32::from(device.color_temp_mireds().unwrap_or(326));
                             let ct_response = ui.add(
                                 egui::Slider::new(&mut ct_value, 153.0..=500.0).suffix(" mired"),
                             );
