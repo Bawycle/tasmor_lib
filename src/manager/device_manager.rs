@@ -707,4 +707,99 @@ mod tests {
 
         assert!(!manager.is_connected(id).await);
     }
+
+    #[tokio::test]
+    async fn watch_device_returns_receiver() {
+        let manager = DeviceManager::new();
+        let config = DeviceConfig::mqtt("mqtt://localhost:1883", "test");
+        let id = manager.add_device(config).await;
+
+        let rx = manager.watch_device(id).await;
+        assert!(rx.is_some());
+
+        // Verify initial state is empty
+        let rx = rx.unwrap();
+        assert!(rx.borrow().power(1).is_none());
+    }
+
+    #[tokio::test]
+    async fn watch_device_returns_none_for_unknown() {
+        let manager = DeviceManager::new();
+        let fake_id = DeviceId::new();
+
+        assert!(manager.watch_device(fake_id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn multiple_devices_have_unique_ids() {
+        let manager = DeviceManager::new();
+
+        let config1 = DeviceConfig::mqtt("mqtt://localhost:1883", "device1");
+        let config2 = DeviceConfig::mqtt("mqtt://localhost:1883", "device2");
+        let config3 = DeviceConfig::http("192.168.1.100");
+
+        let id1 = manager.add_device(config1).await;
+        let id2 = manager.add_device(config2).await;
+        let id3 = manager.add_device(config3).await;
+
+        assert_ne!(id1, id2);
+        assert_ne!(id2, id3);
+        assert_ne!(id1, id3);
+        assert_eq!(manager.device_count().await, 3);
+
+        let ids = manager.device_ids().await;
+        assert!(ids.contains(&id1));
+        assert!(ids.contains(&id2));
+        assert!(ids.contains(&id3));
+    }
+
+    #[tokio::test]
+    async fn capabilities_returns_none_for_unknown() {
+        let manager = DeviceManager::new();
+        let fake_id = DeviceId::new();
+
+        assert!(manager.capabilities(fake_id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn friendly_name_returns_none_for_unknown() {
+        let manager = DeviceManager::new();
+        let fake_id = DeviceId::new();
+
+        assert!(manager.friendly_name(fake_id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn friendly_name_falls_back_to_topic() {
+        let manager = DeviceManager::new();
+        let config = DeviceConfig::mqtt("mqtt://localhost:1883", "tasmota_bulb");
+        let id = manager.add_device(config).await;
+
+        // Without friendly_name set, should use the topic
+        assert_eq!(
+            manager.friendly_name(id).await,
+            Some("tasmota_bulb".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn http_device_friendly_name_uses_host() {
+        let manager = DeviceManager::new();
+        let config = DeviceConfig::http("192.168.1.100");
+        let id = manager.add_device(config).await;
+
+        // Without friendly_name set, should use the host
+        assert_eq!(
+            manager.friendly_name(id).await,
+            Some("192.168.1.100".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn is_connected_returns_false_for_unknown() {
+        let manager = DeviceManager::new();
+        let fake_id = DeviceId::new();
+
+        assert!(!manager.is_connected(fake_id).await);
+    }
 }

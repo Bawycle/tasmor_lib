@@ -412,4 +412,193 @@ mod tests {
         let pool2 = BrokerPool::global();
         assert!(std::ptr::eq(pool1, pool2));
     }
+
+    #[test]
+    fn broker_key_different_hosts() {
+        let key1 = BrokerKey::new("mqtt://host1:1883", None).unwrap();
+        let key2 = BrokerKey::new("mqtt://host2:1883", None).unwrap();
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn broker_key_same_credentials() {
+        let key1 = BrokerKey::new("mqtt://localhost:1883", Some(("user", "pass"))).unwrap();
+        let key2 = BrokerKey::new("mqtt://localhost:1883", Some(("user", "other"))).unwrap();
+        // Keys are equal because only username is stored, not password
+        assert_eq!(key1, key2);
+    }
+
+    #[test]
+    fn broker_key_hashable() {
+        use std::collections::HashSet;
+
+        let key1 = BrokerKey::new("mqtt://localhost:1883", None).unwrap();
+        let key2 = BrokerKey::new("mqtt://localhost:1884", None).unwrap();
+
+        let mut set = HashSet::new();
+        set.insert(key1.clone());
+        set.insert(key2);
+
+        assert_eq!(set.len(), 2);
+        assert!(set.contains(&key1));
+    }
+
+    #[test]
+    fn parse_broker_url_invalid_port() {
+        let result = parse_broker_url("mqtt://localhost:invalid");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_broker_url_ipv4() {
+        let (host, port) = parse_broker_url("10.0.0.1:8883").unwrap();
+        assert_eq!(host, "10.0.0.1");
+        assert_eq!(port, 8883);
+    }
+
+    #[tokio::test]
+    async fn pool_new_is_empty() {
+        let pool = BrokerPool::new();
+        assert_eq!(pool.connection_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn pool_cleanup_on_empty() {
+        let pool = BrokerPool::new();
+        pool.cleanup().await;
+        assert_eq!(pool.connection_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn shared_connection_route_message_no_subscribers() {
+        // Create a minimal SharedConnection for testing route_message
+        use rumqttc::MqttOptions;
+
+        let options = MqttOptions::new("test_client", "localhost", 1883);
+        let (client, _event_loop) = AsyncClient::new(options, 10);
+
+        let key = BrokerKey::new("mqtt://localhost:1883", None).unwrap();
+        let conn = SharedConnection {
+            client,
+            subscriptions: RwLock::new(HashMap::new()),
+            broker_key: key,
+        };
+
+        // Should not panic when no subscribers
+        conn.route_message("stat/device/RESULT", "{}".to_string())
+            .await;
+        assert_eq!(conn.subscription_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn shared_connection_route_message_wrong_format() {
+        use rumqttc::MqttOptions;
+
+        let options = MqttOptions::new("test_client2", "localhost", 1883);
+        let (client, _event_loop) = AsyncClient::new(options, 10);
+
+        let key = BrokerKey::new("mqtt://localhost:1883", None).unwrap();
+        let conn = SharedConnection {
+            client,
+            subscriptions: RwLock::new(HashMap::new()),
+            broker_key: key,
+        };
+
+        // Wrong topic format - should not panic
+        conn.route_message("wrong/format", "{}".to_string()).await;
+        conn.route_message("stat/device/POWER", "{}".to_string())
+            .await; // Not RESULT
+        conn.route_message("cmnd/device/RESULT", "{}".to_string())
+            .await; // Not stat/
+    }
+
+    #[tokio::test]
+    async fn shared_connection_subscription_count() {
+        use rumqttc::MqttOptions;
+
+        let options = MqttOptions::new("test_client3", "localhost", 1883);
+        let (client, _event_loop) = AsyncClient::new(options, 10);
+
+        let key = BrokerKey::new("mqtt://localhost:1883", None).unwrap();
+        let conn = SharedConnection {
+            client,
+            subscriptions: RwLock::new(HashMap::new()),
+            broker_key: key,
+        };
+
+        assert_eq!(conn.subscription_count().await, 0);
+
+        // Manually add a subscription entry (bypassing MQTT)
+        let (tx, _rx) = mpsc::channel(1);
+        conn.subscriptions
+            .write()
+            .await
+            .insert("device1".to_string(), TopicSubscription { response_tx: tx });
+
+        assert_eq!(conn.subscription_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn shared_connection_remove_subscription() {
+        use rumqttc::MqttOptions;
+
+        let options = MqttOptions::new("test_client4", "localhost", 1883);
+        let (client, _event_loop) = AsyncClient::new(options, 10);
+
+        let key = BrokerKey::new("mqtt://localhost:1883", None).unwrap();
+        let conn = SharedConnection {
+            client,
+            subscriptions: RwLock::new(HashMap::new()),
+            broker_key: key,
+        };
+
+        // Add then remove
+        let (tx, _rx) = mpsc::channel(1);
+        conn.subscriptions
+            .write()
+            .await
+            .insert("device1".to_string(), TopicSubscription { response_tx: tx });
+
+        assert_eq!(conn.subscription_count().await, 1);
+
+        conn.remove_subscription("device1").await;
+        assert_eq!(conn.subscription_count().await, 0);
+
+        // Remove non-existent - should not panic
+        conn.remove_subscription("nonexistent").await;
+    }
+
+    #[test]
+    fn shared_connection_debug() {
+        use rumqttc::MqttOptions;
+
+        let options = MqttOptions::new("test_client5", "localhost", 1883);
+        let (client, _event_loop) = AsyncClient::new(options, 10);
+
+        let key = BrokerKey::new("mqtt://localhost:1883", None).unwrap();
+        let conn = SharedConnection {
+            client,
+            subscriptions: RwLock::new(HashMap::new()),
+            broker_key: key,
+        };
+
+        let debug = format!("{conn:?}");
+        assert!(debug.contains("SharedConnection"));
+        assert!(debug.contains("broker_key"));
+    }
+
+    #[test]
+    fn broker_pool_debug() {
+        let pool = BrokerPool::new();
+        let debug = format!("{pool:?}");
+        assert!(debug.contains("BrokerPool"));
+    }
+
+    #[test]
+    fn broker_pool_default() {
+        let pool1 = BrokerPool::default();
+        let pool2 = BrokerPool::new();
+        // Both should be empty new pools
+        assert_eq!(format!("{pool1:?}"), format!("{pool2:?}"));
+    }
 }
