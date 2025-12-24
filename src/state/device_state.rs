@@ -4,6 +4,45 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! Device state tracking.
+//!
+//! This module provides [`DeviceState`], a comprehensive representation of a
+//! Tasmota device's current state. It tracks:
+//!
+//! - **Power state** for up to 8 relays (POWER1-POWER8)
+//! - **Light settings**: dimmer level, HSB color, color temperature
+//! - **Energy readings**: voltage, current, power consumption, energy totals
+//!
+//! # Design Philosophy
+//!
+//! All fields are `Option` types because device state may not be known until
+//! the device reports it via telemetry or command response. This allows
+//! partial state updates without losing existing information.
+//!
+//! # Usage with Events
+//!
+//! `DeviceState` works together with [`StateChange`](super::StateChange) to
+//! provide an event-driven state management system:
+//!
+//! ```
+//! use tasmor_lib::state::{DeviceState, StateChange};
+//! use tasmor_lib::types::{PowerState, Dimmer};
+//!
+//! let mut state = DeviceState::new();
+//!
+//! // Apply changes from telemetry
+//! let changes = vec![
+//!     StateChange::power(1, PowerState::On),
+//!     StateChange::dimmer(Dimmer::new(80).unwrap()),
+//! ];
+//!
+//! for change in &changes {
+//!     state.apply(change);
+//! }
+//!
+//! // Query current state
+//! assert_eq!(state.power(1), Some(PowerState::On));
+//! assert_eq!(state.dimmer().map(|d| d.value()), Some(80));
+//! ```
 
 use crate::types::{ColorTemp, Dimmer, HsbColor, PowerState, TasmotaDateTime};
 

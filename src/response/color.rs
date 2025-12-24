@@ -119,7 +119,7 @@ impl HsbColorResponse {
         self.parse_hsb()
     }
 
-    /// Returns the HSB color as an [`HsbColor`](crate::types::HsbColor) type.
+    /// Returns the HSB color as an [`HsbColor`] type.
     ///
     /// # Errors
     ///
@@ -246,7 +246,7 @@ impl ColorTempResponse {
         self.power.as_ref().map(|s| s == "ON")
     }
 
-    /// Returns the color temperature as a [`ColorTemp`](crate::types::ColorTemp) type.
+    /// Returns the color temperature as a [`ColorTemp`] type.
     ///
     /// # Errors
     ///

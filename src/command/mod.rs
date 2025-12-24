@@ -8,6 +8,19 @@
 //! This module provides typed representations of Tasmota commands that can be
 //! sent via HTTP or MQTT protocols.
 //!
+//! # Available Commands
+//!
+//! | Command Type | Purpose | Example |
+//! |-------------|---------|---------|
+//! | [`PowerCommand`] | Control relay power state | On, Off, Toggle |
+//! | [`DimmerCommand`] | Adjust brightness (0-100) | Set to 75% |
+//! | [`ColorTempCommand`] | Set white color temperature | Warm, Cool |
+//! | [`HsbColorCommand`] | Set RGB color in HSB format | Red, Blue |
+//! | [`SpeedCommand`] | Set transition speed (1-40) | Fast, Slow |
+//! | [`FadeCommand`] | Enable/disable fade transitions | On, Off |
+//! | [`EnergyCommand`] | Query energy consumption | Get, Reset |
+//! | [`StatusCommand`] | Query device status | Status 0-10 |
+//!
 //! # Command Structure
 //!
 //! Each Tasmota command consists of:
@@ -15,7 +28,9 @@
 //! - An optional index suffix (e.g., "Power1", "Power2")
 //! - An optional payload (e.g., "ON", "50", "120,100,75")
 //!
-//! # Example
+//! # Examples
+//!
+//! ## Basic power control
 //!
 //! ```
 //! use tasmor_lib::command::{Command, PowerCommand};
@@ -28,6 +43,21 @@
 //!
 //! assert_eq!(cmd.name(), "Power1");
 //! assert_eq!(cmd.payload(), Some("ON".to_string()));
+//! ```
+//!
+//! ## Light control
+//!
+//! ```
+//! use tasmor_lib::command::{Command, DimmerCommand, ColorTempCommand};
+//! use tasmor_lib::types::{Dimmer, ColorTemp};
+//!
+//! // Set brightness to 75%
+//! let dim = DimmerCommand::Set(Dimmer::new(75).unwrap());
+//! assert_eq!(dim.payload(), Some("75".to_string()));
+//!
+//! // Set warm white color temperature
+//! let ct = ColorTempCommand::Set(ColorTemp::WARM);
+//! assert_eq!(ct.name(), "CT");
 //! ```
 
 mod energy;

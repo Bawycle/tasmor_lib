@@ -26,7 +26,10 @@ pub enum ConnectionState {
     /// Connection failed with an error.
     Failed(String),
     /// Reconnecting after a connection loss.
-    Reconnecting { attempt: u32 },
+    Reconnecting {
+        /// The current reconnection attempt number (1-based).
+        attempt: u32,
+    },
 }
 
 impl ConnectionState {

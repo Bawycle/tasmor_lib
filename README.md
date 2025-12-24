@@ -9,6 +9,8 @@ A modern, type-safe Rust library for controlling [Tasmota](https://tasmota.githu
 
 > ⚠️ **Early Development**: This project is in active development (v0.x.x). The API may change between versions. Not recommended for production use yet.
 
+> 📌 **Tested with**: Tasmota firmware v15.2.0
+
 ## Features
 
 - 🔒 **Type-safe API** - Compile-time guarantees for valid commands and values
@@ -193,6 +195,7 @@ fn handle_mqtt_message(topic: &str, payload: &str) {
 The `examples/` directory contains runnable examples:
 
 - **`bulb_test.rs`** - Simple example demonstrating basic device control
+- **`energy_test.rs`** - Energy monitoring: query power, voltage, current, and consumption
 - **`supervisor/`** - Full GUI application for managing multiple Tasmota devices
 
 Run an example with:

@@ -8,6 +8,34 @@
 //! This module provides structures for deserializing JSON responses from
 //! Tasmota devices. Each response type corresponds to a specific command
 //! or status query.
+//!
+//! # Response Types
+//!
+//! | Response Type | Tasmota Commands | Description |
+//! |--------------|------------------|-------------|
+//! | [`PowerResponse`] | `Power`, `Power1`-`Power8` | Relay on/off state |
+//! | [`DimmerResponse`] | `Dimmer` | Brightness level (0-100) |
+//! | [`HsbColorResponse`] | `HSBColor` | Color in HSB format |
+//! | [`ColorTempResponse`] | `CT` | White color temperature |
+//! | [`EnergyResponse`] | `Status 10` | Power consumption data |
+//! | [`StatusResponse`] | `Status 0` | Full device status |
+//!
+//! # Usage Pattern
+//!
+//! Response types are typically used with `serde_json` to parse the JSON
+//! returned by [`Device::send_command`](crate::Device::send_command):
+//!
+//! ```
+//! use tasmor_lib::response::PowerResponse;
+//!
+//! // Tasmota returns JSON like: {"POWER": "ON"} or {"POWER1": "ON", "POWER2": "OFF"}
+//! let json = r#"{"POWER": "ON"}"#;
+//! let response: PowerResponse = serde_json::from_str(json).unwrap();
+//!
+//! // Query the power state
+//! let state = response.first_power_state().unwrap();
+//! println!("Power is: {}", state);  // "ON"
+//! ```
 
 mod color;
 mod dimmer;

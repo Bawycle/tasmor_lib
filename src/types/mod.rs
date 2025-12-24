@@ -9,15 +9,57 @@
 //! commands. Each type ensures values are within their valid ranges at
 //! construction time, preventing runtime errors.
 //!
-//! # Types
+//! # Types Overview
 //!
-//! - [`PowerState`] - On/Off/Toggle states for power control
-//! - [`PowerIndex`] - Relay index for multi-channel devices (1-8)
-//! - [`Dimmer`] - Brightness level (0-100%)
-//! - [`ColorTemp`] - Color temperature in mireds (153-500)
-//! - [`HsbColor`] - HSB color (Hue 0-360, Saturation 0-100, Brightness 0-100)
-//! - [`FadeSpeed`] - Transition speed (1-40)
-//! - [`TasmotaDateTime`] - Datetime with optional timezone from Tasmota telemetry
+//! | Type | Range | Description |
+//! |------|-------|-------------|
+//! | [`PowerState`] | On/Off/Toggle/Blink | Relay power state |
+//! | [`PowerIndex`] | 0-8 | Relay index (0 = all relays) |
+//! | [`Dimmer`] | 0-100 | Brightness percentage |
+//! | [`ColorTemp`] | 153-500 mireds | White color temperature |
+//! | [`HsbColor`] | H:0-360, S:0-100, B:0-100 | RGB color in HSB format |
+//! | [`FadeSpeed`] | 1-40 | Transition speed (1=fastest) |
+//! | [`TasmotaDateTime`] | ISO 8601 | Datetime from telemetry |
+//!
+//! # Construction Patterns
+//!
+//! All types with constraints use the newtype pattern with validation:
+//!
+//! ```
+//! use tasmor_lib::types::{Dimmer, ColorTemp, HsbColor};
+//!
+//! // Validated construction - returns Result
+//! let dimmer = Dimmer::new(75)?;           // Ok(Dimmer(75))
+//! let invalid = Dimmer::new(150);          // Err(ValueError)
+//!
+//! // Clamped construction - always succeeds
+//! let clamped = Dimmer::clamped(150);      // Dimmer(100)
+//!
+//! // Preset values for common use cases
+//! let warm = ColorTemp::WARM;              // 500 mireds (2000K)
+//! let cool = ColorTemp::COOL;              // 153 mireds (6500K)
+//! let red = HsbColor::red();               // Pure red
+//! # Ok::<(), tasmor_lib::ValueError>(())
+//! ```
+//!
+//! # Type Conversions
+//!
+//! ```
+//! use tasmor_lib::types::{PowerState, Dimmer, ColorTemp};
+//!
+//! // PowerState from bool
+//! let on: PowerState = true.into();
+//! let off: PowerState = false.into();
+//!
+//! // ColorTemp to Kelvin
+//! let ct = ColorTemp::new(326)?;
+//! assert_eq!(ct.to_kelvin(), 3067);  // ~3000K neutral white
+//!
+//! // Dimmer as fraction
+//! let dim = Dimmer::new(50)?;
+//! assert_eq!(dim.as_fraction(), 0.5);
+//! # Ok::<(), tasmor_lib::ValueError>(())
+//! ```
 
 mod color;
 mod datetime;

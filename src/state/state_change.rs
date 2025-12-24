@@ -4,6 +4,53 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! State change representation.
+//!
+//! State changes are the fundamental building blocks for updating device state.
+//! They represent discrete changes that can be applied to a [`DeviceState`](super::DeviceState),
+//! either from command responses or telemetry updates.
+//!
+//! # Change Types
+//!
+//! - [`StateChange::Power`] - Relay state changes (on/off)
+//! - [`StateChange::Dimmer`] - Brightness level changes
+//! - [`StateChange::HsbColor`] - RGB color changes in HSB format
+//! - [`StateChange::ColorTemp`] - White color temperature changes
+//! - [`StateChange::Energy`] - Energy monitoring updates
+//! - [`StateChange::Batch`] - Multiple changes grouped together
+//!
+//! # Examples
+//!
+//! ## Creating individual changes
+//!
+//! ```
+//! use tasmor_lib::state::StateChange;
+//! use tasmor_lib::types::{PowerState, Dimmer, HsbColor, ColorTemp};
+//!
+//! // Power state change
+//! let power_on = StateChange::power(1, PowerState::On);
+//!
+//! // Light control changes
+//! let dim = StateChange::dimmer(Dimmer::new(75).unwrap());
+//! let color = StateChange::hsb_color(HsbColor::red());
+//! let warm = StateChange::color_temp(ColorTemp::WARM);
+//! ```
+//!
+//! ## Applying changes to device state
+//!
+//! ```
+//! use tasmor_lib::state::{DeviceState, StateChange};
+//! use tasmor_lib::types::PowerState;
+//!
+//! let mut state = DeviceState::new();
+//!
+//! // Apply returns true if state actually changed
+//! let changed = state.apply(&StateChange::power_on());
+//! assert!(changed);
+//!
+//! // Applying same change again returns false
+//! let changed = state.apply(&StateChange::power_on());
+//! assert!(!changed);
+//! ```
 
 use crate::types::{ColorTemp, Dimmer, HsbColor, PowerState, TasmotaDateTime};
 
