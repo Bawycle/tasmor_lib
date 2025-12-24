@@ -59,20 +59,26 @@ impl HsbColorResponse {
             });
         }
 
-        let hue = parts[0].parse::<u16>().map_err(|_| ParseError::InvalidValue {
-            field: "HSBColor.hue".to_string(),
-            message: format!("invalid hue value: {}", parts[0]),
-        })?;
+        let hue = parts[0]
+            .parse::<u16>()
+            .map_err(|_| ParseError::InvalidValue {
+                field: "HSBColor.hue".to_string(),
+                message: format!("invalid hue value: {}", parts[0]),
+            })?;
 
-        let saturation = parts[1].parse::<u8>().map_err(|_| ParseError::InvalidValue {
-            field: "HSBColor.saturation".to_string(),
-            message: format!("invalid saturation value: {}", parts[1]),
-        })?;
+        let saturation = parts[1]
+            .parse::<u8>()
+            .map_err(|_| ParseError::InvalidValue {
+                field: "HSBColor.saturation".to_string(),
+                message: format!("invalid saturation value: {}", parts[1]),
+            })?;
 
-        let brightness = parts[2].parse::<u8>().map_err(|_| ParseError::InvalidValue {
-            field: "HSBColor.brightness".to_string(),
-            message: format!("invalid brightness value: {}", parts[2]),
-        })?;
+        let brightness = parts[2]
+            .parse::<u8>()
+            .map_err(|_| ParseError::InvalidValue {
+                field: "HSBColor.brightness".to_string(),
+                message: format!("invalid brightness value: {}", parts[2]),
+            })?;
 
         Ok((hue, saturation, brightness))
     }
