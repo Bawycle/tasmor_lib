@@ -36,10 +36,22 @@ use crate::error::ProtocolError;
 #[derive(Debug, Clone)]
 pub struct CommandResponse {
     /// The raw JSON response body.
-    pub body: String,
+    body: String,
 }
 
 impl CommandResponse {
+    /// Creates a new command response with the given body.
+    #[must_use]
+    pub fn new(body: String) -> Self {
+        Self { body }
+    }
+
+    /// Returns the raw JSON response body.
+    #[must_use]
+    pub fn body(&self) -> &str {
+        &self.body
+    }
+
     /// Parses the response as a specific type.
     ///
     /// # Errors

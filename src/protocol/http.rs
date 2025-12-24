@@ -150,7 +150,7 @@ impl Protocol for HttpClient {
 
         tracing::debug!(body = %body, "Received HTTP response");
 
-        Ok(CommandResponse { body })
+        Ok(CommandResponse::new(body))
     }
 }
 

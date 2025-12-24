@@ -144,7 +144,7 @@ impl Protocol for PooledMqttClient {
         // Wait for response
         let body = self.wait_response(Duration::from_secs(5)).await?;
 
-        Ok(CommandResponse { body })
+        Ok(CommandResponse::new(body))
     }
 
     async fn send_raw(&self, command: &str) -> Result<CommandResponse, ProtocolError> {
@@ -164,7 +164,7 @@ impl Protocol for PooledMqttClient {
 
         let body = self.wait_response(Duration::from_secs(5)).await?;
 
-        Ok(CommandResponse { body })
+        Ok(CommandResponse::new(body))
     }
 }
 
