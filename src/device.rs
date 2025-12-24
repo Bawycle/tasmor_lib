@@ -208,7 +208,7 @@ impl<P: Protocol> Device<P> {
     ///
     /// Returns error if the device doesn't support dimming or the command fails.
     pub async fn set_dimmer(&self, value: Dimmer) -> Result<DimmerResponse, Error> {
-        self.check_capability("dimmer", self.capabilities.dimmer)?;
+        self.check_capability("dimmer", self.capabilities.dimmer())?;
         let cmd = DimmerCommand::Set(value);
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
@@ -222,7 +222,7 @@ impl<P: Protocol> Device<P> {
     ///
     /// Returns error if the device doesn't support dimming or the command fails.
     pub async fn get_dimmer(&self) -> Result<DimmerResponse, Error> {
-        self.check_capability("dimmer", self.capabilities.dimmer)?;
+        self.check_capability("dimmer", self.capabilities.dimmer())?;
         let cmd = DimmerCommand::Get;
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
@@ -238,7 +238,7 @@ impl<P: Protocol> Device<P> {
     ///
     /// Returns error if the device doesn't support color temperature or the command fails.
     pub async fn set_color_temp(&self, value: ColorTemp) -> Result<ColorTempResponse, Error> {
-        self.check_capability("color temperature", self.capabilities.color_temp)?;
+        self.check_capability("color temperature", self.capabilities.color_temp())?;
         let cmd = ColorTempCommand::Set(value);
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
@@ -252,7 +252,7 @@ impl<P: Protocol> Device<P> {
     ///
     /// Returns error if the device doesn't support color temperature or the command fails.
     pub async fn get_color_temp(&self) -> Result<ColorTempResponse, Error> {
-        self.check_capability("color temperature", self.capabilities.color_temp)?;
+        self.check_capability("color temperature", self.capabilities.color_temp())?;
         let cmd = ColorTempCommand::Get;
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
@@ -268,7 +268,7 @@ impl<P: Protocol> Device<P> {
     ///
     /// Returns error if the device doesn't support RGB or the command fails.
     pub async fn set_hsb_color(&self, color: HsbColor) -> Result<HsbColorResponse, Error> {
-        self.check_capability("RGB color", self.capabilities.rgb)?;
+        self.check_capability("RGB color", self.capabilities.rgb())?;
         let cmd = HsbColorCommand::Set(color);
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
@@ -282,7 +282,7 @@ impl<P: Protocol> Device<P> {
     ///
     /// Returns error if the device doesn't support RGB or the command fails.
     pub async fn get_hsb_color(&self) -> Result<HsbColorResponse, Error> {
-        self.check_capability("RGB color", self.capabilities.rgb)?;
+        self.check_capability("RGB color", self.capabilities.rgb())?;
         let cmd = HsbColorCommand::Get;
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
@@ -348,7 +348,7 @@ impl<P: Protocol> Device<P> {
     ///
     /// Returns error if the device doesn't support energy monitoring or the command fails.
     pub async fn energy(&self) -> Result<EnergyResponse, Error> {
-        self.check_capability("energy monitoring", self.capabilities.energy)?;
+        self.check_capability("energy monitoring", self.capabilities.energy())?;
         let cmd = EnergyCommand::Get;
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)

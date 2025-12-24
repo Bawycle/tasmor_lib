@@ -33,21 +33,19 @@ use crate::response::StatusResponse;
 ///
 /// // Default capabilities (single relay, no extras)
 /// let basic = Capabilities::default();
-/// assert_eq!(basic.power_channels, 1);
-/// assert!(!basic.dimmer);
+/// assert_eq!(basic.power_channels(), 1);
+/// assert!(!basic.dimmer());
 ///
-/// // RGB light bulb capabilities
-/// let rgb_bulb = Capabilities {
-///     power_channels: 1,
-///     dimmer: true,
-///     color_temp: true,
-///     rgb: true,
-///     energy: false,
-/// };
+/// // RGB light bulb capabilities using builder
+/// let rgb_bulb = tasmor_lib::CapabilitiesBuilder::new()
+///     .with_dimmer()
+///     .with_color_temp()
+///     .with_rgb()
+///     .build();
 ///
 /// // Neo Coolcam smart plug
 /// let neo_coolcam = Capabilities::neo_coolcam();
-/// assert!(neo_coolcam.energy);
+/// assert!(neo_coolcam.energy());
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 // Each boolean represents an independent device feature flag that cannot be
@@ -55,19 +53,51 @@ use crate::response::StatusResponse;
 #[allow(clippy::struct_excessive_bools)]
 pub struct Capabilities {
     /// Number of power relay channels (1-8).
-    pub power_channels: u8,
+    power_channels: u8,
 
     /// Supports dimmer/brightness control.
-    pub dimmer: bool,
+    dimmer: bool,
 
     /// Supports color temperature (CCT) control.
-    pub color_temp: bool,
+    color_temp: bool,
 
     /// Supports RGB/HSB color control.
-    pub rgb: bool,
+    rgb: bool,
 
     /// Supports energy monitoring (voltage, current, power).
-    pub energy: bool,
+    energy: bool,
+}
+
+impl Capabilities {
+    /// Returns the number of power relay channels (1-8).
+    #[must_use]
+    pub const fn power_channels(&self) -> u8 {
+        self.power_channels
+    }
+
+    /// Returns whether the device supports dimmer/brightness control.
+    #[must_use]
+    pub const fn dimmer(&self) -> bool {
+        self.dimmer
+    }
+
+    /// Returns whether the device supports color temperature (CCT) control.
+    #[must_use]
+    pub const fn color_temp(&self) -> bool {
+        self.color_temp
+    }
+
+    /// Returns whether the device supports RGB/HSB color control.
+    #[must_use]
+    pub const fn rgb(&self) -> bool {
+        self.rgb
+    }
+
+    /// Returns whether the device supports energy monitoring.
+    #[must_use]
+    pub const fn energy(&self) -> bool {
+        self.energy
+    }
 }
 
 impl Default for Capabilities {

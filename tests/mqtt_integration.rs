@@ -102,9 +102,9 @@ mod device_mqtt {
         assert!(device.is_ok());
 
         let device = device.unwrap();
-        assert!(device.capabilities().dimmer);
-        assert!(device.capabilities().rgb);
-        assert!(device.capabilities().color_temp);
+        assert!(device.capabilities().dimmer());
+        assert!(device.capabilities().rgb());
+        assert!(device.capabilities().color_temp());
     }
 
     #[tokio::test]
@@ -121,8 +121,8 @@ mod device_mqtt {
         assert!(device.is_ok());
 
         let device = device.unwrap();
-        assert!(device.capabilities().energy);
-        assert!(!device.capabilities().dimmer);
+        assert!(device.capabilities().energy());
+        assert!(!device.capabilities().dimmer());
     }
 
     #[tokio::test]
@@ -139,8 +139,8 @@ mod device_mqtt {
         assert!(device.is_ok());
 
         let device = device.unwrap();
-        assert_eq!(device.capabilities().power_channels, 1);
-        assert!(!device.capabilities().dimmer);
+        assert_eq!(device.capabilities().power_channels(), 1);
+        assert!(!device.capabilities().dimmer());
     }
 }
 

@@ -358,7 +358,7 @@ mod device_auto_detection {
         let host = mock_server.uri().replace("http://", "");
         let device = Device::http(&host).build().await.unwrap();
 
-        assert_eq!(device.capabilities().power_channels, 1);
+        assert_eq!(device.capabilities().power_channels(), 1);
     }
 
     #[tokio::test]
@@ -387,7 +387,7 @@ mod device_auto_detection {
         let host = mock_server.uri().replace("http://", "");
         let device = Device::http(&host).build().await.unwrap();
 
-        assert!(device.capabilities().energy);
+        assert!(device.capabilities().energy());
     }
 
     #[tokio::test]
@@ -401,9 +401,9 @@ mod device_auto_detection {
             .build_without_probe()
             .unwrap();
 
-        assert!(device.capabilities().dimmer);
-        assert!(device.capabilities().color_temp);
-        assert!(device.capabilities().rgb);
+        assert!(device.capabilities().dimmer());
+        assert!(device.capabilities().color_temp());
+        assert!(device.capabilities().rgb());
     }
 }
 

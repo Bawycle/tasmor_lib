@@ -453,7 +453,7 @@ impl DeviceManager {
     /// Returns an error if the device is not found, not connected, or doesn't
     /// have dimmer capability.
     pub async fn set_dimmer(&self, device_id: DeviceId, value: Dimmer) -> Result<(), Error> {
-        self.check_capability(device_id, |c| c.dimmer).await?;
+        self.check_capability(device_id, |c| c.dimmer()).await?;
 
         let command = DimmerCommand::set(value);
         let response = self.send_command(device_id, &command).await?;
@@ -482,7 +482,7 @@ impl DeviceManager {
     /// Returns an error if the device is not found, not connected, or doesn't
     /// have RGB capability.
     pub async fn set_hsb_color(&self, device_id: DeviceId, color: HsbColor) -> Result<(), Error> {
-        self.check_capability(device_id, |c| c.rgb).await?;
+        self.check_capability(device_id, |c| c.rgb()).await?;
 
         let command = HsbColorCommand::set(color);
         let response = self.send_command(device_id, &command).await?;
@@ -510,7 +510,7 @@ impl DeviceManager {
     /// Returns an error if the device is not found, not connected, or doesn't
     /// have color temperature capability.
     pub async fn set_color_temp(&self, device_id: DeviceId, ct: ColorTemp) -> Result<(), Error> {
-        self.check_capability(device_id, |c| c.color_temp).await?;
+        self.check_capability(device_id, |c| c.color_temp()).await?;
 
         let command = crate::command::ColorTempCommand::set(ct);
         let response = self.send_command(device_id, &command).await?;
@@ -670,16 +670,17 @@ mod tests {
     async fn capabilities_returns_configured_caps() {
         let manager = DeviceManager::new();
         let config =
-            DeviceConfig::mqtt("mqtt://localhost:1883", "test").with_capabilities(Capabilities {
-                dimmer: true,
-                rgb: true,
-                ..Default::default()
-            });
+            DeviceConfig::mqtt("mqtt://localhost:1883", "test").with_capabilities(
+                crate::CapabilitiesBuilder::new()
+                    .with_dimmer()
+                    .with_rgb()
+                    .build(),
+            );
         let id = manager.add_device(config).await;
 
         let caps = manager.capabilities(id).await.unwrap();
-        assert!(caps.dimmer);
-        assert!(caps.rgb);
+        assert!(caps.dimmer());
+        assert!(caps.rgb());
     }
 
     #[tokio::test]
