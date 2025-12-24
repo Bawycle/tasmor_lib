@@ -131,12 +131,6 @@ impl Dimmer {
     }
 }
 
-impl Default for Dimmer {
-    fn default() -> Self {
-        Self::MAX
-    }
-}
-
 impl fmt::Display for Dimmer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}%", self.0)
@@ -205,10 +199,5 @@ mod tests {
     fn dimmer_ordering() {
         assert!(Dimmer::MIN < Dimmer::MAX);
         assert!(Dimmer::new(50).unwrap() < Dimmer::new(75).unwrap());
-    }
-
-    #[test]
-    fn dimmer_default() {
-        assert_eq!(Dimmer::default(), Dimmer::MAX);
     }
 }
