@@ -3102,6 +3102,7 @@ dependencies = [
 name = "tasmor_lib"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "mockforge-mqtt",
  "reqwest",
  "rumqttc",

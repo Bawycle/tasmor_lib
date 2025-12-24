@@ -5,7 +5,7 @@
 
 //! State change representation.
 
-use crate::types::{ColorTemp, Dimmer, HsbColor, PowerState};
+use crate::types::{ColorTemp, Dimmer, HsbColor, PowerState, TasmotaDateTime};
 
 /// Represents a change in device state.
 ///
@@ -64,8 +64,10 @@ pub enum StateChange {
         energy_yesterday: Option<f32>,
         /// Total energy consumed in kWh.
         energy_total: Option<f32>,
-        /// Timestamp when total energy counting started (ISO 8601 format).
-        total_start_time: Option<String>,
+        /// Timestamp when total energy counting started.
+        ///
+        /// Contains both naive datetime and timezone-aware datetime if available.
+        total_start_time: Option<TasmotaDateTime>,
     },
 
     /// Multiple changes at once.
@@ -147,7 +149,7 @@ impl StateChange {
         energy_today: Option<f32>,
         energy_yesterday: Option<f32>,
         energy_total: Option<f32>,
-        total_start_time: Option<String>,
+        total_start_time: Option<TasmotaDateTime>,
     ) -> Self {
         Self::Energy {
             power,

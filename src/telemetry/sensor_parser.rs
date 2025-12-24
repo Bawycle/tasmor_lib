@@ -9,6 +9,7 @@ use serde::Deserialize;
 
 use crate::error::ParseError;
 use crate::state::StateChange;
+use crate::types::TasmotaDateTime;
 
 /// Parsed sensor data from a `tele/<topic>/SENSOR` message.
 ///
@@ -311,6 +312,12 @@ impl SensorData {
         if let Some(energy) = &self.energy {
             // Only emit energy change if at least one field is present
             if energy.has_power_data() || energy.has_consumption_data() {
+                // Parse the total start time into a proper datetime type
+                let total_start_time = energy
+                    .total_start_time
+                    .as_deref()
+                    .and_then(TasmotaDateTime::parse);
+
                 // Safe: power and voltage values from Tasmota are well within f32 precision range
                 changes.push(StateChange::Energy {
                     power: energy.power.map(|p| p as f32),
@@ -322,7 +329,7 @@ impl SensorData {
                     energy_today: energy.today,
                     energy_yesterday: energy.yesterday,
                     energy_total: energy.total,
-                    total_start_time: energy.total_start_time.clone(),
+                    total_start_time,
                 });
             }
         }
@@ -382,6 +389,8 @@ impl StatusSnsResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Datelike;
+    use chrono::Timelike;
 
     #[test]
     fn parse_energy_basic() {
@@ -659,7 +668,41 @@ mod tests {
             total_start_time, ..
         } = &changes[0]
         {
-            assert_eq!(total_start_time.as_deref(), Some("2024-01-15T10:30:00"));
+            let dt = total_start_time.as_ref().expect("Should have datetime");
+            assert_eq!(dt.naive().year(), 2024);
+            assert_eq!(dt.naive().month(), 1);
+            assert_eq!(dt.naive().day(), 15);
+            assert_eq!(dt.naive().hour(), 10);
+            assert_eq!(dt.naive().minute(), 30);
+            assert!(!dt.has_timezone()); // No timezone in input
+        } else {
+            panic!("Expected StateChange::Energy");
+        }
+    }
+
+    #[test]
+    fn to_state_changes_with_total_start_time_with_tz() {
+        let json = r#"{
+            "ENERGY": {
+                "TotalStartTime": "2024-01-15T10:30:00+01:00",
+                "Power": 100,
+                "Voltage": 230,
+                "Current": 0.5,
+                "Total": 500.0
+            }
+        }"#;
+        let data: SensorData = serde_json::from_str(json).unwrap();
+
+        let changes = data.to_state_changes();
+        assert_eq!(changes.len(), 1);
+        if let StateChange::Energy {
+            total_start_time, ..
+        } = &changes[0]
+        {
+            let dt = total_start_time.as_ref().expect("Should have datetime");
+            assert!(dt.has_timezone());
+            let tz_dt = dt.to_datetime().expect("Should have timezone");
+            assert_eq!(tz_dt.offset().local_minus_utc(), 3600); // +1 hour
         } else {
             panic!("Expected StateChange::Energy");
         }

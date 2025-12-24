@@ -17,13 +17,16 @@
 //! - [`ColorTemp`] - Color temperature in mireds (153-500)
 //! - [`HsbColor`] - HSB color (Hue 0-360, Saturation 0-100, Brightness 0-100)
 //! - [`FadeSpeed`] - Transition speed (1-40)
+//! - [`TasmotaDateTime`] - Datetime with optional timezone from Tasmota telemetry
 
 mod color;
+mod datetime;
 mod dimmer;
 mod power;
 mod speed;
 
 pub use color::{ColorTemp, HsbColor};
+pub use datetime::{DateTimeParseError, TasmotaDateTime};
 pub use dimmer::Dimmer;
 pub use power::{PowerIndex, PowerState};
 pub use speed::FadeSpeed;

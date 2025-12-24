@@ -650,27 +650,15 @@ fn render_energy_section(ui: &mut Ui, device: &DeviceState) {
         if let Some(total) = device.energy_total() {
             ui.horizontal(|ui| {
                 let total_text = if let Some(start_time) = device.total_start_time() {
-                    // Try to format the start time more nicely
-                    let formatted_time = format_start_time(start_time);
-                    format!("Total: {total:.1} kWh (since {formatted_time})")
+                    // Use chrono's format for date display
+                    let formatted_date = start_time.naive().format("%Y-%m-%d");
+                    format!("Total: {total:.1} kWh (since {formatted_date})")
                 } else {
                     format!("Total: {total:.1} kWh")
                 };
                 ui.label(RichText::new(total_text).small().weak());
             });
         }
-    }
-}
-
-/// Formats the start time for display.
-///
-/// Tries to extract just the date part from ISO 8601 format.
-fn format_start_time(time: &str) -> String {
-    // If it looks like ISO 8601 (e.g., "2024-01-15T10:30:00"), extract date
-    if time.len() >= 10 && time.chars().nth(4) == Some('-') && time.chars().nth(7) == Some('-') {
-        time[..10].to_string()
-    } else {
-        time.to_string()
     }
 }
 

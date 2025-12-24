@@ -313,9 +313,11 @@ impl ManagedDevice {
 
     /// Returns the timestamp when total energy counting started.
     ///
-    /// The format depends on the Tasmota device configuration (ISO 8601, epoch, etc.).
+    /// Returns a [`TasmotaDateTime`] which provides:
+    /// - `naive()` for the datetime without timezone (always available)
+    /// - `with_timezone()` for timezone-aware datetime (if timezone was known)
     #[must_use]
-    pub fn total_start_time(&self) -> Option<&str> {
+    pub fn total_start_time(&self) -> Option<&tasmor_lib::types::TasmotaDateTime> {
         self.state.total_start_time()
     }
 }

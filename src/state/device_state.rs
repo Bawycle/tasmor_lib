@@ -5,7 +5,7 @@
 
 //! Device state tracking.
 
-use crate::types::{ColorTemp, Dimmer, HsbColor, PowerState};
+use crate::types::{ColorTemp, Dimmer, HsbColor, PowerState, TasmotaDateTime};
 
 use super::StateChange;
 
@@ -59,8 +59,8 @@ pub struct DeviceState {
     energy_yesterday: Option<f32>,
     /// Energy total in kWh.
     energy_total: Option<f32>,
-    /// Timestamp when total energy counting started (ISO 8601 format).
-    total_start_time: Option<String>,
+    /// Timestamp when total energy counting started.
+    total_start_time: Option<TasmotaDateTime>,
 }
 
 impl DeviceState {
@@ -291,14 +291,16 @@ impl DeviceState {
 
     /// Gets the timestamp when total energy counting started.
     ///
-    /// Returns the timestamp in ISO 8601 format (e.g., "2024-01-15T10:30:00").
+    /// Returns a [`TasmotaDateTime`] which provides both:
+    /// - `naive()` - the datetime without timezone (always available)
+    /// - `to_datetime()` - the timezone-aware datetime (if timezone was known)
     #[must_use]
-    pub fn total_start_time(&self) -> Option<&str> {
-        self.total_start_time.as_deref()
+    pub fn total_start_time(&self) -> Option<&TasmotaDateTime> {
+        self.total_start_time.as_ref()
     }
 
     /// Sets the timestamp when total energy counting started.
-    pub fn set_total_start_time(&mut self, time: String) {
+    pub fn set_total_start_time(&mut self, time: TasmotaDateTime) {
         self.total_start_time = Some(time);
     }
 
@@ -381,7 +383,7 @@ impl DeviceState {
                 update_if_some!(energy_yesterday, energy_yesterday);
                 update_if_some!(energy_total, energy_total);
 
-                // Handle string field separately
+                // Handle datetime field separately (not a Copy type)
                 if let Some(time) = total_start_time
                     && self.total_start_time.as_ref() != Some(time)
                 {

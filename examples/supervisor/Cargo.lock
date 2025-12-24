@@ -615,6 +615,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "chrono"
+version = "0.4.42"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "145052bdd345b87320e369255277e3fb5152762ad123a901ef5c262dd38fe8d2"
+dependencies = [
+ "num-traits",
+ "serde",
+]
+
+[[package]]
 name = "clipboard-win"
 version = "5.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3304,6 +3314,7 @@ dependencies = [
 name = "tasmor_lib"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "reqwest",
  "rumqttc",
  "serde",
