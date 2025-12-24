@@ -639,7 +639,7 @@ impl DeviceManager {
     ///
     /// Sends the `EnergyTotal 0` command to the device, which clears the
     /// accumulated energy consumption value and resets the start time.
-    /// The response contains the updated Total, Yesterday, and Today values.
+    /// After the reset, queries `Status 10` to get the updated `TotalStartTime`.
     ///
     /// Note: Instantaneous readings (Voltage, Current, Power) are not affected
     /// by this reset and will be updated on the next telemetry message.
@@ -655,6 +655,11 @@ impl DeviceManager {
         // Send the reset command - response contains updated energy values
         let reset_command = crate::command::EnergyCommand::ResetTotal;
         self.send_command(device_id, &reset_command).await?;
+
+        // Query Status 10 to get the updated TotalStartTime
+        // (the EnergyTotal response doesn't include it)
+        let get_command = crate::command::EnergyCommand::Get;
+        self.send_command(device_id, &get_command).await?;
 
         Ok(())
     }
