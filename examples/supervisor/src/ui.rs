@@ -5,10 +5,116 @@
 
 //! UI components for the Tasmota Supervisor application.
 
+use std::collections::VecDeque;
+
+use chrono::Local;
 use egui::{Color32, RichText, Ui, Vec2, Widget};
 
-use crate::device_config::{ConnectionStatus, DeviceState};
+use crate::device_config::{ConnectionStatus, DeviceState, Protocol};
 use crate::device_model::DeviceModel;
+
+// ============================================================================
+// Console Log for HTTP Devices
+// ============================================================================
+
+/// Maximum number of entries to keep in the console log.
+const CONSOLE_MAX_ENTRIES: usize = 50;
+
+/// A single entry in the HTTP console log.
+#[derive(Clone)]
+pub struct ConsoleEntry {
+    /// Timestamp of the entry (short format: HH:MM:SS)
+    pub timestamp: String,
+    /// The request that was sent (e.g., "`power_on()`")
+    pub request: String,
+    /// The result of the request
+    pub result: ConsoleResult,
+}
+
+/// Result of an HTTP request.
+#[derive(Clone)]
+pub enum ConsoleResult {
+    /// Successful response with details
+    Success(String),
+    /// Error response
+    Error(String),
+    /// Request is pending (waiting for response)
+    #[allow(dead_code)] // Reserved for future async request tracking
+    Pending,
+}
+
+impl ConsoleEntry {
+    /// Creates a new pending console entry for a request.
+    #[must_use]
+    #[allow(dead_code)] // Reserved for future async request tracking
+    pub fn new_request(request: &str) -> Self {
+        Self {
+            timestamp: Local::now().format("%H:%M:%S").to_string(),
+            request: request.to_string(),
+            result: ConsoleResult::Pending,
+        }
+    }
+
+    /// Creates a new successful console entry.
+    #[must_use]
+    pub fn success(request: &str, response: &str) -> Self {
+        Self {
+            timestamp: Local::now().format("%H:%M:%S").to_string(),
+            request: request.to_string(),
+            result: ConsoleResult::Success(response.to_string()),
+        }
+    }
+
+    /// Creates a new error console entry.
+    #[must_use]
+    pub fn error(request: &str, error: &str) -> Self {
+        Self {
+            timestamp: Local::now().format("%H:%M:%S").to_string(),
+            request: request.to_string(),
+            result: ConsoleResult::Error(error.to_string()),
+        }
+    }
+}
+
+/// Console log for an HTTP device.
+#[derive(Clone, Default)]
+pub struct ConsoleLog {
+    entries: VecDeque<ConsoleEntry>,
+}
+
+impl ConsoleLog {
+    /// Creates a new empty console log.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            entries: VecDeque::new(),
+        }
+    }
+
+    /// Adds an entry to the log, removing old entries if necessary.
+    pub fn push(&mut self, entry: ConsoleEntry) {
+        self.entries.push_back(entry);
+        while self.entries.len() > CONSOLE_MAX_ENTRIES {
+            self.entries.pop_front();
+        }
+    }
+
+    /// Clears all entries from the log.
+    pub fn clear(&mut self) {
+        self.entries.clear();
+    }
+
+    /// Returns an iterator over the entries.
+    pub fn iter(&self) -> impl Iterator<Item = &ConsoleEntry> {
+        self.entries.iter()
+    }
+
+    /// Returns true if the log is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
 
 /// Creates a power toggle switch widget.
 fn power_toggle(on: &mut bool, enabled: bool) -> impl Widget + '_ {
@@ -77,9 +183,286 @@ fn power_toggle(on: &mut bool, enabled: bool) -> impl Widget + '_ {
 }
 
 /// Renders device information in a compact card format.
+///
+/// Dispatches to protocol-specific rendering based on the device's protocol.
+/// For HTTP devices, requires a console log for request/response display.
+pub fn device_card(
+    ui: &mut Ui,
+    device: &DeviceState,
+    console_log: Option<&ConsoleLog>,
+) -> DeviceCardResponse {
+    match device.config.protocol {
+        Protocol::Http => http_device_card(ui, device, console_log.unwrap_or(&ConsoleLog::new())),
+        Protocol::Mqtt => mqtt_device_card(ui, device),
+    }
+}
+
+/// Renders an HTTP device card with console-style request/response UI.
+///
+/// HTTP devices show controls that send requests and a console log
+/// displaying the request/response history.
 #[allow(clippy::too_many_lines)]
 // UI rendering function with multiple sections - splitting would reduce readability
-pub fn device_card(ui: &mut Ui, device: &DeviceState) -> DeviceCardResponse {
+fn http_device_card(
+    ui: &mut Ui,
+    device: &DeviceState,
+    console_log: &ConsoleLog,
+) -> DeviceCardResponse {
+    let mut response = DeviceCardResponse::default();
+
+    egui::Frame::new()
+        .fill(ui.visuals().extreme_bg_color)
+        .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
+        .corner_radius(4.0)
+        .inner_margin(12.0)
+        .show(ui, |ui| {
+            // Header row
+            ui.horizontal(|ui| {
+                // Protocol badge
+                ui.label(
+                    RichText::new("HTTP")
+                        .small()
+                        .color(Color32::WHITE)
+                        .background_color(Color32::from_rgb(255, 140, 0)),
+                );
+
+                ui.vertical(|ui| {
+                    ui.heading(&device.config.name);
+                    ui.label(RichText::new(device.model().name()).small().weak());
+                    let features: Vec<&str> = device.model().capabilities().features().collect();
+                    if !features.is_empty() {
+                        ui.label(RichText::new(features.join(" · ")).small().weak().italics());
+                    }
+                });
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    // Connection controls
+                    match device.status() {
+                        ConnectionStatus::Disconnected | ConnectionStatus::Error => {
+                            if ui.button("Connect").clicked() {
+                                response.connect_clicked = true;
+                            }
+                        }
+                        ConnectionStatus::Connected => {
+                            if ui.button("Disconnect").clicked() {
+                                response.disconnect_clicked = true;
+                            }
+                        }
+                        ConnectionStatus::Connecting => {
+                            ui.spinner();
+                        }
+                    }
+
+                    if ui.button("⚙").clicked() {
+                        response.settings_clicked = true;
+                    }
+                    if ui.button("🗑").clicked() {
+                        response.delete_clicked = true;
+                    }
+                });
+            });
+
+            ui.separator();
+
+            // Commands section
+            ui.label(RichText::new("Commands").strong());
+
+            // Power controls
+            ui.horizontal(|ui| {
+                ui.label("Power:");
+                if ui.button("ON").clicked() {
+                    response.power_on_clicked = true;
+                }
+                if ui.button("OFF").clicked() {
+                    response.power_off_clicked = true;
+                }
+                if ui.button("Toggle").clicked() {
+                    response.power_toggle_clicked = true;
+                }
+
+                ui.separator();
+
+                if ui.button("Status").clicked() {
+                    response.status_query_clicked = true;
+                }
+            });
+
+            // Dimmer control (if supported)
+            if device.model().supports_dimming() {
+                ui.horizontal(|ui| {
+                    ui.label("Dimmer:");
+                    let mut dimmer_value = 50.0_f32;
+                    let slider_response =
+                        ui.add(egui::Slider::new(&mut dimmer_value, 0.0..=100.0).suffix("%"));
+                    if ui.button("Send").clicked()
+                        || slider_response.drag_stopped()
+                        || slider_response.lost_focus()
+                    {
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                        let dimmer = dimmer_value as u8;
+                        response.dimmer_changed = Some(dimmer);
+                    }
+                });
+            }
+
+            // Color controls (if supported)
+            if device.model().supports_color() {
+                ui.horizontal(|ui| {
+                    ui.label("HSB:");
+                    let mut hue = 0.0_f32;
+                    ui.add(egui::Slider::new(&mut hue, 0.0..=360.0).text("H"));
+                    if ui.button("Send").clicked() {
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                        let h = hue as u16;
+                        response.hue_changed = Some((h, 100, 100));
+                    }
+                });
+
+                if device
+                    .model()
+                    .capabilities()
+                    .supports_color_temperature_control()
+                {
+                    ui.horizontal(|ui| {
+                        ui.label("Color Temp:");
+                        let mut ct_value = 326.0_f32;
+                        ui.add(egui::Slider::new(&mut ct_value, 153.0..=500.0).suffix(" mired"));
+                        if ui.button("Send").clicked() {
+                            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                            let ct = ct_value as u16;
+                            response.color_temp_changed = Some(ct);
+                        }
+                    });
+                }
+            }
+
+            // Energy controls (if supported)
+            if device.model().supports_energy_monitoring() {
+                ui.horizontal(|ui| {
+                    ui.label("Energy:");
+                    if ui.button("Query").clicked() {
+                        response.status_query_clicked = true;
+                    }
+                    if ui.button("Reset Total").clicked() {
+                        response.energy_reset_clicked = true;
+                    }
+                });
+            }
+
+            ui.separator();
+
+            // Console section
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Console").strong());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.small_button("Clear").clicked() {
+                        response.console_clear_clicked = true;
+                    }
+                });
+            });
+
+            // Console log area
+            egui::Frame::new()
+                .fill(Color32::from_rgb(30, 30, 30))
+                .corner_radius(4.0)
+                .inner_margin(8.0)
+                .show(ui, |ui| {
+                    egui::ScrollArea::vertical()
+                        .max_height(150.0)
+                        .stick_to_bottom(true)
+                        .show(ui, |ui| {
+                            ui.set_min_width(ui.available_width());
+
+                            if console_log.is_empty() {
+                                ui.label(
+                                    RichText::new("No requests yet. Use the controls above.")
+                                        .weak()
+                                        .italics()
+                                        .color(Color32::GRAY),
+                                );
+                            } else {
+                                for entry in console_log.iter() {
+                                    render_console_entry(ui, entry);
+                                }
+                            }
+                        });
+                });
+
+            // Error display
+            if let Some(error) = &device.error {
+                ui.separator();
+                ui.label(
+                    RichText::new(format!("❌ {error}"))
+                        .color(Color32::RED)
+                        .small(),
+                );
+            }
+        });
+
+    response
+}
+
+/// Renders a single console entry.
+fn render_console_entry(ui: &mut Ui, entry: &ConsoleEntry) {
+    let timestamp_color = Color32::from_rgb(128, 128, 128);
+    let request_color = Color32::from_rgb(100, 180, 255);
+
+    ui.horizontal_wrapped(|ui| {
+        // Timestamp
+        ui.label(
+            RichText::new(&entry.timestamp)
+                .small()
+                .color(timestamp_color),
+        );
+
+        // Request
+        ui.label(RichText::new(format!("> {}", entry.request)).color(request_color));
+    });
+
+    // Result on next line with indentation
+    match &entry.result {
+        ConsoleResult::Success(msg) => {
+            ui.horizontal_wrapped(|ui| {
+                ui.add_space(55.0); // Align with request
+                ui.label(
+                    RichText::new(format!("✓ {msg}"))
+                        .small()
+                        .color(Color32::from_rgb(100, 200, 100)),
+                );
+            });
+        }
+        ConsoleResult::Error(msg) => {
+            ui.horizontal_wrapped(|ui| {
+                ui.add_space(55.0);
+                ui.label(
+                    RichText::new(format!("✗ {msg}"))
+                        .small()
+                        .color(Color32::from_rgb(255, 100, 100)),
+                );
+            });
+        }
+        ConsoleResult::Pending => {
+            ui.horizontal_wrapped(|ui| {
+                ui.add_space(55.0);
+                ui.label(
+                    RichText::new("⏳ pending...")
+                        .small()
+                        .color(Color32::YELLOW),
+                );
+            });
+        }
+    }
+
+    ui.add_space(4.0);
+}
+
+/// Renders an MQTT device card with real-time state display.
+///
+/// MQTT devices show live state updates and controls that reflect
+/// the current device state.
+#[allow(clippy::too_many_lines)]
+// UI rendering function with multiple sections - splitting would reduce readability
+fn mqtt_device_card(ui: &mut Ui, device: &DeviceState) -> DeviceCardResponse {
     let mut response = DeviceCardResponse::default();
 
     egui::Frame::new()
@@ -92,6 +475,16 @@ pub fn device_card(ui: &mut Ui, device: &DeviceState) -> DeviceCardResponse {
                 // Status indicator
                 let status_color = device.status().color();
                 ui.label(RichText::new("●").color(status_color).size(20.0));
+
+                // Protocol badge for MQTT
+                if device.status() == ConnectionStatus::Connected {
+                    ui.label(
+                        RichText::new("MQTT")
+                            .small()
+                            .color(Color32::WHITE)
+                            .background_color(Color32::from_rgb(34, 139, 34)),
+                    );
+                }
 
                 ui.vertical(|ui| {
                     // Device name and model
@@ -252,6 +645,10 @@ pub struct DeviceCardResponse {
     pub delete_clicked: bool,
     /// Power toggle button was clicked
     pub power_toggle_clicked: bool,
+    /// Power ON button was clicked (HTTP only)
+    pub power_on_clicked: bool,
+    /// Power OFF button was clicked (HTTP only)
+    pub power_off_clicked: bool,
     /// Dimmer slider changed
     pub dimmer_changed: Option<u8>,
     /// HSB color hue changed (hue, saturation, brightness)
@@ -260,6 +657,10 @@ pub struct DeviceCardResponse {
     pub color_temp_changed: Option<u16>,
     /// Energy reset button was clicked
     pub energy_reset_clicked: bool,
+    /// Status query button was clicked (HTTP only)
+    pub status_query_clicked: bool,
+    /// Console clear button was clicked (HTTP only)
+    pub console_clear_clicked: bool,
 }
 
 /// Renders the add device dialog.

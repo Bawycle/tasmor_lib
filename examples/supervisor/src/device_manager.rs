@@ -235,6 +235,32 @@ impl DeviceManager {
             .map_err(|e| e.to_string())
     }
 
+    /// Turns the power on.
+    pub async fn power_on(&self, config_id: Uuid) -> Result<(), String> {
+        let device_id = self
+            .get_device_id(config_id)
+            .await
+            .ok_or("Device not found")?;
+
+        self.library_manager
+            .power_on(device_id)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Turns the power off.
+    pub async fn power_off(&self, config_id: Uuid) -> Result<(), String> {
+        let device_id = self
+            .get_device_id(config_id)
+            .await
+            .ok_or("Device not found")?;
+
+        self.library_manager
+            .power_off(device_id)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     /// Sets the dimmer level.
     pub async fn set_dimmer(&self, config_id: Uuid, level: u8) -> Result<(), String> {
         let device_id = self
@@ -272,7 +298,7 @@ impl DeviceManager {
     }
 
     /// Sets the color temperature.
-    pub async fn set_color_temp(&self, config_id: Uuid, ct: u16) -> Result<(), String> {
+    pub async fn set_color_temperature(&self, config_id: Uuid, ct: u16) -> Result<(), String> {
         let device_id = self
             .get_device_id(config_id)
             .await

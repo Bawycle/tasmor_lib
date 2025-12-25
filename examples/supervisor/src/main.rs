@@ -17,6 +17,8 @@ mod device_model;
 mod persistence;
 mod ui;
 
+use std::collections::HashMap;
+
 use eframe::egui;
 use uuid::Uuid;
 
@@ -24,7 +26,9 @@ use device_config::{ConnectionStatus, DeviceConfig, DeviceState, Protocol};
 use device_manager::{DeviceEvent, DeviceManager};
 use persistence::AppConfig;
 use tokio::sync::broadcast;
-use ui::{AddDeviceDialogState, DeviceCardResponse, EditDeviceDialogState};
+use ui::{
+    AddDeviceDialogState, ConsoleEntry, ConsoleLog, DeviceCardResponse, EditDeviceDialogState,
+};
 
 /// Main application state.
 struct TasmotaSupervisor {
@@ -36,6 +40,8 @@ struct TasmotaSupervisor {
     app_config: AppConfig,
     /// List of devices for UI display
     devices: Vec<DeviceState>,
+    /// Console logs for HTTP devices (keyed by device UUID)
+    console_logs: HashMap<Uuid, ConsoleLog>,
     /// Whether the add device dialog is open
     show_add_dialog: bool,
     /// State for the add device dialog
@@ -71,11 +77,17 @@ impl TasmotaSupervisor {
             event_rx,
             app_config,
             devices,
+            console_logs: HashMap::new(),
             show_add_dialog: false,
             add_dialog_state: AddDeviceDialogState::new(),
             edit_dialog_state: None,
             error_message: None,
         }
+    }
+
+    /// Logs an entry to the console for an HTTP device.
+    fn log_to_console(&mut self, device_id: Uuid, entry: ConsoleEntry) {
+        self.console_logs.entry(device_id).or_default().push(entry);
     }
 
     /// Spawns a background task that wakes the UI when device events arrive.
@@ -102,7 +114,14 @@ impl TasmotaSupervisor {
     }
 
     /// Handles device card interactions.
-    fn handle_device_card_response(&mut self, device_id: Uuid, response: &DeviceCardResponse) {
+    #[allow(clippy::too_many_lines)]
+    // Handler for all device interactions - splitting would reduce readability
+    fn handle_device_card_response(
+        &mut self,
+        device_id: Uuid,
+        response: &DeviceCardResponse,
+        is_http: bool,
+    ) {
         let rt = tokio::runtime::Handle::current();
 
         if response.connect_clicked {
@@ -137,43 +156,213 @@ impl TasmotaSupervisor {
         if response.delete_clicked {
             // Remove from persistent config
             self.app_config.remove_device(device_id);
+            // Remove console log
+            self.console_logs.remove(&device_id);
 
             let dm = &self.device_manager;
             rt.block_on(dm.remove_device(device_id));
         }
 
+        // HTTP-specific: Power ON
+        if response.power_on_clicked && is_http {
+            let dm = &self.device_manager;
+            match rt.block_on(dm.power_on(device_id)) {
+                Ok(()) => {
+                    self.log_to_console(
+                        device_id,
+                        ConsoleEntry::success("power_on()", "Power1 = ON"),
+                    );
+                }
+                Err(e) => {
+                    self.log_to_console(device_id, ConsoleEntry::error("power_on()", &e));
+                }
+            }
+        }
+
+        // HTTP-specific: Power OFF
+        if response.power_off_clicked && is_http {
+            let dm = &self.device_manager;
+            match rt.block_on(dm.power_off(device_id)) {
+                Ok(()) => {
+                    self.log_to_console(
+                        device_id,
+                        ConsoleEntry::success("power_off()", "Power1 = OFF"),
+                    );
+                }
+                Err(e) => {
+                    self.log_to_console(device_id, ConsoleEntry::error("power_off()", &e));
+                }
+            }
+        }
+
+        // Power toggle (both HTTP and MQTT, but log for HTTP)
         if response.power_toggle_clicked {
             let dm = &self.device_manager;
-            if let Err(e) = rt.block_on(dm.toggle_power(device_id)) {
-                self.error_message = Some(e);
+            match rt.block_on(dm.toggle_power(device_id)) {
+                Ok(()) => {
+                    if is_http {
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::success("power_toggle()", "Power toggled"),
+                        );
+                    }
+                }
+                Err(e) => {
+                    if is_http {
+                        self.log_to_console(device_id, ConsoleEntry::error("power_toggle()", &e));
+                    } else {
+                        self.error_message = Some(e);
+                    }
+                }
             }
         }
 
+        // Dimmer
         if let Some(dimmer) = response.dimmer_changed {
             let dm = &self.device_manager;
-            if let Err(e) = rt.block_on(dm.set_dimmer(device_id, dimmer)) {
-                self.error_message = Some(e);
+            match rt.block_on(dm.set_dimmer(device_id, dimmer)) {
+                Ok(()) => {
+                    if is_http {
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::success(
+                                &format!("set_dimmer({dimmer})"),
+                                &format!("Dimmer = {dimmer}"),
+                            ),
+                        );
+                    }
+                }
+                Err(e) => {
+                    if is_http {
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::error(&format!("set_dimmer({dimmer})"), &e),
+                        );
+                    } else {
+                        self.error_message = Some(e);
+                    }
+                }
             }
         }
 
+        // HSB Color
         if let Some((hue, sat, bri)) = response.hue_changed {
             let dm = &self.device_manager;
-            if let Err(e) = rt.block_on(dm.set_hsb_color(device_id, hue, sat, bri)) {
-                self.error_message = Some(e);
+            match rt.block_on(dm.set_hsb_color(device_id, hue, sat, bri)) {
+                Ok(()) => {
+                    if is_http {
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::success(
+                                &format!("set_hsb_color({hue}, {sat}, {bri})"),
+                                &format!("HSBColor = {hue},{sat},{bri}"),
+                            ),
+                        );
+                    }
+                }
+                Err(e) => {
+                    if is_http {
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::error(&format!("set_hsb_color({hue}, {sat}, {bri})"), &e),
+                        );
+                    } else {
+                        self.error_message = Some(e);
+                    }
+                }
             }
         }
 
+        // Color temperature
         if let Some(ct) = response.color_temp_changed {
             let dm = &self.device_manager;
-            if let Err(e) = rt.block_on(dm.set_color_temp(device_id, ct)) {
-                self.error_message = Some(e);
+            match rt.block_on(dm.set_color_temperature(device_id, ct)) {
+                Ok(()) => {
+                    if is_http {
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::success(
+                                &format!("set_color_temperature({ct})"),
+                                &format!("CT = {ct}"),
+                            ),
+                        );
+                    }
+                }
+                Err(e) => {
+                    if is_http {
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::error(&format!("set_color_temperature({ct})"), &e),
+                        );
+                    } else {
+                        self.error_message = Some(e);
+                    }
+                }
             }
         }
 
+        // Energy reset
         if response.energy_reset_clicked {
             let dm = &self.device_manager;
-            if let Err(e) = rt.block_on(dm.reset_energy_total(device_id)) {
-                self.error_message = Some(e);
+            match rt.block_on(dm.reset_energy_total(device_id)) {
+                Ok(()) => {
+                    if is_http {
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::success("reset_energy_total()", "Energy counter reset"),
+                        );
+                    }
+                }
+                Err(e) => {
+                    if is_http {
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::error("reset_energy_total()", &e),
+                        );
+                    } else {
+                        self.error_message = Some(e);
+                    }
+                }
+            }
+        }
+
+        // HTTP-specific: Status query
+        if response.status_query_clicked && is_http {
+            let dm = &self.device_manager;
+            match rt.block_on(dm.refresh_status(device_id)) {
+                Ok(()) => {
+                    // Get the current state to display in console
+                    if let Some(device) = self.devices.iter().find(|d| d.config.id == device_id) {
+                        let power_str = device.is_power_on().map_or("?".to_string(), |on| {
+                            if on { "ON" } else { "OFF" }.to_string()
+                        });
+                        let dimmer_str = device
+                            .dimmer_value()
+                            .map_or(String::new(), |d| format!(", Dimmer={d}"));
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::success(
+                                "status()",
+                                &format!("Power={power_str}{dimmer_str}"),
+                            ),
+                        );
+                    } else {
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::success("status()", "Status refreshed"),
+                        );
+                    }
+                }
+                Err(e) => {
+                    self.log_to_console(device_id, ConsoleEntry::error("status()", &e));
+                }
+            }
+        }
+
+        // HTTP-specific: Console clear
+        if response.console_clear_clicked {
+            if let Some(log) = self.console_logs.get_mut(&device_id) {
+                log.clear();
             }
         }
     }
@@ -454,16 +643,18 @@ impl eframe::App for TasmotaSupervisor {
                         self.devices
                             .iter()
                             .map(|device| {
-                                let response = ui::device_card(ui, device);
+                                let console_log = self.console_logs.get(&device.config.id);
+                                let response = ui::device_card(ui, device, console_log);
                                 ui.add_space(8.0);
-                                (device.config.id, response)
+                                (device.config.id, device.config.protocol, response)
                             })
                             .collect()
                     })
                     .inner;
 
-                for (device_id, response) in &responses {
-                    self.handle_device_card_response(*device_id, response);
+                for (device_id, protocol, response) in &responses {
+                    let is_http = *protocol == Protocol::Http;
+                    self.handle_device_card_response(*device_id, response, is_http);
                 }
             }
         });
@@ -519,6 +710,7 @@ mod tests {
             event_rx,
             app_config: AppConfig::default(),
             devices,
+            console_logs: HashMap::new(),
             show_add_dialog: false,
             add_dialog_state: AddDeviceDialogState::new(),
             edit_dialog_state: None,
@@ -548,6 +740,7 @@ mod tests {
             event_rx,
             app_config: AppConfig::default(),
             devices,
+            console_logs: HashMap::new(),
             show_add_dialog: false,
             add_dialog_state: AddDeviceDialogState::new(),
             edit_dialog_state: None,
@@ -579,6 +772,7 @@ mod tests {
             event_rx,
             app_config: AppConfig::default(),
             devices,
+            console_logs: HashMap::new(),
             show_add_dialog: false,
             add_dialog_state: AddDeviceDialogState::new(),
             edit_dialog_state: None,
