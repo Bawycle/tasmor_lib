@@ -40,8 +40,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Connecting to MQTT broker {broker}...");
 
     let capabilities = CapabilitiesBuilder::new()
-        .with_dimmer()
-        .with_color_temp()
+        .with_dimmer_control()
+        .with_color_temperature_control()
         .build();
 
     let device = Device::mqtt(broker, topic)

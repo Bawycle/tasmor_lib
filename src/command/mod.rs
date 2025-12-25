@@ -14,9 +14,9 @@
 //! |-------------|---------|---------|
 //! | [`PowerCommand`] | Control relay power state | On, Off, Toggle |
 //! | [`DimmerCommand`] | Adjust brightness (0-100) | Set to 75% |
-//! | [`ColorTempCommand`] | Set white color temperature | Warm, Cool |
+//! | [`ColorTemperatureCommand`] | Set white color temperature | Warm, Cool |
 //! | [`HsbColorCommand`] | Set RGB color in HSB format | Red, Blue |
-//! | [`SpeedCommand`] | Set transition speed (1-40) | Fast, Slow |
+//! | [`FadeSpeedCommand`] | Set fade transition speed (1-40) | Fast, Slow |
 //! | [`FadeCommand`] | Enable/disable fade transitions | On, Off |
 //! | [`EnergyCommand`] | Query energy consumption | Get, Reset |
 //! | [`StatusCommand`] | Query device status | Status 0-10 |
@@ -48,15 +48,15 @@
 //! ## Light control
 //!
 //! ```
-//! use tasmor_lib::command::{Command, DimmerCommand, ColorTempCommand};
-//! use tasmor_lib::types::{Dimmer, ColorTemp};
+//! use tasmor_lib::command::{Command, DimmerCommand, ColorTemperatureCommand};
+//! use tasmor_lib::types::{Dimmer, ColorTemperature};
 //!
 //! // Set brightness to 75%
 //! let dim = DimmerCommand::Set(Dimmer::new(75).unwrap());
 //! assert_eq!(dim.payload(), Some("75".to_string()));
 //!
 //! // Set warm white color temperature
-//! let ct = ColorTempCommand::Set(ColorTemp::WARM);
+//! let ct = ColorTemperatureCommand::Set(ColorTemperature::WARM);
 //! assert_eq!(ct.name(), "CT");
 //! ```
 
@@ -66,8 +66,10 @@ mod power;
 mod status;
 
 pub use energy::EnergyCommand;
-pub use light::{ColorTempCommand, DimmerCommand, HsbColorCommand, SpeedCommand, StateCommand};
-pub use power::{FadeCommand, PowerCommand, PowerOnFadeCommand};
+pub use light::{
+    ColorTemperatureCommand, DimmerCommand, FadeSpeedCommand, HsbColorCommand, StateCommand,
+};
+pub use power::{FadeCommand, PowerCommand, StartupFadeCommand};
 pub use status::{StatusCommand, StatusType};
 
 /// A command that can be sent to a Tasmota device.

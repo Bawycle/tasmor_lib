@@ -147,30 +147,30 @@ impl Command for FadeCommand {
     }
 }
 
-/// Command to enable or disable fade on power-on.
+/// Command to enable or disable fade at device startup.
 ///
 /// This corresponds to Tasmota's `SetOption91`.
 ///
 /// # Examples
 ///
 /// ```
-/// use tasmor_lib::command::{Command, PowerOnFadeCommand};
+/// use tasmor_lib::command::{Command, StartupFadeCommand};
 ///
-/// let enable = PowerOnFadeCommand::Enable;
+/// let enable = StartupFadeCommand::Enable;
 /// assert_eq!(enable.name(), "SetOption91");
 /// assert_eq!(enable.payload(), Some("1".to_string()));
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PowerOnFadeCommand {
+pub enum StartupFadeCommand {
     /// Query the current setting.
     Get,
-    /// Enable fade on power-on.
+    /// Enable fade at startup.
     Enable,
-    /// Disable fade on power-on.
+    /// Disable fade at startup.
     Disable,
 }
 
-impl Command for PowerOnFadeCommand {
+impl Command for StartupFadeCommand {
     fn name(&self) -> String {
         "SetOption91".to_string()
     }
@@ -224,8 +224,8 @@ mod tests {
     }
 
     #[test]
-    fn power_on_fade_command() {
-        assert_eq!(PowerOnFadeCommand::Get.name(), "SetOption91");
-        assert_eq!(PowerOnFadeCommand::Enable.payload(), Some("1".to_string()));
+    fn startup_fade_command() {
+        assert_eq!(StartupFadeCommand::Get.name(), "SetOption91");
+        assert_eq!(StartupFadeCommand::Enable.payload(), Some("1".to_string()));
     }
 }

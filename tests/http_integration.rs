@@ -6,11 +6,11 @@
 //! Integration tests for HTTP protocol using wiremock.
 
 use tasmor_lib::command::{
-    ColorTempCommand, DimmerCommand, EnergyCommand, FadeCommand, HsbColorCommand, PowerCommand,
-    PowerOnFadeCommand, SpeedCommand, StatusCommand,
+    ColorTemperatureCommand, DimmerCommand, EnergyCommand, FadeCommand, FadeSpeedCommand,
+    HsbColorCommand, PowerCommand, StartupFadeCommand, StatusCommand,
 };
 use tasmor_lib::protocol::{HttpClient, HttpClientBuilder, Protocol};
-use tasmor_lib::types::{ColorTemp, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState};
+use tasmor_lib::types::{ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState};
 use tasmor_lib::{Capabilities, Device};
 use wiremock::matchers::{method, query_param, query_param_contains};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -151,7 +151,7 @@ mod http_client {
             .build()
             .unwrap();
 
-        let cmd = ColorTempCommand::Set(ColorTemp::new(250).unwrap());
+        let cmd = ColorTemperatureCommand::Set(ColorTemperature::new(250).unwrap());
         let response = client.send_command(&cmd).await.unwrap();
 
         assert!(response.body().contains("250"));
@@ -256,17 +256,17 @@ mod http_client {
             .build()
             .unwrap();
 
-        let cmd = SpeedCommand::Set(FadeSpeed::new(20).unwrap());
+        let cmd = FadeSpeedCommand::Set(FadeSpeed::new(20).unwrap());
         let response = client.send_command(&cmd).await.unwrap();
 
         assert!(response.body().contains("20"));
     }
 
     #[tokio::test]
-    async fn send_power_on_fade_command() {
+    async fn send_startup_fade_command() {
         let mock_server = MockServer::start().await;
 
-        // PowerOnFadeCommand uses SetOption91 in Tasmota
+        // StartupFadeCommand uses SetOption91 in Tasmota
         Mock::given(method("GET"))
             .and(query_param("cmnd", "SetOption91 1"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -280,7 +280,7 @@ mod http_client {
             .build()
             .unwrap();
 
-        let cmd = PowerOnFadeCommand::Enable;
+        let cmd = StartupFadeCommand::Enable;
         let response = client.send_command(&cmd).await.unwrap();
 
         assert!(response.body().contains("ON"));
@@ -387,7 +387,7 @@ mod device_auto_detection {
         let host = mock_server.uri().replace("http://", "");
         let device = Device::http(&host).build().await.unwrap();
 
-        assert!(device.capabilities().energy());
+        assert!(device.capabilities().supports_energy_monitoring());
     }
 
     #[tokio::test]
@@ -401,9 +401,9 @@ mod device_auto_detection {
             .build_without_probe()
             .unwrap();
 
-        assert!(device.capabilities().dimmer());
-        assert!(device.capabilities().color_temp());
-        assert!(device.capabilities().rgb());
+        assert!(device.capabilities().supports_dimmer_control());
+        assert!(device.capabilities().supports_color_temperature_control());
+        assert!(device.capabilities().supports_rgb_control());
     }
 }
 
@@ -557,7 +557,7 @@ mod device_light_commands {
     }
 
     #[tokio::test]
-    async fn set_color_temp() {
+    async fn set_color_temperature() {
         let mock_server = MockServer::start().await;
 
         Mock::given(method("GET"))
@@ -570,7 +570,7 @@ mod device_light_commands {
 
         let device = create_light_device(&mock_server).await;
         device
-            .set_color_temp(ColorTemp::new(300).unwrap())
+            .set_color_temperature(ColorTemperature::new(300).unwrap())
             .await
             .unwrap();
     }
@@ -627,7 +627,7 @@ mod device_light_commands {
     }
 
     #[tokio::test]
-    async fn set_speed() {
+    async fn set_fade_speed() {
         let mock_server = MockServer::start().await;
 
         Mock::given(method("GET"))
@@ -639,7 +639,10 @@ mod device_light_commands {
             .await;
 
         let device = create_light_device(&mock_server).await;
-        device.set_speed(FadeSpeed::new(15).unwrap()).await.unwrap();
+        device
+            .set_fade_speed(FadeSpeed::new(15).unwrap())
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -657,7 +660,7 @@ mod device_light_commands {
     }
 
     #[tokio::test]
-    async fn color_temp_fails_without_capability() {
+    async fn color_temperature_fails_without_capability() {
         let mock_server = MockServer::start().await;
 
         let host = mock_server.uri().replace("http://", "");
@@ -666,7 +669,9 @@ mod device_light_commands {
             .build_without_probe()
             .unwrap();
 
-        let result = device.set_color_temp(ColorTemp::NEUTRAL).await;
+        let result = device
+            .set_color_temperature(ColorTemperature::NEUTRAL)
+            .await;
         assert!(result.is_err());
     }
 

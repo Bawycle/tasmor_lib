@@ -102,9 +102,9 @@ mod device_mqtt {
         assert!(device.is_ok());
 
         let device = device.unwrap();
-        assert!(device.capabilities().dimmer());
-        assert!(device.capabilities().rgb());
-        assert!(device.capabilities().color_temp());
+        assert!(device.capabilities().supports_dimmer_control());
+        assert!(device.capabilities().supports_rgb_control());
+        assert!(device.capabilities().supports_color_temperature_control());
     }
 
     #[tokio::test]
@@ -121,8 +121,8 @@ mod device_mqtt {
         assert!(device.is_ok());
 
         let device = device.unwrap();
-        assert!(device.capabilities().energy());
-        assert!(!device.capabilities().dimmer());
+        assert!(device.capabilities().supports_energy_monitoring());
+        assert!(!device.capabilities().supports_dimmer_control());
     }
 
     #[tokio::test]
@@ -140,7 +140,7 @@ mod device_mqtt {
 
         let device = device.unwrap();
         assert_eq!(device.capabilities().power_channels(), 1);
-        assert!(!device.capabilities().dimmer());
+        assert!(!device.capabilities().supports_dimmer_control());
     }
 }
 
@@ -264,7 +264,9 @@ mod capability_verification {
             .await
             .unwrap();
 
-        let result = device.set_color_temp(tasmor_lib::ColorTemp::NEUTRAL).await;
+        let result = device
+            .set_color_temperature(tasmor_lib::ColorTemperature::NEUTRAL)
+            .await;
         assert!(result.is_err());
     }
 

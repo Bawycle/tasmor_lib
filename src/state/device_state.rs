@@ -44,7 +44,7 @@
 //! assert_eq!(state.dimmer().map(|d| d.value()), Some(80));
 //! ```
 
-use crate::types::{ColorTemp, Dimmer, HsbColor, PowerState, TasmotaDateTime};
+use crate::types::{ColorTemperature, Dimmer, HsbColor, PowerState, TasmotaDateTime};
 
 use super::StateChange;
 
@@ -79,7 +79,7 @@ pub struct DeviceState {
     /// HSB color (hue, saturation, brightness).
     hsb_color: Option<HsbColor>,
     /// Color temperature in mireds (153-500).
-    color_temp: Option<ColorTemp>,
+    color_temperature: Option<ColorTemperature>,
     /// Current power consumption in Watts.
     power_consumption: Option<f32>,
     /// Current voltage in Volts.
@@ -213,18 +213,18 @@ impl DeviceState {
 
     /// Gets the color temperature.
     #[must_use]
-    pub fn color_temp(&self) -> Option<ColorTemp> {
-        self.color_temp
+    pub fn color_temperature(&self) -> Option<ColorTemperature> {
+        self.color_temperature
     }
 
     /// Sets the color temperature.
-    pub fn set_color_temp(&mut self, ct: ColorTemp) {
-        self.color_temp = Some(ct);
+    pub fn set_color_temperature(&mut self, ct: ColorTemperature) {
+        self.color_temperature = Some(ct);
     }
 
     /// Clears the color temperature.
-    pub fn clear_color_temp(&mut self) {
-        self.color_temp = None;
+    pub fn clear_color_temperature(&mut self) {
+        self.color_temperature = None;
     }
 
     // ========== Energy Monitoring ==========
@@ -378,11 +378,11 @@ impl DeviceState {
                     true
                 }
             }
-            StateChange::ColorTemp(ct) => {
-                if self.color_temp == Some(*ct) {
+            StateChange::ColorTemperature(ct) => {
+                if self.color_temperature == Some(*ct) {
                     false
                 } else {
-                    self.color_temp = Some(*ct);
+                    self.color_temperature = Some(*ct);
                     true
                 }
             }
@@ -460,7 +460,7 @@ mod tests {
         assert!(state.power(1).is_none());
         assert!(state.dimmer().is_none());
         assert!(state.hsb_color().is_none());
-        assert!(state.color_temp().is_none());
+        assert!(state.color_temperature().is_none());
         assert!(state.power_consumption().is_none());
     }
 
@@ -653,8 +653,8 @@ mod tests {
         assert_eq!(hsb.saturation(), 100);
         assert_eq!(hsb.brightness(), 100);
 
-        // Color temp should also be set
-        assert!(state.color_temp().is_some());
-        assert_eq!(state.color_temp().unwrap().value(), 153);
+        // Color temperature should also be set
+        assert!(state.color_temperature().is_some());
+        assert_eq!(state.color_temperature().unwrap().value(), 153);
     }
 }

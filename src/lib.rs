@@ -38,7 +38,7 @@
 //!     device.power_on().await?;
 //!
 //!     // Check capabilities before using features
-//!     if device.capabilities().dimmer() {
+//!     if device.capabilities().supports_dimmer_control() {
 //!         device.set_dimmer(tasmor_lib::Dimmer::new(75)?).await?;
 //!     }
 //!
@@ -93,13 +93,13 @@ pub mod types;
 
 pub use capabilities::{Capabilities, CapabilitiesBuilder};
 pub use command::{
-    ColorTempCommand, Command, DimmerCommand, EnergyCommand, FadeCommand, HsbColorCommand,
-    PowerCommand, PowerOnFadeCommand, SpeedCommand, StateCommand, StatusCommand,
+    ColorTemperatureCommand, Command, DimmerCommand, EnergyCommand, FadeCommand, FadeSpeedCommand,
+    HsbColorCommand, PowerCommand, StartupFadeCommand, StateCommand, StatusCommand,
 };
 pub use device::{Device, HttpDeviceBuilder, MqttDeviceBuilder};
 pub use error::{DeviceError, Error, ParseError, ProtocolError, Result, ValueError};
 pub use response::{EnergyResponse, PowerResponse, StatusResponse};
 pub use types::{
-    ColorTemp, DateTimeParseError, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState,
+    ColorTemperature, DateTimeParseError, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState,
     TasmotaDateTime,
 };

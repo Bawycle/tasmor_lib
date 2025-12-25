@@ -10,7 +10,7 @@ use serde::de::{self, Deserializer};
 
 use crate::error::ParseError;
 use crate::state::StateChange;
-use crate::types::{ColorTemp, Dimmer, HsbColor, PowerState};
+use crate::types::{ColorTemperature, Dimmer, HsbColor, PowerState};
 
 /// Deserializes a boolean from either "ON"/"OFF" string or 0/1 integer.
 fn deserialize_bool_or_int<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
@@ -330,9 +330,9 @@ impl TelemetryState {
 
         // Color temperature
         if let Some(ct) = self.ct
-            && let Ok(color_temp) = ColorTemp::new(ct)
+            && let Ok(color_temp) = ColorTemperature::new(ct)
         {
-            changes.push(StateChange::ColorTemp(color_temp));
+            changes.push(StateChange::ColorTemperature(color_temp));
         }
 
         // HSB Color

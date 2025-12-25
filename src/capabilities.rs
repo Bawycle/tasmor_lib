@@ -34,18 +34,18 @@ use crate::response::StatusResponse;
 /// // Default capabilities (single relay, no extras)
 /// let basic = Capabilities::default();
 /// assert_eq!(basic.power_channels(), 1);
-/// assert!(!basic.dimmer());
+/// assert!(!basic.supports_dimmer_control());
 ///
 /// // RGB light bulb capabilities using builder
 /// let rgb_bulb = tasmor_lib::CapabilitiesBuilder::new()
-///     .with_dimmer()
-///     .with_color_temp()
-///     .with_rgb()
+///     .with_dimmer_control()
+///     .with_color_temperature_control()
+///     .with_rgb_control()
 ///     .build();
 ///
 /// // Neo Coolcam smart plug
 /// let neo_coolcam = Capabilities::neo_coolcam();
-/// assert!(neo_coolcam.energy());
+/// assert!(neo_coolcam.supports_energy_monitoring());
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -57,16 +57,16 @@ pub struct Capabilities {
     power_channels: u8,
 
     /// Supports dimmer/brightness control.
-    dimmer: bool,
+    dimmer_control: bool,
 
     /// Supports color temperature (CCT) control.
-    color_temp: bool,
+    color_temperature_control: bool,
 
     /// Supports RGB/HSB color control.
-    rgb: bool,
+    rgb_control: bool,
 
     /// Supports energy monitoring (voltage, current, power).
-    energy: bool,
+    energy_monitoring: bool,
 }
 
 impl Capabilities {
@@ -78,32 +78,32 @@ impl Capabilities {
 
     /// Returns whether the device supports dimmer/brightness control.
     #[must_use]
-    pub const fn dimmer(&self) -> bool {
-        self.dimmer
+    pub const fn supports_dimmer_control(&self) -> bool {
+        self.dimmer_control
     }
 
     /// Returns whether the device supports color temperature (CCT) control.
     #[must_use]
-    pub const fn color_temp(&self) -> bool {
-        self.color_temp
+    pub const fn supports_color_temperature_control(&self) -> bool {
+        self.color_temperature_control
     }
 
     /// Returns whether the device supports RGB/HSB color control.
     #[must_use]
-    pub const fn rgb(&self) -> bool {
-        self.rgb
+    pub const fn supports_rgb_control(&self) -> bool {
+        self.rgb_control
     }
 
     /// Returns whether the device supports energy monitoring.
     #[must_use]
-    pub const fn energy(&self) -> bool {
-        self.energy
+    pub const fn supports_energy_monitoring(&self) -> bool {
+        self.energy_monitoring
     }
 
     /// Returns an iterator over the names of enabled features.
     ///
     /// This is useful for introspection and debugging. The returned names
-    /// match the field names: `dimmer`, `color_temp`, `rgb`, `energy`.
+    /// are: `dimmer_control`, `color_temperature_control`, `rgb_control`, `energy_monitoring`.
     ///
     /// # Examples
     ///
@@ -112,17 +112,18 @@ impl Capabilities {
     ///
     /// let caps = Capabilities::rgbcct_light();
     /// let features: Vec<_> = caps.features().collect();
-    /// assert!(features.contains(&"dimmer"));
-    /// assert!(features.contains(&"color_temp"));
-    /// assert!(features.contains(&"rgb"));
-    /// assert!(!features.contains(&"energy"));
+    /// assert!(features.contains(&"dimmer_control"));
+    /// assert!(features.contains(&"color_temperature_control"));
+    /// assert!(features.contains(&"rgb_control"));
+    /// assert!(!features.contains(&"energy_monitoring"));
     /// ```
     pub fn features(&self) -> impl Iterator<Item = &'static str> {
         [
-            self.dimmer.then_some("dimmer"),
-            self.color_temp.then_some("color_temp"),
-            self.rgb.then_some("rgb"),
-            self.energy.then_some("energy"),
+            self.dimmer_control.then_some("dimmer_control"),
+            self.color_temperature_control
+                .then_some("color_temperature_control"),
+            self.rgb_control.then_some("rgb_control"),
+            self.energy_monitoring.then_some("energy_monitoring"),
         ]
         .into_iter()
         .flatten()
@@ -133,10 +134,10 @@ impl Default for Capabilities {
     fn default() -> Self {
         Self {
             power_channels: 1,
-            dimmer: false,
-            color_temp: false,
-            rgb: false,
-            energy: false,
+            dimmer_control: false,
+            color_temperature_control: false,
+            rgb_control: false,
+            energy_monitoring: false,
         }
     }
 }
@@ -147,10 +148,10 @@ impl Capabilities {
     pub const fn basic() -> Self {
         Self {
             power_channels: 1,
-            dimmer: false,
-            color_temp: false,
-            rgb: false,
-            energy: false,
+            dimmer_control: false,
+            color_temperature_control: false,
+            rgb_control: false,
+            energy_monitoring: false,
         }
     }
 
@@ -162,10 +163,10 @@ impl Capabilities {
     pub const fn neo_coolcam() -> Self {
         Self {
             power_channels: 1,
-            dimmer: false,
-            color_temp: false,
-            rgb: false,
-            energy: true,
+            dimmer_control: false,
+            color_temperature_control: false,
+            rgb_control: false,
+            energy_monitoring: true,
         }
     }
 
@@ -178,10 +179,10 @@ impl Capabilities {
     pub const fn rgb_light() -> Self {
         Self {
             power_channels: 1,
-            dimmer: true,
-            color_temp: false,
-            rgb: true,
-            energy: false,
+            dimmer_control: true,
+            color_temperature_control: false,
+            rgb_control: true,
+            energy_monitoring: false,
         }
     }
 
@@ -195,10 +196,10 @@ impl Capabilities {
     pub const fn rgbcct_light() -> Self {
         Self {
             power_channels: 1,
-            dimmer: true,
-            color_temp: true,
-            rgb: true,
-            energy: false,
+            dimmer_control: true,
+            color_temperature_control: true,
+            rgb_control: true,
+            energy_monitoring: false,
         }
     }
 
@@ -207,10 +208,10 @@ impl Capabilities {
     pub const fn cct_light() -> Self {
         Self {
             power_channels: 1,
-            dimmer: true,
-            color_temp: true,
-            rgb: false,
-            energy: false,
+            dimmer_control: true,
+            color_temperature_control: true,
+            rgb_control: false,
+            energy_monitoring: false,
         }
     }
 
@@ -235,7 +236,7 @@ impl Capabilities {
             // Module ID can give hints
             if device.module == 49 {
                 // Neo Coolcam - has energy monitoring
-                caps.energy = true;
+                caps.energy_monitoring = true;
             }
 
             // Count friendly names as a proxy for relay count
@@ -250,13 +251,13 @@ impl Capabilities {
         // Check for light capabilities in sensor status
         if let Some(ref sensors) = status.sensors {
             if sensors.get("Dimmer").is_some() {
-                caps.dimmer = true;
+                caps.dimmer_control = true;
             }
             if sensors.get("CT").is_some() {
-                caps.color_temp = true;
+                caps.color_temperature_control = true;
             }
             if sensors.get("HSBColor").is_some() {
-                caps.rgb = true;
+                caps.rgb_control = true;
             }
         }
 
@@ -266,7 +267,7 @@ impl Capabilities {
             .as_ref()
             .is_some_and(|s| s.get("ENERGY").is_some())
         {
-            caps.energy = true;
+            caps.energy_monitoring = true;
         }
 
         caps
@@ -275,13 +276,13 @@ impl Capabilities {
     /// Returns whether this device supports any light control features.
     #[must_use]
     pub const fn is_light(&self) -> bool {
-        self.dimmer || self.color_temp || self.rgb
+        self.dimmer_control || self.color_temperature_control || self.rgb_control
     }
 
     /// Returns whether this device supports energy monitoring.
     #[must_use]
     pub const fn has_energy_monitoring(&self) -> bool {
-        self.energy
+        self.energy_monitoring
     }
 
     /// Returns whether this device has multiple relays.
@@ -311,31 +312,31 @@ impl CapabilitiesBuilder {
         self
     }
 
-    /// Enables dimmer support.
+    /// Enables dimmer control support.
     #[must_use]
-    pub fn with_dimmer(mut self) -> Self {
-        self.inner.dimmer = true;
+    pub fn with_dimmer_control(mut self) -> Self {
+        self.inner.dimmer_control = true;
         self
     }
 
-    /// Enables color temperature support.
+    /// Enables color temperature control support.
     #[must_use]
-    pub fn with_color_temp(mut self) -> Self {
-        self.inner.color_temp = true;
+    pub fn with_color_temperature_control(mut self) -> Self {
+        self.inner.color_temperature_control = true;
         self
     }
 
-    /// Enables RGB support.
+    /// Enables RGB control support.
     #[must_use]
-    pub fn with_rgb(mut self) -> Self {
-        self.inner.rgb = true;
+    pub fn with_rgb_control(mut self) -> Self {
+        self.inner.rgb_control = true;
         self
     }
 
     /// Enables energy monitoring support.
     #[must_use]
-    pub fn with_energy(mut self) -> Self {
-        self.inner.energy = true;
+    pub fn with_energy_monitoring(mut self) -> Self {
+        self.inner.energy_monitoring = true;
         self
     }
 
@@ -355,27 +356,27 @@ mod tests {
     fn default_capabilities() {
         let caps = Capabilities::default();
         assert_eq!(caps.power_channels, 1);
-        assert!(!caps.dimmer);
-        assert!(!caps.color_temp);
-        assert!(!caps.rgb);
-        assert!(!caps.energy);
+        assert!(!caps.dimmer_control);
+        assert!(!caps.color_temperature_control);
+        assert!(!caps.rgb_control);
+        assert!(!caps.energy_monitoring);
     }
 
     #[test]
     fn neo_coolcam_capabilities() {
         let caps = Capabilities::neo_coolcam();
         assert_eq!(caps.power_channels, 1);
-        assert!(!caps.dimmer);
-        assert!(caps.energy);
+        assert!(!caps.dimmer_control);
+        assert!(caps.energy_monitoring);
     }
 
     #[test]
     fn rgbcct_light_capabilities() {
         let caps = Capabilities::rgbcct_light();
-        assert!(caps.dimmer);
-        assert!(caps.color_temp);
-        assert!(caps.rgb);
-        assert!(!caps.energy);
+        assert!(caps.dimmer_control);
+        assert!(caps.color_temperature_control);
+        assert!(caps.rgb_control);
+        assert!(!caps.energy_monitoring);
         assert!(caps.is_light());
     }
 
@@ -383,14 +384,14 @@ mod tests {
     fn builder_pattern() {
         let caps = CapabilitiesBuilder::new()
             .power_channels(2)
-            .with_dimmer()
-            .with_energy()
+            .with_dimmer_control()
+            .with_energy_monitoring()
             .build();
 
         assert_eq!(caps.power_channels, 2);
-        assert!(caps.dimmer);
-        assert!(caps.energy);
-        assert!(!caps.rgb);
+        assert!(caps.dimmer_control);
+        assert!(caps.energy_monitoring);
+        assert!(!caps.rgb_control);
     }
 
     #[test]
@@ -418,22 +419,22 @@ mod tests {
         let rgb = Capabilities::rgb_light();
         let features: Vec<_> = rgb.features().collect();
         assert_eq!(features.len(), 2);
-        assert!(features.contains(&"dimmer"));
-        assert!(features.contains(&"rgb"));
+        assert!(features.contains(&"dimmer_control"));
+        assert!(features.contains(&"rgb_control"));
 
         // All features enabled
         let full = CapabilitiesBuilder::new()
-            .with_dimmer()
-            .with_color_temp()
-            .with_rgb()
-            .with_energy()
+            .with_dimmer_control()
+            .with_color_temperature_control()
+            .with_rgb_control()
+            .with_energy_monitoring()
             .build();
         let all_features: Vec<_> = full.features().collect();
         assert_eq!(all_features.len(), 4);
-        assert!(all_features.contains(&"dimmer"));
-        assert!(all_features.contains(&"color_temp"));
-        assert!(all_features.contains(&"rgb"));
-        assert!(all_features.contains(&"energy"));
+        assert!(all_features.contains(&"dimmer_control"));
+        assert!(all_features.contains(&"color_temperature_control"));
+        assert!(all_features.contains(&"rgb_control"));
+        assert!(all_features.contains(&"energy_monitoring"));
     }
 
     // ========================================================================
@@ -459,7 +460,7 @@ mod tests {
         let caps = Capabilities::from_status(&status);
 
         assert!(
-            caps.energy,
+            caps.energy_monitoring,
             "Neo Coolcam (Module 49) should have energy monitoring"
         );
         assert_eq!(caps.power_channels, 1);
@@ -515,7 +516,7 @@ mod tests {
         let caps = Capabilities::from_status(&status);
 
         assert!(
-            caps.energy,
+            caps.energy_monitoring,
             "Device with ENERGY in StatusSTS should have energy monitoring"
         );
     }
@@ -541,14 +542,14 @@ mod tests {
         let caps = Capabilities::from_status(&status);
 
         assert!(
-            caps.dimmer,
+            caps.dimmer_control,
             "Device with Dimmer in StatusSNS should have dimmer capability"
         );
         assert!(caps.is_light());
     }
 
     #[test]
-    fn from_status_detects_color_temp_capability() {
+    fn from_status_detects_color_temperature_capability() {
         // CCT lights report CT (color temperature) in mireds (153-500)
         // Reference: https://tasmota.github.io/docs/Lights/
         // CT 153 = 6500K (cold white), CT 500 = 2000K (warm white)
@@ -568,8 +569,8 @@ mod tests {
         let caps = Capabilities::from_status(&status);
 
         assert!(
-            caps.color_temp,
-            "Device with CT in StatusSNS should have color temp capability"
+            caps.color_temperature_control,
+            "Device with CT in StatusSNS should have color temperature capability"
         );
         assert!(caps.is_light());
     }
@@ -595,7 +596,7 @@ mod tests {
         let caps = Capabilities::from_status(&status);
 
         assert!(
-            caps.rgb,
+            caps.rgb_control,
             "Device with HSBColor in StatusSNS should have RGB capability"
         );
         assert!(caps.is_light());
@@ -626,9 +627,12 @@ mod tests {
         let status: StatusResponse = serde_json::from_str(json).unwrap();
         let caps = Capabilities::from_status(&status);
 
-        assert!(caps.dimmer, "RGBCCT light should have dimmer");
-        assert!(caps.color_temp, "RGBCCT light should have color temp");
-        assert!(caps.rgb, "RGBCCT light should have RGB");
+        assert!(caps.dimmer_control, "RGBCCT light should have dimmer");
+        assert!(
+            caps.color_temperature_control,
+            "RGBCCT light should have color temperature"
+        );
+        assert!(caps.rgb_control, "RGBCCT light should have RGB");
         assert!(caps.is_light());
     }
 
@@ -649,10 +653,10 @@ mod tests {
         let caps = Capabilities::from_status(&status);
 
         assert_eq!(caps.power_channels, 1);
-        assert!(!caps.dimmer);
-        assert!(!caps.color_temp);
-        assert!(!caps.rgb);
-        assert!(!caps.energy);
+        assert!(!caps.dimmer_control);
+        assert!(!caps.color_temperature_control);
+        assert!(!caps.rgb_control);
+        assert!(!caps.energy_monitoring);
         assert!(!caps.is_light());
     }
 
@@ -687,25 +691,27 @@ mod tests {
 
         // Should return defaults
         assert_eq!(caps.power_channels, 1);
-        assert!(!caps.dimmer);
-        assert!(!caps.color_temp);
-        assert!(!caps.rgb);
-        assert!(!caps.energy);
+        assert!(!caps.dimmer_control);
+        assert!(!caps.color_temperature_control);
+        assert!(!caps.rgb_control);
+        assert!(!caps.energy_monitoring);
     }
 
     #[test]
-    fn builder_with_color_temp() {
-        let caps = CapabilitiesBuilder::new().with_color_temp().build();
+    fn builder_with_color_temperature_control() {
+        let caps = CapabilitiesBuilder::new()
+            .with_color_temperature_control()
+            .build();
 
-        assert!(caps.color_temp);
+        assert!(caps.color_temperature_control);
         assert!(caps.is_light());
     }
 
     #[test]
-    fn builder_with_rgb() {
-        let caps = CapabilitiesBuilder::new().with_rgb().build();
+    fn builder_with_rgb_control() {
+        let caps = CapabilitiesBuilder::new().with_rgb_control().build();
 
-        assert!(caps.rgb);
+        assert!(caps.rgb_control);
         assert!(caps.is_light());
     }
 }

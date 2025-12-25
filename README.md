@@ -53,7 +53,7 @@ tasmor_lib = { version = "0.1", features = ["serde"] }
 ### HTTP Example
 
 ```rust
-use tasmor_lib::{Device, Capabilities, ColorTemp, Dimmer};
+use tasmor_lib::{Device, Capabilities, ColorTemperature, Dimmer};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -64,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Turn on and set to warm white
     device.power_on().await?;
-    device.set_color_temp(ColorTemp::WARM).await?;
+    device.set_color_temperature(ColorTemperature::WARM).await?;
     device.set_dimmer(Dimmer::new(75)?).await?;
 
     Ok(())

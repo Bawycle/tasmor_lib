@@ -14,7 +14,7 @@
 //! - [`StateChange::Power`] - Relay state changes (on/off)
 //! - [`StateChange::Dimmer`] - Brightness level changes
 //! - [`StateChange::HsbColor`] - RGB color changes in HSB format
-//! - [`StateChange::ColorTemp`] - White color temperature changes
+//! - [`StateChange::ColorTemperature`] - White color temperature changes
 //! - [`StateChange::Energy`] - Energy monitoring updates
 //! - [`StateChange::Batch`] - Multiple changes grouped together
 //!
@@ -24,7 +24,7 @@
 //!
 //! ```
 //! use tasmor_lib::state::StateChange;
-//! use tasmor_lib::types::{PowerState, Dimmer, HsbColor, ColorTemp};
+//! use tasmor_lib::types::{PowerState, Dimmer, HsbColor, ColorTemperature};
 //!
 //! // Power state change
 //! let power_on = StateChange::power(1, PowerState::On);
@@ -32,7 +32,7 @@
 //! // Light control changes
 //! let dim = StateChange::dimmer(Dimmer::new(75).unwrap());
 //! let color = StateChange::hsb_color(HsbColor::red());
-//! let warm = StateChange::color_temp(ColorTemp::WARM);
+//! let warm = StateChange::color_temperature(ColorTemperature::WARM);
 //! ```
 //!
 //! ## Applying changes to device state
@@ -52,7 +52,7 @@
 //! assert!(!changed);
 //! ```
 
-use crate::types::{ColorTemp, Dimmer, HsbColor, PowerState, TasmotaDateTime};
+use crate::types::{ColorTemperature, Dimmer, HsbColor, PowerState, TasmotaDateTime};
 
 /// Represents a change in device state.
 ///
@@ -86,7 +86,7 @@ pub enum StateChange {
     HsbColor(HsbColor),
 
     /// Color temperature changed.
-    ColorTemp(ColorTemp),
+    ColorTemperature(ColorTemperature),
 
     /// Energy monitoring data updated.
     ///
@@ -162,8 +162,8 @@ impl StateChange {
 
     /// Creates a color temperature change.
     #[must_use]
-    pub fn color_temp(ct: ColorTemp) -> Self {
-        Self::ColorTemp(ct)
+    pub fn color_temperature(ct: ColorTemperature) -> Self {
+        Self::ColorTemperature(ct)
     }
 
     /// Creates an energy reading change with basic power data.
@@ -229,7 +229,7 @@ impl StateChange {
     pub fn is_light(&self) -> bool {
         matches!(
             self,
-            Self::Dimmer(_) | Self::HsbColor(_) | Self::ColorTemp(_)
+            Self::Dimmer(_) | Self::HsbColor(_) | Self::ColorTemperature(_)
         )
     }
 

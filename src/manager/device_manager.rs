@@ -16,7 +16,7 @@ use crate::error::Error;
 use crate::event::{DeviceEvent, DeviceId, EventBus};
 use crate::protocol::PooledMqttClient;
 use crate::state::{DeviceState, StateChange};
-use crate::types::{ColorTemp, Dimmer, HsbColor, PowerIndex};
+use crate::types::{ColorTemperature, Dimmer, HsbColor, PowerIndex};
 
 use super::device_config::{ConnectionConfig, DeviceConfig, ReconnectionPolicy};
 use super::managed_device::{ConnectionState, DeviceClient, ManagedDevice};
@@ -561,7 +561,7 @@ impl DeviceManager {
     /// Returns an error if the device is not found, not connected, or doesn't
     /// have dimmer capability.
     pub async fn set_dimmer(&self, device_id: DeviceId, value: Dimmer) -> Result<(), Error> {
-        self.check_capability(device_id, Capabilities::dimmer)
+        self.check_capability(device_id, Capabilities::supports_dimmer_control)
             .await?;
 
         let command = DimmerCommand::set(value);
@@ -591,7 +591,8 @@ impl DeviceManager {
     /// Returns an error if the device is not found, not connected, or doesn't
     /// have RGB capability.
     pub async fn set_hsb_color(&self, device_id: DeviceId, color: HsbColor) -> Result<(), Error> {
-        self.check_capability(device_id, Capabilities::rgb).await?;
+        self.check_capability(device_id, Capabilities::supports_rgb_control)
+            .await?;
 
         let command = HsbColorCommand::set(color);
         let response = self.send_command(device_id, &command).await?;
@@ -618,17 +619,21 @@ impl DeviceManager {
     ///
     /// Returns an error if the device is not found, not connected, or doesn't
     /// have color temperature capability.
-    pub async fn set_color_temp(&self, device_id: DeviceId, ct: ColorTemp) -> Result<(), Error> {
-        self.check_capability(device_id, Capabilities::color_temp)
+    pub async fn set_color_temperature(
+        &self,
+        device_id: DeviceId,
+        ct: ColorTemperature,
+    ) -> Result<(), Error> {
+        self.check_capability(device_id, Capabilities::supports_color_temperature_control)
             .await?;
 
-        let command = crate::command::ColorTempCommand::set(ct);
+        let command = crate::command::ColorTemperatureCommand::set(ct);
         let response = self.send_command(device_id, &command).await?;
 
         // Parse response and update state
-        let ct_response: crate::response::ColorTempResponse = response.parse()?;
-        if let Ok(parsed_ct) = ct_response.color_temp() {
-            let change = StateChange::ColorTemp(parsed_ct);
+        let ct_response: crate::response::ColorTemperatureResponse = response.parse()?;
+        if let Ok(parsed_ct) = ct_response.to_color_temperature() {
+            let change = StateChange::ColorTemperature(parsed_ct);
             self.apply_state_change(device_id, change).await;
         }
 
@@ -649,7 +654,7 @@ impl DeviceManager {
     /// Returns an error if the device is not found, not connected, or doesn't
     /// have energy monitoring capability.
     pub async fn reset_energy_total(&self, device_id: DeviceId) -> Result<(), Error> {
-        self.check_capability(device_id, Capabilities::energy)
+        self.check_capability(device_id, Capabilities::supports_energy_monitoring)
             .await?;
 
         // Send the reset command - response contains updated energy values
@@ -871,15 +876,15 @@ mod tests {
         let manager = DeviceManager::new();
         let config = DeviceConfig::mqtt("mqtt://localhost:1883", "test").with_capabilities(
             crate::CapabilitiesBuilder::new()
-                .with_dimmer()
-                .with_rgb()
+                .with_dimmer_control()
+                .with_rgb_control()
                 .build(),
         );
         let id = manager.add_device(config).await;
 
         let caps = manager.capabilities(id).await.unwrap();
-        assert!(caps.dimmer());
-        assert!(caps.rgb());
+        assert!(caps.supports_dimmer_control());
+        assert!(caps.supports_rgb_control());
     }
 
     #[tokio::test]

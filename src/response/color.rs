@@ -8,7 +8,7 @@
 use serde::Deserialize;
 
 use crate::error::ParseError;
-use crate::types::{ColorTemp, HsbColor, PowerState};
+use crate::types::{ColorTemperature, HsbColor, PowerState};
 
 /// Response from an `HSBColor` command.
 ///
@@ -184,14 +184,14 @@ impl HsbColorResponse {
 /// # Examples
 ///
 /// ```
-/// use tasmor_lib::response::ColorTempResponse;
+/// use tasmor_lib::response::ColorTemperatureResponse;
 ///
 /// let json = r#"{"CT": 326, "POWER": "ON"}"#;
-/// let response: ColorTempResponse = serde_json::from_str(json).unwrap();
-/// assert_eq!(response.ct(), 326);
+/// let response: ColorTemperatureResponse = serde_json::from_str(json).unwrap();
+/// assert_eq!(response.color_temperature(), 326);
 /// ```
 #[derive(Debug, Clone, Deserialize)]
-pub struct ColorTempResponse {
+pub struct ColorTemperatureResponse {
     /// The color temperature in mireds (153-500).
     #[serde(rename = "CT")]
     ct: u16,
@@ -201,10 +201,10 @@ pub struct ColorTempResponse {
     power: Option<String>,
 }
 
-impl ColorTempResponse {
+impl ColorTemperatureResponse {
     /// Returns the color temperature in mireds (153-500).
     #[must_use]
-    pub fn ct(&self) -> u16 {
+    pub fn color_temperature(&self) -> u16 {
         self.ct
     }
 
@@ -212,7 +212,7 @@ impl ColorTempResponse {
     ///
     /// Calculated as 1,000,000 / mireds.
     #[must_use]
-    pub fn kelvin(&self) -> u32 {
+    pub fn to_kelvin(&self) -> u32 {
         if self.ct == 0 {
             0
         } else {
@@ -246,13 +246,13 @@ impl ColorTempResponse {
         self.power.as_ref().map(|s| s == "ON")
     }
 
-    /// Returns the color temperature as a [`ColorTemp`] type.
+    /// Returns the color temperature as a [`ColorTemperature`] type.
     ///
     /// # Errors
     ///
     /// Returns `ParseError` if the color temperature value is out of range.
-    pub fn color_temp(&self) -> Result<ColorTemp, ParseError> {
-        ColorTemp::new(self.ct).map_err(|e| ParseError::InvalidValue {
+    pub fn to_color_temperature(&self) -> Result<ColorTemperature, ParseError> {
+        ColorTemperature::new(self.ct).map_err(|e| ParseError::InvalidValue {
             field: "CT".to_string(),
             message: e.to_string(),
         })
@@ -351,52 +351,52 @@ mod tests {
     }
 
     // ========================================================================
-    // ColorTempResponse tests
+    // ColorTemperatureResponse tests
     // ========================================================================
 
     #[test]
     fn parse_ct_only() {
         let json = r#"{"CT": 326}"#;
-        let response: ColorTempResponse = serde_json::from_str(json).unwrap();
+        let response: ColorTemperatureResponse = serde_json::from_str(json).unwrap();
 
-        assert_eq!(response.ct(), 326);
+        assert_eq!(response.color_temperature(), 326);
         assert!(response.power_state().unwrap().is_none());
     }
 
     #[test]
     fn parse_ct_with_power() {
         let json = r#"{"CT": 250, "POWER": "ON"}"#;
-        let response: ColorTempResponse = serde_json::from_str(json).unwrap();
+        let response: ColorTemperatureResponse = serde_json::from_str(json).unwrap();
 
-        assert_eq!(response.ct(), 250);
+        assert_eq!(response.color_temperature(), 250);
         assert_eq!(response.power_state().unwrap().unwrap(), PowerState::On);
     }
 
     #[test]
     fn parse_ct_coldest() {
         let json = r#"{"CT": 153}"#;
-        let response: ColorTempResponse = serde_json::from_str(json).unwrap();
+        let response: ColorTemperatureResponse = serde_json::from_str(json).unwrap();
 
-        assert_eq!(response.ct(), 153);
-        assert_eq!(response.kelvin(), 6535); // ~6500K
+        assert_eq!(response.color_temperature(), 153);
+        assert_eq!(response.to_kelvin(), 6535); // ~6500K
     }
 
     #[test]
     fn parse_ct_warmest() {
         let json = r#"{"CT": 500}"#;
-        let response: ColorTempResponse = serde_json::from_str(json).unwrap();
+        let response: ColorTemperatureResponse = serde_json::from_str(json).unwrap();
 
-        assert_eq!(response.ct(), 500);
-        assert_eq!(response.kelvin(), 2000); // 2000K
+        assert_eq!(response.color_temperature(), 500);
+        assert_eq!(response.to_kelvin(), 2000); // 2000K
     }
 
     #[test]
     fn parse_ct_neutral() {
         let json = r#"{"CT": 326}"#;
-        let response: ColorTempResponse = serde_json::from_str(json).unwrap();
+        let response: ColorTemperatureResponse = serde_json::from_str(json).unwrap();
 
-        assert_eq!(response.ct(), 326);
-        assert_eq!(response.kelvin(), 3067); // ~3000K neutral
+        assert_eq!(response.color_temperature(), 326);
+        assert_eq!(response.to_kelvin(), 3067); // ~3000K neutral
     }
 
     #[test]
@@ -407,9 +407,9 @@ mod tests {
             "Dimmer": 100,
             "Color": "FFFFFF"
         }"#;
-        let response: ColorTempResponse = serde_json::from_str(json).unwrap();
+        let response: ColorTemperatureResponse = serde_json::from_str(json).unwrap();
 
-        assert_eq!(response.ct(), 327);
+        assert_eq!(response.color_temperature(), 327);
         assert_eq!(response.power_state().unwrap().unwrap(), PowerState::On);
     }
 }

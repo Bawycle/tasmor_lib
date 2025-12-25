@@ -199,7 +199,7 @@ pub fn device_card(ui: &mut Ui, device: &DeviceState) -> DeviceCardResponse {
                         }
 
                         // Color temperature slider (for RGBCCT lights)
-                        if device.model().capabilities().color_temp() {
+                        if device.model().capabilities().supports_color_temperature_control() {
                             ui.label("Temp:");
                             let mut ct_value = f32::from(device.color_temp_mireds().unwrap_or(326));
                             let ct_response = ui.add(

@@ -9,7 +9,7 @@
 //! temperature, HSB color, and transition speed.
 
 use crate::command::Command;
-use crate::types::{ColorTemp, Dimmer, FadeSpeed, HsbColor};
+use crate::types::{ColorTemperature, Dimmer, FadeSpeed, HsbColor};
 
 /// Command to control dimmer/brightness level.
 ///
@@ -81,39 +81,39 @@ impl Command for DimmerCommand {
 /// # Examples
 ///
 /// ```
-/// use tasmor_lib::command::{Command, ColorTempCommand};
-/// use tasmor_lib::types::ColorTemp;
+/// use tasmor_lib::command::{Command, ColorTemperatureCommand};
+/// use tasmor_lib::types::ColorTemperature;
 ///
 /// // Set to neutral white
-/// let cmd = ColorTempCommand::Set(ColorTemp::NEUTRAL);
+/// let cmd = ColorTemperatureCommand::Set(ColorTemperature::NEUTRAL);
 /// assert_eq!(cmd.name(), "CT");
 /// assert_eq!(cmd.payload(), Some("250".to_string()));
 ///
 /// // Increase color temperature (warmer)
-/// let warmer = ColorTempCommand::Increase;
+/// let warmer = ColorTemperatureCommand::Increase;
 /// assert_eq!(warmer.payload(), Some("+".to_string()));
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ColorTempCommand {
+pub enum ColorTemperatureCommand {
     /// Query the current color temperature.
     Get,
     /// Set color temperature to a specific value.
-    Set(ColorTemp),
+    Set(ColorTemperature),
     /// Increase color temperature by 34 (warmer).
     Increase,
     /// Decrease color temperature by 34 (cooler).
     Decrease,
 }
 
-impl ColorTempCommand {
+impl ColorTemperatureCommand {
     /// Creates a command to set a specific color temperature.
     #[must_use]
-    pub const fn set(value: ColorTemp) -> Self {
+    pub const fn set(value: ColorTemperature) -> Self {
         Self::Set(value)
     }
 }
 
-impl Command for ColorTempCommand {
+impl Command for ColorTemperatureCommand {
     fn name(&self) -> String {
         "CT".to_string()
     }
@@ -207,25 +207,25 @@ impl Command for HsbColorCommand {
     }
 }
 
-/// Command to control fade/transition speed.
+/// Command to control fade transition speed.
 ///
 /// # Examples
 ///
 /// ```
-/// use tasmor_lib::command::{Command, SpeedCommand};
+/// use tasmor_lib::command::{Command, FadeSpeedCommand};
 /// use tasmor_lib::types::FadeSpeed;
 ///
 /// // Set medium speed
-/// let cmd = SpeedCommand::Set(FadeSpeed::MEDIUM);
+/// let cmd = FadeSpeedCommand::Set(FadeSpeed::MEDIUM);
 /// assert_eq!(cmd.name(), "Speed");
 /// assert_eq!(cmd.payload(), Some("20".to_string()));
 ///
 /// // Increase speed (slower transitions)
-/// let slower = SpeedCommand::Increase;
+/// let slower = FadeSpeedCommand::Increase;
 /// assert_eq!(slower.payload(), Some("+".to_string()));
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SpeedCommand {
+pub enum FadeSpeedCommand {
     /// Query the current speed setting.
     Get,
     /// Set the speed to a specific value.
@@ -236,7 +236,7 @@ pub enum SpeedCommand {
     Decrease,
 }
 
-impl SpeedCommand {
+impl FadeSpeedCommand {
     /// Creates a command to set a specific speed.
     #[must_use]
     pub const fn set(value: FadeSpeed) -> Self {
@@ -244,7 +244,7 @@ impl SpeedCommand {
     }
 }
 
-impl Command for SpeedCommand {
+impl Command for FadeSpeedCommand {
     fn name(&self) -> String {
         "Speed".to_string()
     }
@@ -315,15 +315,21 @@ mod tests {
 
     #[test]
     fn color_temp_command_set() {
-        let cmd = ColorTempCommand::Set(ColorTemp::COOL);
+        let cmd = ColorTemperatureCommand::Set(ColorTemperature::COOL);
         assert_eq!(cmd.name(), "CT");
         assert_eq!(cmd.payload(), Some("153".to_string()));
     }
 
     #[test]
     fn color_temp_command_adjustments() {
-        assert_eq!(ColorTempCommand::Increase.payload(), Some("+".to_string()));
-        assert_eq!(ColorTempCommand::Decrease.payload(), Some("-".to_string()));
+        assert_eq!(
+            ColorTemperatureCommand::Increase.payload(),
+            Some("+".to_string())
+        );
+        assert_eq!(
+            ColorTemperatureCommand::Decrease.payload(),
+            Some("-".to_string())
+        );
     }
 
     #[test]
@@ -355,16 +361,16 @@ mod tests {
     }
 
     #[test]
-    fn speed_command_set() {
-        let cmd = SpeedCommand::Set(FadeSpeed::SLOW);
+    fn fade_speed_command_set() {
+        let cmd = FadeSpeedCommand::Set(FadeSpeed::SLOW);
         assert_eq!(cmd.name(), "Speed");
         assert_eq!(cmd.payload(), Some("40".to_string()));
     }
 
     #[test]
-    fn speed_command_adjustments() {
-        assert_eq!(SpeedCommand::Increase.payload(), Some("+".to_string()));
-        assert_eq!(SpeedCommand::Decrease.payload(), Some("-".to_string()));
+    fn fade_speed_command_adjustments() {
+        assert_eq!(FadeSpeedCommand::Increase.payload(), Some("+".to_string()));
+        assert_eq!(FadeSpeedCommand::Decrease.payload(), Some("-".to_string()));
     }
 
     #[test]

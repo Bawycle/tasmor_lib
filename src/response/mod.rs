@@ -16,7 +16,7 @@
 //! | [`PowerResponse`] | `Power`, `Power1`-`Power8` | Relay on/off state |
 //! | [`DimmerResponse`] | `Dimmer` | Brightness level (0-100) |
 //! | [`HsbColorResponse`] | `HSBColor` | Color in HSB format |
-//! | [`ColorTempResponse`] | `CT` | White color temperature |
+//! | [`ColorTemperatureResponse`] | `CT` | White color temperature |
 //! | [`EnergyResponse`] | `Status 10` | Power consumption data |
 //! | [`StatusResponse`] | `Status 0` | Full device status |
 //!
@@ -43,7 +43,7 @@ mod energy;
 mod power;
 mod status;
 
-pub use color::{ColorTempResponse, HsbColorResponse};
+pub use color::{ColorTemperatureResponse, HsbColorResponse};
 pub use dimmer::DimmerResponse;
 pub use energy::EnergyResponse;
 pub use power::PowerResponse;

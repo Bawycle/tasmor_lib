@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // Build device with energy monitoring capability
-    let capabilities = CapabilitiesBuilder::new().with_energy().build();
+    let capabilities = CapabilitiesBuilder::new().with_energy_monitoring().build();
 
     let mut builder = Device::mqtt(broker, topic).with_capabilities(capabilities);
 

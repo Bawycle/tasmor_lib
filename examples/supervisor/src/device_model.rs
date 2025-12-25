@@ -81,10 +81,10 @@ mod tests {
         let caps = model.capabilities();
 
         assert_eq!(caps.power_channels(), 1);
-        assert!(caps.rgb());
-        assert!(caps.color_temp());
-        assert!(caps.dimmer());
-        assert!(!caps.energy());
+        assert!(caps.supports_rgb_control());
+        assert!(caps.supports_color_temperature_control());
+        assert!(caps.supports_dimmer_control());
+        assert!(!caps.supports_energy_monitoring());
     }
 
     #[test]
@@ -93,10 +93,10 @@ mod tests {
         let caps = model.capabilities();
 
         assert_eq!(caps.power_channels(), 1);
-        assert!(caps.rgb());
-        assert!(caps.color_temp());
-        assert!(caps.dimmer());
-        assert!(!caps.energy());
+        assert!(caps.supports_rgb_control());
+        assert!(caps.supports_color_temperature_control());
+        assert!(caps.supports_dimmer_control());
+        assert!(!caps.supports_energy_monitoring());
     }
 
     #[test]
@@ -105,10 +105,10 @@ mod tests {
         let caps = model.capabilities();
 
         assert_eq!(caps.power_channels(), 1);
-        assert!(!caps.rgb());
-        assert!(!caps.color_temp());
-        assert!(!caps.dimmer());
-        assert!(caps.energy());
+        assert!(!caps.supports_rgb_control());
+        assert!(!caps.supports_color_temperature_control());
+        assert!(!caps.supports_dimmer_control());
+        assert!(caps.supports_energy_monitoring());
     }
 
     #[test]

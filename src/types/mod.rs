@@ -16,7 +16,7 @@
 //! | [`PowerState`] | On/Off/Toggle/Blink | Relay power state |
 //! | [`PowerIndex`] | 0-8 | Relay index (0 = all relays) |
 //! | [`Dimmer`] | 0-100 | Brightness percentage |
-//! | [`ColorTemp`] | 153-500 mireds | White color temperature |
+//! | [`ColorTemperature`] | 153-500 mireds | White color temperature |
 //! | [`HsbColor`] | H:0-360, S:0-100, B:0-100 | RGB color in HSB format |
 //! | [`FadeSpeed`] | 1-40 | Transition speed (1=fastest) |
 //! | [`TasmotaDateTime`] | ISO 8601 | Datetime from telemetry |
@@ -26,7 +26,7 @@
 //! All types with constraints use the newtype pattern with validation:
 //!
 //! ```
-//! use tasmor_lib::types::{Dimmer, ColorTemp, HsbColor};
+//! use tasmor_lib::types::{Dimmer, ColorTemperature, HsbColor};
 //!
 //! // Validated construction - returns Result
 //! let dimmer = Dimmer::new(75)?;           // Ok(Dimmer(75))
@@ -36,8 +36,8 @@
 //! let clamped = Dimmer::clamped(150);      // Dimmer(100)
 //!
 //! // Preset values for common use cases
-//! let warm = ColorTemp::WARM;              // 500 mireds (2000K)
-//! let cool = ColorTemp::COOL;              // 153 mireds (6500K)
+//! let warm = ColorTemperature::WARM;       // 500 mireds (2000K)
+//! let cool = ColorTemperature::COOL;       // 153 mireds (6500K)
 //! let red = HsbColor::red();               // Pure red
 //! # Ok::<(), tasmor_lib::ValueError>(())
 //! ```
@@ -45,14 +45,14 @@
 //! # Type Conversions
 //!
 //! ```
-//! use tasmor_lib::types::{PowerState, Dimmer, ColorTemp};
+//! use tasmor_lib::types::{PowerState, Dimmer, ColorTemperature};
 //!
 //! // PowerState from bool
 //! let on: PowerState = true.into();
 //! let off: PowerState = false.into();
 //!
-//! // ColorTemp to Kelvin
-//! let ct = ColorTemp::new(326)?;
+//! // ColorTemperature to Kelvin
+//! let ct = ColorTemperature::new(326)?;
 //! assert_eq!(ct.to_kelvin(), 3067);  // ~3000K neutral white
 //!
 //! // Dimmer as fraction
@@ -67,7 +67,7 @@ mod dimmer;
 mod power;
 mod speed;
 
-pub use color::{ColorTemp, HsbColor};
+pub use color::{ColorTemperature, HsbColor};
 pub use datetime::{DateTimeParseError, TasmotaDateTime};
 pub use dimmer::Dimmer;
 pub use power::{PowerIndex, PowerState};

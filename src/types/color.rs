@@ -24,21 +24,21 @@ use crate::error::ValueError;
 /// # Examples
 ///
 /// ```
-/// use tasmor_lib::types::ColorTemp;
+/// use tasmor_lib::types::ColorTemperature;
 ///
 /// // Create a neutral white color temperature
-/// let ct = ColorTemp::new(250).unwrap();
+/// let ct = ColorTemperature::new(250).unwrap();
 /// assert_eq!(ct.value(), 250);
 ///
 /// // Use predefined values
-/// let cool = ColorTemp::COOL;
-/// let warm = ColorTemp::WARM;
+/// let cool = ColorTemperature::COOL;
+/// let warm = ColorTemperature::WARM;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct ColorTemp(u16);
+pub struct ColorTemperature(u16);
 
-impl ColorTemp {
+impl ColorTemperature {
     /// Minimum color temperature (coolest, ~6500K).
     pub const MIN: u16 = 153;
 
@@ -126,13 +126,13 @@ impl ColorTemp {
     }
 }
 
-impl Default for ColorTemp {
+impl Default for ColorTemperature {
     fn default() -> Self {
         Self::NEUTRAL
     }
 }
 
-impl fmt::Display for ColorTemp {
+impl fmt::Display for ColorTemperature {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}K", self.to_kelvin())
     }
@@ -315,38 +315,38 @@ mod tests {
     #[test]
     fn color_temp_valid() {
         for v in 153..=500 {
-            let ct = ColorTemp::new(v).unwrap();
+            let ct = ColorTemperature::new(v).unwrap();
             assert_eq!(ct.value(), v);
         }
     }
 
     #[test]
     fn color_temp_invalid() {
-        assert!(ColorTemp::new(152).is_err());
-        assert!(ColorTemp::new(501).is_err());
+        assert!(ColorTemperature::new(152).is_err());
+        assert!(ColorTemperature::new(501).is_err());
     }
 
     #[test]
     fn color_temp_clamped() {
-        assert_eq!(ColorTemp::clamped(100).value(), 153);
-        assert_eq!(ColorTemp::clamped(600).value(), 500);
-        assert_eq!(ColorTemp::clamped(300).value(), 300);
+        assert_eq!(ColorTemperature::clamped(100).value(), 153);
+        assert_eq!(ColorTemperature::clamped(600).value(), 500);
+        assert_eq!(ColorTemperature::clamped(300).value(), 300);
     }
 
     #[test]
     fn color_temp_kelvin_conversion() {
         // 153 mireds ≈ 6535K (cool)
-        let cool = ColorTemp::COOL;
+        let cool = ColorTemperature::COOL;
         assert!(cool.to_kelvin() > 6000);
 
         // 500 mireds ≈ 2000K (warm)
-        let warm = ColorTemp::CANDLE;
+        let warm = ColorTemperature::CANDLE;
         assert_eq!(warm.to_kelvin(), 2000);
     }
 
     #[test]
     fn color_temp_from_kelvin() {
-        let ct = ColorTemp::from_kelvin(4000).unwrap();
+        let ct = ColorTemperature::from_kelvin(4000).unwrap();
         assert_eq!(ct.value(), 250);
     }
 
