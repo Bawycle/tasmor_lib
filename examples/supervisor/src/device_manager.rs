@@ -278,10 +278,10 @@ impl DeviceManager {
             .await
             .ok_or("Device not found")?;
 
-        let color_temp = tasmor_lib::ColorTemp::new(ct).map_err(|e| e.to_string())?;
+        let color_temp = tasmor_lib::ColorTemperature::new(ct).map_err(|e| e.to_string())?;
 
         self.library_manager
-            .set_color_temp(device_id, color_temp)
+            .set_color_temperature(device_id, color_temp)
             .await
             .map_err(|e| e.to_string())
     }

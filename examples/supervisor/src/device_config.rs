@@ -254,7 +254,7 @@ impl ManagedDevice {
     /// Returns the color temperature in mireds.
     #[must_use]
     pub fn color_temp_mireds(&self) -> Option<u16> {
-        self.state.color_temp().map(|c| c.value())
+        self.state.color_temperature().map(|c| c.value())
     }
 
     /// Returns the power consumption in watts.
