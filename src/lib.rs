@@ -78,16 +78,43 @@
 //!     Ok(())
 //! }
 //! ```
+//!
+//! ## MQTT Device with Callbacks (Event Subscriptions)
+//!
+//! MQTT devices support real-time event subscriptions via callbacks:
+//!
+//! ```ignore
+//! use tasmor_lib::{Device, subscription::Subscribable};
+//!
+//! #[tokio::main]
+//! async fn main() -> tasmor_lib::Result<()> {
+//!     let device = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_switch")
+//!         .build()
+//!         .await?;
+//!
+//!     // Subscribe to power state changes
+//!     device.on_power_changed(|relay_idx, state| {
+//!         println!("Relay {} is now {:?}", relay_idx, state);
+//!     });
+//!
+//!     // Subscribe to dimmer changes
+//!     device.on_dimmer_changed(|value| {
+//!         println!("Dimmer set to {:?}", value);
+//!     });
+//!
+//!     device.power_toggle().await?;
+//!     Ok(())
+//! }
+//! ```
 
 mod capabilities;
 pub mod command;
 mod device;
 pub mod error;
-pub mod event;
-pub mod manager;
 pub mod protocol;
 pub mod response;
 pub mod state;
+pub mod subscription;
 pub mod telemetry;
 pub mod types;
 
@@ -98,7 +125,9 @@ pub use command::{
 };
 pub use device::{Device, HttpDeviceBuilder, MqttDeviceBuilder};
 pub use error::{DeviceError, Error, ParseError, ProtocolError, Result, ValueError};
+pub use protocol::{HttpConfig, MqttBroker, MqttBrokerBuilder, MqttBrokerConfig, TopicRouter};
 pub use response::{EnergyResponse, PowerResponse, StatusResponse};
+pub use subscription::{CallbackRegistry, Subscribable, SubscriptionId};
 pub use types::{
     ColorTemperature, DateTimeParseError, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState,
     TasmotaDateTime,

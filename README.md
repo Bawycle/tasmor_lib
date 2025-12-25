@@ -117,46 +117,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Multi-Device Management
 
-For applications controlling multiple devices, use the `DeviceManager`:
+For applications controlling multiple MQTT devices, create devices directly and use callbacks for state changes:
 
 ```rust
-use tasmor_lib::manager::{DeviceManager, DeviceConfig};
-use tasmor_lib::event::DeviceEvent;
-use tasmor_lib::{Capabilities, Dimmer};
+use tasmor_lib::{Device, Capabilities, Dimmer};
+use tasmor_lib::subscription::Subscribable;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let manager = DeviceManager::new();
+    // Create multiple devices - each maintains its own connection
+    let living_room = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_living")
+        .with_credentials("mqtt_user", "mqtt_pass")
+        .with_capabilities(Capabilities::rgbcct_light())
+        .build_without_probe()
+        .await?;
 
-    // Subscribe to device events
-    let mut events = manager.subscribe();
-    tokio::spawn(async move {
-        while let Ok(event) = events.recv().await {
-            match event {
-                DeviceEvent::StateChanged { device_id, change, .. } => {
-                    println!("Device {:?} changed: {:?}", device_id, change);
-                }
-                DeviceEvent::ConnectionChanged { device_id, connected: true, initial_state, .. } => {
-                    println!("Device {:?} connected", device_id);
-                    // Initial state is available immediately after connection
-                    if let Some(state) = initial_state {
-                        println!("  Power: {:?}, Dimmer: {:?}", state.power(1), state.dimmer());
-                    }
-                }
-                _ => {}
-            }
-        }
+    let bedroom = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_bedroom")
+        .with_credentials("mqtt_user", "mqtt_pass")
+        .with_capabilities(Capabilities::rgbcct_light())
+        .build_without_probe()
+        .await?;
+
+    // Subscribe to power changes on each device
+    living_room.on_power_changed(|relay, state| {
+        println!("Living room relay {} is now {:?}", relay, state);
     });
 
-    // Add devices
-    let config = DeviceConfig::mqtt("mqtt://192.168.1.50:1883", "living_room")
-        .with_capabilities(Capabilities::rgbcct_light())
-        .with_friendly_name("Living Room Light");
+    bedroom.on_power_changed(|relay, state| {
+        println!("Bedroom relay {} is now {:?}", relay, state);
+    });
 
-    let device_id = manager.add_device(config).await;
+    // Subscribe to dimmer changes
+    living_room.on_dimmer_changed(|dimmer| {
+        println!("Living room dimmer: {:?}", dimmer);
+    });
 
-    // Control devices by ID
-    manager.set_dimmer(device_id, Dimmer::new(75)?).await?;
+    // Control devices directly
+    living_room.power_on().await?;
+    living_room.set_dimmer(Dimmer::new(75)?).await?;
+
+    bedroom.power_on().await?;
 
     Ok(())
 }
@@ -196,16 +196,12 @@ The `examples/` directory contains runnable examples:
 
 - **`bulb_test.rs`** - Simple example demonstrating basic device control
 - **`energy_test.rs`** - Energy monitoring: query power, voltage, current, and consumption
-- **`supervisor/`** - Full GUI application for managing multiple Tasmota devices
 
 Run an example with:
 
 ```bash
-# Simple example
-cargo run --example bulb_test
-
-# Supervisor GUI application
-cargo run --manifest-path examples/supervisor/Cargo.toml --release
+cargo run --example bulb_test -- mqtt://192.168.1.50:1883 tasmota_topic user pass
+cargo run --example energy_test -- mqtt://192.168.1.50:1883 tasmota_plug user pass
 ```
 
 ## Documentation

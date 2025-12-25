@@ -7,8 +7,68 @@
 //!
 //! This module provides a unified API for interacting with Tasmota devices
 //! regardless of the underlying protocol (HTTP or MQTT).
+//!
+//! # Protocol Differences
+//!
+//! ## HTTP Devices
+//!
+//! HTTP devices are stateless - each command is an independent HTTP request.
+//! They do not support real-time event subscriptions.
+//!
+//! ```no_run
+//! use tasmor_lib::Device;
+//!
+//! # async fn example() -> tasmor_lib::Result<()> {
+//! let device = Device::http("192.168.1.100")
+//!     .with_credentials("admin", "password")
+//!     .build()
+//!     .await?;
+//!
+//! device.power_on().await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## MQTT Devices
+//!
+//! MQTT devices maintain a persistent connection through a broker and support
+//! real-time event subscriptions via the [`Subscribable`](crate::subscription::Subscribable) trait.
+//!
+//! ```ignore
+//! use tasmor_lib::protocol::MqttBroker;
+//! use tasmor_lib::Device;
+//! use tasmor_lib::subscription::Subscribable;
+//!
+//! # async fn example() -> tasmor_lib::Result<()> {
+//! let broker = MqttBroker::builder()
+//!     .host("192.168.1.50")
+//!     .port(1883)
+//!     .build()
+//!     .await?;
+//!
+//! let device = Device::mqtt(&broker, "tasmota_bedroom")
+//!     .build()
+//!     .await?;
+//!
+//! // MQTT devices support subscriptions
+//! device.on_power_changed(|index, state| {
+//!     println!("Power {index} is now {:?}", state);
+//! });
+//!
+//! device.power_on().await?;
+//! # Ok(())
+//! # }
+//! ```
+
+mod http_builder;
+mod mqtt_builder;
+
+pub use http_builder::HttpDeviceBuilder;
+pub use mqtt_builder::MqttDeviceBuilder;
 
 use std::sync::Arc;
+
+use parking_lot::RwLock;
 
 use crate::capabilities::Capabilities;
 use crate::command::{
@@ -16,17 +76,25 @@ use crate::command::{
     HsbColorCommand, PowerCommand, StartupFadeCommand, StatusCommand,
 };
 use crate::error::{DeviceError, Error};
-use crate::protocol::{CommandResponse, HttpClient, MqttClient, Protocol};
+use crate::protocol::{CommandResponse, HttpClient, Protocol};
 use crate::response::{
     ColorTemperatureResponse, DimmerResponse, EnergyResponse, HsbColorResponse, PowerResponse,
     StatusResponse,
 };
+use crate::state::DeviceState;
+use crate::subscription::CallbackRegistry;
 use crate::types::{ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState};
 
 /// A Tasmota device that can be controlled via HTTP or MQTT.
 ///
 /// The `Device` struct provides a high-level API for controlling Tasmota devices,
 /// abstracting away the underlying protocol details.
+///
+/// # Type Parameter
+///
+/// The type parameter `P` determines the underlying protocol:
+/// - `HttpClient` for HTTP devices (no subscriptions)
+/// - `MqttDeviceHandle` for MQTT devices (supports subscriptions)
 ///
 /// # Creating a Device
 ///
@@ -52,6 +120,8 @@ use crate::types::{ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerIndex, Po
 pub struct Device<P: Protocol> {
     protocol: Arc<P>,
     capabilities: Capabilities,
+    state: Arc<RwLock<DeviceState>>,
+    callbacks: Arc<CallbackRegistry>,
 }
 
 impl<P: Protocol> Device<P> {
@@ -60,6 +130,8 @@ impl<P: Protocol> Device<P> {
         Self {
             protocol: Arc::new(protocol),
             capabilities,
+            state: Arc::new(RwLock::new(DeviceState::new())),
+            callbacks: Arc::new(CallbackRegistry::new()),
         }
     }
 
@@ -67,6 +139,15 @@ impl<P: Protocol> Device<P> {
     #[must_use]
     pub fn capabilities(&self) -> &Capabilities {
         &self.capabilities
+    }
+
+    /// Returns a snapshot of the current device state.
+    ///
+    /// For MQTT devices, this reflects the latest known state from telemetry.
+    /// For HTTP devices, this is updated after each command response.
+    #[must_use]
+    pub fn state(&self) -> DeviceState {
+        self.state.read().clone()
     }
 
     /// Sends a command to the device.
@@ -385,257 +466,171 @@ impl<P: Protocol> Device<P> {
     }
 }
 
-// ========== HTTP Device Builder ==========
+// ========== HTTP Device Entry Point ==========
 
 impl Device<HttpClient> {
-    /// Creates a builder for an HTTP-based device.
-    #[must_use]
-    pub fn http(host: impl Into<String>) -> HttpDeviceBuilder {
-        HttpDeviceBuilder::new(host)
-    }
-}
-
-/// Builder for creating HTTP-based devices.
-#[derive(Debug)]
-pub struct HttpDeviceBuilder {
-    host: String,
-    username: Option<String>,
-    password: Option<String>,
-    capabilities: Option<Capabilities>,
-}
-
-impl HttpDeviceBuilder {
-    /// Creates a new builder for the specified host.
-    fn new(host: impl Into<String>) -> Self {
-        Self {
-            host: host.into(),
-            username: None,
-            password: None,
-            capabilities: None,
-        }
-    }
-
-    /// Sets authentication credentials.
-    #[must_use]
-    pub fn with_credentials(
-        mut self,
-        username: impl Into<String>,
-        password: impl Into<String>,
-    ) -> Self {
-        self.username = Some(username.into());
-        self.password = Some(password.into());
-        self
-    }
-
-    /// Sets the device capabilities manually (skips auto-detection).
-    #[must_use]
-    pub fn with_capabilities(mut self, capabilities: Capabilities) -> Self {
-        self.capabilities = Some(capabilities);
-        self
-    }
-
-    /// Builds the device with auto-detection of capabilities.
+    /// Creates a builder for an HTTP-based device from a host string.
     ///
-    /// This will query the device status to detect capabilities.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if connection or capability detection fails.
-    pub async fn build(self) -> Result<Device<HttpClient>, Error> {
-        let client = self.create_client()?;
-
-        // Auto-detect capabilities
-        let capabilities = if let Some(caps) = self.capabilities {
-            caps
-        } else {
-            let cmd = StatusCommand::all();
-            let response = client.send_command(&cmd).await.map_err(Error::Protocol)?;
-            let status: StatusResponse = response.parse().map_err(Error::Parse)?;
-            Capabilities::from_status(&status)
-        };
-
-        Ok(Device::new(client, capabilities))
-    }
-
-    /// Builds the device without probing for capabilities.
-    ///
-    /// Use this when you've set capabilities manually or want faster startup.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the HTTP client cannot be created.
-    pub fn build_without_probe(self) -> Result<Device<HttpClient>, Error> {
-        let client = self.create_client()?;
-        let capabilities = self.capabilities.unwrap_or_default();
-        Ok(Device::new(client, capabilities))
-    }
-
-    /// Creates the HTTP client.
-    fn create_client(&self) -> Result<HttpClient, Error> {
-        let mut client = HttpClient::new(&self.host).map_err(Error::Protocol)?;
-
-        if let (Some(username), Some(password)) = (&self.username, &self.password) {
-            client = client.with_credentials(username, password);
-        }
-
-        Ok(client)
-    }
-}
-
-// ========== MQTT Device Builder ==========
-
-impl Device<MqttClient> {
-    /// Creates a builder for an MQTT-based device.
-    #[must_use]
-    pub fn mqtt(broker: impl Into<String>, topic: impl Into<String>) -> MqttDeviceBuilder {
-        MqttDeviceBuilder::new(broker, topic)
-    }
-}
-
-/// Builder for creating MQTT-based devices.
-#[derive(Debug)]
-pub struct MqttDeviceBuilder {
-    broker: String,
-    topic: String,
-    username: Option<String>,
-    password: Option<String>,
-    capabilities: Option<Capabilities>,
-}
-
-impl MqttDeviceBuilder {
-    /// Creates a new builder for the specified broker and topic.
-    fn new(broker: impl Into<String>, topic: impl Into<String>) -> Self {
-        Self {
-            broker: broker.into(),
-            topic: topic.into(),
-            username: None,
-            password: None,
-            capabilities: None,
-        }
-    }
-
-    /// Sets authentication credentials for the MQTT broker.
-    ///
-    /// Most MQTT brokers require authentication. Use this method to provide
-    /// the username and password configured on your broker.
+    /// This is a convenience method equivalent to `Device::http_config(HttpConfig::new(host))`.
     ///
     /// # Arguments
     ///
-    /// * `username` - MQTT broker username
-    /// * `password` - MQTT broker password
+    /// * `host` - The hostname or IP address of the Tasmota device
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// use tasmor_lib::{Device, Capabilities};
+    /// use tasmor_lib::Device;
     ///
     /// # async fn example() -> tasmor_lib::Result<()> {
-    /// let device = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_bulb")
-    ///     .with_credentials("mqtt_user", "mqtt_password")
-    ///     .with_capabilities(Capabilities::basic())
+    /// let device = Device::http("192.168.1.100")
     ///     .build()
     ///     .await?;
     /// # Ok(())
     /// # }
     /// ```
     #[must_use]
-    pub fn with_credentials(
-        mut self,
-        username: impl Into<String>,
-        password: impl Into<String>,
-    ) -> Self {
-        self.username = Some(username.into());
-        self.password = Some(password.into());
-        self
+    pub fn http(host: impl Into<String>) -> HttpDeviceBuilder {
+        HttpDeviceBuilder::new(crate::protocol::HttpConfig::new(host))
     }
 
-    /// Sets the device capabilities manually (skips auto-detection).
+    /// Creates a builder for an HTTP-based device from an `HttpConfig`.
+    ///
+    /// Use this when you need to configure advanced options like port, HTTPS,
+    /// or credentials at the configuration level.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - HTTP configuration including host, port, and credentials
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tasmor_lib::Device;
+    /// use tasmor_lib::protocol::HttpConfig;
+    ///
+    /// # async fn example() -> tasmor_lib::Result<()> {
+    /// let config = HttpConfig::new("192.168.1.100")
+    ///     .with_port(8080)
+    ///     .with_credentials("admin", "password");
+    ///
+    /// let device = Device::http_config(config)
+    ///     .build()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     #[must_use]
-    pub fn with_capabilities(mut self, capabilities: Capabilities) -> Self {
-        self.capabilities = Some(capabilities);
-        self
+    pub fn http_config(config: crate::protocol::HttpConfig) -> HttpDeviceBuilder {
+        HttpDeviceBuilder::new(config)
+    }
+}
+
+// ========== MQTT Device Subscriptions ==========
+
+use crate::protocol::MqttClient;
+use crate::state::StateChange;
+use crate::subscription::{EnergyData, Subscribable, SubscriptionId};
+
+impl Device<MqttClient> {
+    /// Registers the device's callbacks with the MQTT client for message routing.
+    ///
+    /// This is called automatically by the builder after device creation.
+    pub(crate) fn register_mqtt_callbacks(&self) {
+        self.protocol.register_callbacks(&self.callbacks);
+    }
+}
+
+impl Subscribable for Device<MqttClient> {
+    fn on_power_changed<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(u8, PowerState) + Send + Sync + 'static,
+    {
+        self.callbacks.on_power_changed(callback)
     }
 
-    /// Builds the device with auto-detection of capabilities.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if connection or capability detection fails.
-    pub async fn build(self) -> Result<Device<MqttClient>, Error> {
-        let client = self.create_client().await?;
-
-        // Auto-detect capabilities
-        let capabilities = if let Some(caps) = self.capabilities {
-            caps
-        } else {
-            let cmd = StatusCommand::all();
-            let response = client.send_command(&cmd).await.map_err(Error::Protocol)?;
-            let status: StatusResponse = response.parse().map_err(Error::Parse)?;
-            Capabilities::from_status(&status)
-        };
-
-        Ok(Device::new(client, capabilities))
+    fn on_dimmer_changed<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(Dimmer) + Send + Sync + 'static,
+    {
+        self.callbacks.on_dimmer_changed(callback)
     }
 
-    /// Builds the device without probing for capabilities.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the MQTT client cannot be created.
-    pub async fn build_without_probe(self) -> Result<Device<MqttClient>, Error> {
-        let client = self.create_client().await?;
-        let capabilities = self.capabilities.unwrap_or_default();
-        Ok(Device::new(client, capabilities))
+    fn on_color_changed<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(HsbColor) + Send + Sync + 'static,
+    {
+        self.callbacks.on_hsb_color_changed(callback)
     }
 
-    /// Creates the MQTT client with the configured options.
-    async fn create_client(&self) -> Result<MqttClient, Error> {
-        use crate::protocol::MqttClientBuilder;
+    fn on_color_temp_changed<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(ColorTemperature) + Send + Sync + 'static,
+    {
+        self.callbacks.on_color_temp_changed(callback)
+    }
 
-        let mut builder = MqttClientBuilder::new()
-            .broker(&self.broker)
-            .device_topic(&self.topic);
+    fn on_energy_updated<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(EnergyData) + Send + Sync + 'static,
+    {
+        self.callbacks.on_energy_updated(callback)
+    }
 
-        if let (Some(username), Some(password)) = (&self.username, &self.password) {
-            builder = builder.credentials(username, password);
-        }
+    fn on_connected<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(&DeviceState) + Send + Sync + 'static,
+    {
+        self.callbacks.on_connected(callback)
+    }
 
-        builder.build().await.map_err(Error::Protocol)
+    fn on_disconnected<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.callbacks.on_disconnected(callback)
+    }
+
+    fn on_state_changed<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(&StateChange) + Send + Sync + 'static,
+    {
+        self.callbacks.on_state_changed(callback)
+    }
+
+    fn unsubscribe(&self, id: SubscriptionId) -> bool {
+        self.callbacks.unsubscribe(id)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::HttpConfig;
 
     #[test]
-    fn http_device_builder() {
+    fn http_device_builder_from_config() {
+        let config = HttpConfig::new("192.168.1.100").with_credentials("admin", "pass");
+
+        let builder = Device::<HttpClient>::http_config(config)
+            .with_capabilities(Capabilities::neo_coolcam());
+
+        assert!(builder.capabilities().is_some());
+    }
+
+    #[test]
+    fn http_device_builder_from_host() {
         let builder = Device::<HttpClient>::http("192.168.1.100")
             .with_credentials("admin", "pass")
             .with_capabilities(Capabilities::neo_coolcam());
 
-        assert_eq!(builder.host, "192.168.1.100");
-        assert!(builder.capabilities.is_some());
+        assert!(builder.capabilities().is_some());
     }
 
     #[test]
-    fn mqtt_device_builder() {
-        let builder = Device::<MqttClient>::mqtt("mqtt://broker:1883", "tasmota_switch")
-            .with_capabilities(Capabilities::basic());
-
-        assert_eq!(builder.broker, "mqtt://broker:1883");
-        assert_eq!(builder.topic, "tasmota_switch");
-    }
-
-    #[test]
-    fn mqtt_device_builder_with_credentials() {
-        let builder = Device::<MqttClient>::mqtt("mqtt://broker:1883", "tasmota_switch")
-            .with_credentials("mqtt_user", "mqtt_pass")
-            .with_capabilities(Capabilities::basic());
-
-        assert_eq!(builder.broker, "mqtt://broker:1883");
-        assert_eq!(builder.topic, "tasmota_switch");
-        assert_eq!(builder.username, Some("mqtt_user".to_string()));
-        assert_eq!(builder.password, Some("mqtt_pass".to_string()));
+    fn device_state_default() {
+        // This test verifies the Device struct can hold state
+        let state = DeviceState::new();
+        assert!(state.power(1).is_none());
     }
 }

@@ -291,13 +291,12 @@ fn http_device_card(
             if device.model().supports_dimming() {
                 ui.horizontal(|ui| {
                     ui.label("Dimmer:");
-                    let mut dimmer_value = 50.0_f32;
+                    // Read current value from device state, default to 50%
+                    let mut dimmer_value = f32::from(device.dimmer_value().unwrap_or(50));
                     let slider_response =
                         ui.add(egui::Slider::new(&mut dimmer_value, 0.0..=100.0).suffix("%"));
-                    if ui.button("Send").clicked()
-                        || slider_response.drag_stopped()
-                        || slider_response.lost_focus()
-                    {
+                    // Send command when slider is released (no Send button needed)
+                    if slider_response.drag_stopped() || slider_response.lost_focus() {
                         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                         let dimmer = dimmer_value as u8;
                         response.dimmer_changed = Some(dimmer);
@@ -309,9 +308,13 @@ fn http_device_card(
             if device.model().supports_color() {
                 ui.horizontal(|ui| {
                     ui.label("HSB:");
-                    let mut hue = 0.0_f32;
-                    ui.add(egui::Slider::new(&mut hue, 0.0..=360.0).text("H"));
-                    if ui.button("Send").clicked() {
+                    // Read current hue from device state, default to 0
+                    let mut hue = device
+                        .hsb_color_values()
+                        .map_or(0.0, |(h, _, _)| f32::from(h));
+                    let hue_response = ui.add(egui::Slider::new(&mut hue, 0.0..=360.0).text("H"));
+                    // Send command when slider is released
+                    if hue_response.drag_stopped() || hue_response.lost_focus() {
                         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                         let h = hue as u16;
                         response.hue_changed = Some((h, 100, 100));
@@ -325,9 +328,12 @@ fn http_device_card(
                 {
                     ui.horizontal(|ui| {
                         ui.label("Color Temp:");
-                        let mut ct_value = 326.0_f32;
-                        ui.add(egui::Slider::new(&mut ct_value, 153.0..=500.0).suffix(" mired"));
-                        if ui.button("Send").clicked() {
+                        // Read current CT from device state, default to 326 (neutral)
+                        let mut ct_value = device.color_temp_mireds().map_or(326.0, f32::from);
+                        let ct_response = ui
+                            .add(egui::Slider::new(&mut ct_value, 153.0..=500.0).suffix(" mired"));
+                        // Send command when slider is released
+                        if ct_response.drag_stopped() || ct_response.lost_focus() {
                             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                             let ct = ct_value as u16;
                             response.color_temp_changed = Some(ct);

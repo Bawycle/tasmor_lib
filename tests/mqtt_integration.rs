@@ -302,3 +302,16 @@ mod capability_verification {
         assert!(result.is_err());
     }
 }
+
+// ============================================================================
+// MQTT Callback Tests
+// ============================================================================
+//
+// NOTE: The mockforge-mqtt broker used for testing doesn't fully support
+// pub/sub message forwarding between clients. The callback routing logic
+// is tested via unit tests in:
+//   - src/protocol/topic_router.rs (TopicRouter tests)
+//   - src/subscription/callback.rs (CallbackRegistry tests)
+//
+// For full integration testing with callbacks, use a real MQTT broker
+// like Mosquitto.
