@@ -286,6 +286,30 @@ impl ManagedDevice {
     pub fn total_start_time(&self) -> Option<&tasmor_lib::types::TasmotaDateTime> {
         self.state.total_start_time()
     }
+
+    /// Returns the scheme value (0-4).
+    #[must_use]
+    pub fn scheme_value(&self) -> Option<u8> {
+        self.state.scheme().map(|s| s.value())
+    }
+
+    /// Returns the wakeup duration in seconds.
+    #[must_use]
+    pub fn wakeup_duration_seconds(&self) -> Option<u16> {
+        self.state.wakeup_duration().map(|d| d.seconds())
+    }
+
+    /// Returns whether fade transitions are enabled.
+    #[must_use]
+    pub fn fade_enabled(&self) -> Option<bool> {
+        self.state.fade_enabled()
+    }
+
+    /// Returns the fade speed value (1-40).
+    #[must_use]
+    pub fn fade_speed_value(&self) -> Option<u8> {
+        self.state.fade_speed().map(|s| s.value())
+    }
 }
 
 // Keep backward compatibility alias during migration

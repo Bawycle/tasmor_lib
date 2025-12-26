@@ -307,17 +307,29 @@ fn http_device_card(
             // Color controls (if supported)
             if device.model().supports_color() {
                 ui.horizontal(|ui| {
-                    ui.label("HSB:");
-                    // Read current hue from device state, default to 0
-                    let mut hue = device
-                        .hsb_color_values()
-                        .map_or(0.0, |(h, _, _)| f32::from(h));
-                    let hue_response = ui.add(egui::Slider::new(&mut hue, 0.0..=360.0).text("H"));
-                    // Send command when slider is released
+                    ui.label("Color:");
+                    // Get current color from device state, convert to RGB
+                    let (h, s, b) = device.hsb_color_values().unwrap_or((0, 100, 100));
+                    let hsb = tasmor_lib::types::HsbColor::new(h, s, b).unwrap_or_default();
+                    let rgb = hsb.to_rgb();
+                    let mut color = [rgb.red(), rgb.green(), rgb.blue()];
+
+                    // Color picker button
+                    let picker_response = ui.color_edit_button_srgb(&mut color);
+                    if picker_response.changed() {
+                        response.rgb_color_changed =
+                            Some(format!("#{:02X}{:02X}{:02X}", color[0], color[1], color[2]));
+                    }
+
+                    // Hue slider as alternative
+                    ui.label("H:");
+                    let mut hue = f32::from(h);
+                    let hue_response =
+                        ui.add(egui::Slider::new(&mut hue, 0.0..=360.0).show_value(false));
                     if hue_response.drag_stopped() || hue_response.lost_focus() {
                         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                        let h = hue as u16;
-                        response.hue_changed = Some((h, 100, 100));
+                        let hue_val = hue as u16;
+                        response.hue_changed = Some((hue_val, s, b));
                     }
                 });
 
@@ -340,6 +352,62 @@ fn http_device_card(
                         }
                     });
                 }
+
+                // Scheme selector row
+                ui.horizontal(|ui| {
+                    ui.label("Scheme:");
+                    let current_scheme = device.scheme_value().unwrap_or(0);
+                    let scheme_names = ["Single", "Wakeup", "Cycle Up", "Cycle Down", "Random"];
+                    egui::ComboBox::from_id_salt(("http_scheme", device.config.id))
+                        .selected_text(*scheme_names.get(current_scheme as usize).unwrap_or(&"?"))
+                        .show_ui(ui, |ui| {
+                            for (idx, name) in scheme_names.iter().enumerate() {
+                                #[allow(clippy::cast_possible_truncation)]
+                                let idx_u8 = idx as u8;
+                                if ui
+                                    .selectable_label(current_scheme == idx_u8, *name)
+                                    .clicked()
+                                {
+                                    response.scheme_changed = Some(idx_u8);
+                                }
+                            }
+                        });
+
+                    // Wakeup duration (only shown when scheme is Wakeup)
+                    if current_scheme == 1 {
+                        ui.label("Duration:");
+                        let mut duration_secs =
+                            f32::from(device.wakeup_duration_seconds().unwrap_or(60));
+                        let duration_response =
+                            ui.add(egui::Slider::new(&mut duration_secs, 1.0..=3000.0).suffix("s"));
+                        if duration_response.drag_stopped() || duration_response.lost_focus() {
+                            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                            let secs = duration_secs as u16;
+                            response.wakeup_duration_changed = Some(secs);
+                        }
+                    }
+                });
+
+                // Fade controls row
+                ui.horizontal(|ui| {
+                    let fade_on = device.fade_enabled().unwrap_or(false);
+                    ui.label("Fade:");
+                    if ui.selectable_label(fade_on, "On").clicked() {
+                        response.fade_toggle_clicked = true;
+                    }
+                    if ui.selectable_label(!fade_on, "Off").clicked() {
+                        response.fade_speed_changed = Some(0);
+                    }
+
+                    ui.label("Speed:");
+                    let mut speed_value = f32::from(device.fade_speed_value().unwrap_or(10));
+                    let speed_response = ui.add(egui::Slider::new(&mut speed_value, 1.0..=40.0));
+                    if speed_response.drag_stopped() || speed_response.lost_focus() {
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                        let speed = speed_value as u8;
+                        response.fade_speed_changed = Some(speed);
+                    }
+                });
             }
 
             // Energy controls (if supported)
@@ -583,16 +651,27 @@ fn mqtt_device_card(ui: &mut Ui, device: &DeviceState) -> DeviceCardResponse {
                 // Color controls on a separate row
                 if device.model().supports_color() {
                     ui.horizontal(|ui| {
-                        // Hue slider for color selection
                         ui.label("Color:");
+                        // Get current color from device state, convert to RGB
                         let (h, s, b) = device.hsb_color_values().unwrap_or((0, 100, 100));
+                        let hsb = tasmor_lib::types::HsbColor::new(h, s, b).unwrap_or_default();
+                        let rgb = hsb.to_rgb();
+                        let mut color = [rgb.red(), rgb.green(), rgb.blue()];
+
+                        // Color picker button
+                        let picker_response = ui.color_edit_button_srgb(&mut color);
+                        if picker_response.changed() {
+                            response.rgb_color_changed =
+                                Some(format!("#{:02X}{:02X}{:02X}", color[0], color[1], color[2]));
+                        }
+
+                        // Hue slider as alternative
+                        ui.label("H:");
                         let mut hue_value = f32::from(h);
-                        let hue_response =
-                            ui.add(egui::Slider::new(&mut hue_value, 0.0..=360.0).suffix("°"));
-                        // Only send command when slider is released
+                        let hue_response = ui
+                            .add(egui::Slider::new(&mut hue_value, 0.0..=360.0).show_value(false));
                         if hue_response.drag_stopped() || hue_response.lost_focus() {
                             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                            // Slider is constrained to 0-360, truncation and sign loss are safe
                             let hue = hue_value as u16;
                             response.hue_changed = Some((hue, s, b));
                         }
@@ -603,18 +682,76 @@ fn mqtt_device_card(ui: &mut Ui, device: &DeviceState) -> DeviceCardResponse {
                             .capabilities()
                             .supports_color_temperature_control()
                         {
-                            ui.label("Temp:");
+                            ui.label("CT:");
                             let mut ct_value = f32::from(device.color_temp_mireds().unwrap_or(326));
                             let ct_response = ui.add(
-                                egui::Slider::new(&mut ct_value, 153.0..=500.0).suffix(" mired"),
+                                egui::Slider::new(&mut ct_value, 153.0..=500.0).show_value(false),
                             );
-                            // Only send command when slider is released
                             if ct_response.drag_stopped() || ct_response.lost_focus() {
                                 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                                // Slider is constrained to 153-500, truncation and sign loss are safe
                                 let ct = ct_value as u16;
                                 response.color_temp_changed = Some(ct);
                             }
+                        }
+                    });
+
+                    // Scheme selector row
+                    ui.horizontal(|ui| {
+                        ui.label("Scheme:");
+                        let current_scheme = device.scheme_value().unwrap_or(0);
+                        let scheme_names = ["Single", "Wakeup", "Cycle Up", "Cycle Down", "Random"];
+                        egui::ComboBox::from_id_salt(("mqtt_scheme", device.config.id))
+                            .selected_text(
+                                *scheme_names.get(current_scheme as usize).unwrap_or(&"?"),
+                            )
+                            .show_ui(ui, |ui| {
+                                for (idx, name) in scheme_names.iter().enumerate() {
+                                    #[allow(clippy::cast_possible_truncation)]
+                                    let idx_u8 = idx as u8;
+                                    if ui
+                                        .selectable_label(current_scheme == idx_u8, *name)
+                                        .clicked()
+                                    {
+                                        response.scheme_changed = Some(idx_u8);
+                                    }
+                                }
+                            });
+
+                        // Wakeup duration (only shown when scheme is Wakeup)
+                        if current_scheme == 1 {
+                            ui.label("Duration:");
+                            let mut duration_secs =
+                                f32::from(device.wakeup_duration_seconds().unwrap_or(60));
+                            let duration_response = ui.add(
+                                egui::Slider::new(&mut duration_secs, 1.0..=3000.0).suffix("s"),
+                            );
+                            if duration_response.drag_stopped() || duration_response.lost_focus() {
+                                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                                let secs = duration_secs as u16;
+                                response.wakeup_duration_changed = Some(secs);
+                            }
+                        }
+                    });
+
+                    // Fade controls row
+                    ui.horizontal(|ui| {
+                        let fade_on = device.fade_enabled().unwrap_or(false);
+                        ui.label("Fade:");
+                        if ui.selectable_label(fade_on, "On").clicked() {
+                            response.fade_toggle_clicked = true;
+                        }
+                        if ui.selectable_label(!fade_on, "Off").clicked() {
+                            response.fade_speed_changed = Some(0);
+                        }
+
+                        ui.label("Speed:");
+                        let mut speed_value = f32::from(device.fade_speed_value().unwrap_or(10));
+                        let speed_response =
+                            ui.add(egui::Slider::new(&mut speed_value, 1.0..=40.0));
+                        if speed_response.drag_stopped() || speed_response.lost_focus() {
+                            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                            let speed = speed_value as u8;
+                            response.fade_speed_changed = Some(speed);
                         }
                     });
                 }
@@ -667,6 +804,16 @@ pub struct DeviceCardResponse {
     pub status_query_clicked: bool,
     /// Console clear button was clicked (HTTP only)
     pub console_clear_clicked: bool,
+    /// Scheme changed (0-4)
+    pub scheme_changed: Option<u8>,
+    /// Wakeup duration changed (in seconds)
+    pub wakeup_duration_changed: Option<u16>,
+    /// RGB color changed (hex string like "#FF5733")
+    pub rgb_color_changed: Option<String>,
+    /// Fade toggle button was clicked
+    pub fade_toggle_clicked: bool,
+    /// Fade speed changed (1-40)
+    pub fade_speed_changed: Option<u8>,
 }
 
 /// Renders the add device dialog.

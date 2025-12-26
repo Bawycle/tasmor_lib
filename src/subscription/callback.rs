@@ -364,8 +364,10 @@ impl CallbackRegistry {
                     callback(*scheme);
                 }
             }
-            StateChange::WakeupDuration(_) => {
-                // WakeupDuration has no specific callbacks; changes are captured
+            StateChange::WakeupDuration(_)
+            | StateChange::FadeEnabled(_)
+            | StateChange::FadeSpeed(_) => {
+                // These have no specific callbacks; changes are captured
                 // by generic state_changed callbacks
             }
             StateChange::Energy {

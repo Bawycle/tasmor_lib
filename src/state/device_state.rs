@@ -45,7 +45,8 @@
 //! ```
 
 use crate::types::{
-    ColorTemperature, Dimmer, HsbColor, PowerState, Scheme, TasmotaDateTime, WakeupDuration,
+    ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerState, Scheme, TasmotaDateTime,
+    WakeupDuration,
 };
 
 use super::StateChange;
@@ -85,6 +86,10 @@ pub struct DeviceState {
     scheme: Option<Scheme>,
     /// Wakeup duration in seconds (1-3000).
     wakeup_duration: Option<WakeupDuration>,
+    /// Whether fade transitions are enabled.
+    fade_enabled: Option<bool>,
+    /// Fade transition speed (1-40).
+    fade_speed: Option<FadeSpeed>,
     /// Current power consumption in Watts.
     power_consumption: Option<f32>,
     /// Current voltage in Volts.
@@ -268,6 +273,40 @@ impl DeviceState {
         self.wakeup_duration = None;
     }
 
+    // ========== Fade Settings ==========
+
+    /// Gets whether fade transitions are enabled.
+    #[must_use]
+    pub fn fade_enabled(&self) -> Option<bool> {
+        self.fade_enabled
+    }
+
+    /// Sets whether fade transitions are enabled.
+    pub fn set_fade_enabled(&mut self, enabled: bool) {
+        self.fade_enabled = Some(enabled);
+    }
+
+    /// Clears the fade enabled state.
+    pub fn clear_fade_enabled(&mut self) {
+        self.fade_enabled = None;
+    }
+
+    /// Gets the fade transition speed.
+    #[must_use]
+    pub fn fade_speed(&self) -> Option<FadeSpeed> {
+        self.fade_speed
+    }
+
+    /// Sets the fade transition speed.
+    pub fn set_fade_speed(&mut self, speed: FadeSpeed) {
+        self.fade_speed = Some(speed);
+    }
+
+    /// Clears the fade speed.
+    pub fn clear_fade_speed(&mut self) {
+        self.fade_speed = None;
+    }
+
     // ========== Energy Monitoring ==========
 
     /// Gets the current power consumption in Watts.
@@ -392,6 +431,9 @@ impl DeviceState {
     ///
     /// Returns `true` if the state was modified, `false` if it was already
     /// at the target value.
+    #[allow(clippy::too_many_lines)]
+    // Match arms for each StateChange variant are straightforward and splitting
+    // would reduce readability without improving maintainability
     pub fn apply(&mut self, change: &StateChange) -> bool {
         match change {
             StateChange::Power { index, state } => {
@@ -440,6 +482,22 @@ impl DeviceState {
                     false
                 } else {
                     self.wakeup_duration = Some(*duration);
+                    true
+                }
+            }
+            StateChange::FadeEnabled(enabled) => {
+                if self.fade_enabled == Some(*enabled) {
+                    false
+                } else {
+                    self.fade_enabled = Some(*enabled);
+                    true
+                }
+            }
+            StateChange::FadeSpeed(speed) => {
+                if self.fade_speed == Some(*speed) {
+                    false
+                } else {
+                    self.fade_speed = Some(*speed);
                     true
                 }
             }
@@ -713,5 +771,57 @@ mod tests {
         // Color temperature should also be set
         assert!(state.color_temperature().is_some());
         assert_eq!(state.color_temperature().unwrap().value(), 153);
+
+        // Fade should be enabled
+        assert_eq!(state.fade_enabled(), Some(true));
+
+        // Fade speed should be set
+        assert_eq!(state.fade_speed().map(|s| s.value()), Some(2));
+    }
+
+    #[test]
+    fn fade_getters_setters() {
+        let mut state = DeviceState::new();
+
+        // Initially None
+        assert!(state.fade_enabled().is_none());
+        assert!(state.fade_speed().is_none());
+
+        // Set fade enabled
+        state.set_fade_enabled(true);
+        assert_eq!(state.fade_enabled(), Some(true));
+
+        state.set_fade_enabled(false);
+        assert_eq!(state.fade_enabled(), Some(false));
+
+        // Set fade speed
+        let speed = FadeSpeed::new(15).unwrap();
+        state.set_fade_speed(speed);
+        assert_eq!(state.fade_speed(), Some(speed));
+
+        // Clear
+        state.clear_fade_enabled();
+        state.clear_fade_speed();
+        assert!(state.fade_enabled().is_none());
+        assert!(state.fade_speed().is_none());
+    }
+
+    #[test]
+    fn apply_fade_changes() {
+        let mut state = DeviceState::new();
+
+        // Apply fade enabled
+        let change = StateChange::FadeEnabled(true);
+        assert!(state.apply(&change));
+        assert_eq!(state.fade_enabled(), Some(true));
+
+        // Applying same state returns false
+        assert!(!state.apply(&change));
+
+        // Apply fade speed
+        let speed = FadeSpeed::new(20).unwrap();
+        let change = StateChange::FadeSpeed(speed);
+        assert!(state.apply(&change));
+        assert_eq!(state.fade_speed(), Some(speed));
     }
 }

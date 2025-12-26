@@ -10,7 +10,7 @@ use serde::de::{self, Deserializer};
 
 use crate::error::ParseError;
 use crate::state::StateChange;
-use crate::types::{ColorTemperature, Dimmer, HsbColor, PowerState, Scheme};
+use crate::types::{ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerState, Scheme};
 
 /// Deserializes a boolean from either "ON"/"OFF" string or 0/1 integer.
 fn deserialize_bool_or_int<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
@@ -347,6 +347,18 @@ impl TelemetryState {
             changes.push(StateChange::Scheme(scheme));
         }
 
+        // Fade enabled
+        if let Some(fade) = self.fade {
+            changes.push(StateChange::FadeEnabled(fade));
+        }
+
+        // Fade speed
+        if let Some(speed_value) = self.speed
+            && let Ok(speed) = FadeSpeed::new(speed_value)
+        {
+            changes.push(StateChange::FadeSpeed(speed));
+        }
+
         // If we have multiple changes, wrap in a batch
         if changes.len() > 1 {
             vec![StateChange::Batch(changes)]
@@ -580,16 +592,26 @@ mod tests {
         let changes = state.to_state_changes();
         assert_eq!(changes.len(), 1);
         if let StateChange::Batch(batch) = &changes[0] {
-            // Should contain: power, dimmer, color_temp, hsb_color
+            // Should contain: power, dimmer, color_temp, hsb_color, scheme, fade_enabled, fade_speed
             assert!(
-                batch.len() >= 4,
-                "Expected at least 4 changes, got {}",
+                batch.len() >= 7,
+                "Expected at least 7 changes, got {}",
                 batch.len()
             );
 
             // Verify HsbColor is in the batch
             let has_hsb = batch.iter().any(|c| matches!(c, StateChange::HsbColor(_)));
             assert!(has_hsb, "HsbColor should be in the batch");
+
+            // Verify FadeEnabled is in the batch
+            let has_fade = batch
+                .iter()
+                .any(|c| matches!(c, StateChange::FadeEnabled(true)));
+            assert!(has_fade, "FadeEnabled(true) should be in the batch");
+
+            // Verify FadeSpeed is in the batch
+            let has_speed = batch.iter().any(|c| matches!(c, StateChange::FadeSpeed(_)));
+            assert!(has_speed, "FadeSpeed should be in the batch");
         } else {
             panic!("Expected batch with multiple changes");
         }

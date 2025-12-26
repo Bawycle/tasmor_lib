@@ -17,6 +17,8 @@
 //! - [`StateChange::ColorTemperature`] - White color temperature changes
 //! - [`StateChange::Scheme`] - Light scheme/effect changes
 //! - [`StateChange::WakeupDuration`] - Wakeup effect duration changes
+//! - [`StateChange::FadeEnabled`] - Fade transition enable/disable
+//! - [`StateChange::FadeSpeed`] - Fade transition speed changes
 //! - [`StateChange::Energy`] - Energy monitoring updates
 //! - [`StateChange::Batch`] - Multiple changes grouped together
 //!
@@ -55,7 +57,8 @@
 //! ```
 
 use crate::types::{
-    ColorTemperature, Dimmer, HsbColor, PowerState, Scheme, TasmotaDateTime, WakeupDuration,
+    ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerState, Scheme, TasmotaDateTime,
+    WakeupDuration,
 };
 
 /// Represents a change in device state.
@@ -96,6 +99,12 @@ pub enum StateChange {
 
     /// Wakeup duration changed.
     WakeupDuration(WakeupDuration),
+
+    /// Fade enabled/disabled.
+    FadeEnabled(bool),
+
+    /// Fade speed changed.
+    FadeSpeed(FadeSpeed),
 
     /// Energy monitoring data updated.
     ///
@@ -187,6 +196,18 @@ impl StateChange {
         Self::WakeupDuration(duration)
     }
 
+    /// Creates a fade enabled change.
+    #[must_use]
+    pub fn fade_enabled(enabled: bool) -> Self {
+        Self::FadeEnabled(enabled)
+    }
+
+    /// Creates a fade speed change.
+    #[must_use]
+    pub fn fade_speed(speed: FadeSpeed) -> Self {
+        Self::FadeSpeed(speed)
+    }
+
     /// Creates an energy reading change with basic power data.
     #[must_use]
     pub fn energy(power: f32, voltage: f32, current: f32) -> Self {
@@ -245,7 +266,7 @@ impl StateChange {
         matches!(self, Self::Power { .. })
     }
 
-    /// Returns `true` if this is a light-related change (dimmer, color, CT, scheme).
+    /// Returns `true` if this is a light-related change (dimmer, color, CT, scheme, fade).
     #[must_use]
     pub fn is_light(&self) -> bool {
         matches!(
@@ -255,6 +276,8 @@ impl StateChange {
                 | Self::ColorTemperature(_)
                 | Self::Scheme(_)
                 | Self::WakeupDuration(_)
+                | Self::FadeEnabled(_)
+                | Self::FadeSpeed(_)
         )
     }
 
@@ -331,7 +354,21 @@ mod tests {
     #[test]
     fn is_light() {
         assert!(StateChange::Dimmer(Dimmer::MAX).is_light());
+        assert!(StateChange::fade_enabled(true).is_light());
+        assert!(StateChange::fade_speed(FadeSpeed::MEDIUM).is_light());
         assert!(!StateChange::power_on().is_light());
+    }
+
+    #[test]
+    fn fade_constructors() {
+        let enabled = StateChange::fade_enabled(true);
+        assert!(matches!(enabled, StateChange::FadeEnabled(true)));
+
+        let disabled = StateChange::fade_enabled(false);
+        assert!(matches!(disabled, StateChange::FadeEnabled(false)));
+
+        let speed = StateChange::fade_speed(FadeSpeed::FAST);
+        assert!(matches!(speed, StateChange::FadeSpeed(_)));
     }
 
     #[test]

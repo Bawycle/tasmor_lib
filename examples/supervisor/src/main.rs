@@ -400,6 +400,165 @@ impl TasmotaSupervisor {
                 log.clear();
             }
         }
+
+        // Scheme changed
+        if let Some(scheme) = response.scheme_changed {
+            let dm = &self.device_manager;
+            match rt.block_on(dm.set_scheme(device_id, scheme)) {
+                Ok(()) => {
+                    if is_http {
+                        let scheme_names = ["Single", "Wakeup", "Cycle Up", "Cycle Down", "Random"];
+                        let name = scheme_names.get(scheme as usize).unwrap_or(&"?");
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::success(
+                                &format!("set_scheme({scheme})"),
+                                &format!("Scheme = {name}"),
+                            ),
+                        );
+                    }
+                }
+                Err(e) => {
+                    if is_http {
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::error(&format!("set_scheme({scheme})"), &e),
+                        );
+                    } else {
+                        self.error_message = Some(e);
+                    }
+                }
+            }
+        }
+
+        // Wakeup duration changed
+        if let Some(secs) = response.wakeup_duration_changed {
+            let dm = &self.device_manager;
+            match rt.block_on(dm.set_wakeup_duration(device_id, secs)) {
+                Ok(()) => {
+                    if is_http {
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::success(
+                                &format!("set_wakeup_duration({secs})"),
+                                &format!("WakeupDuration = {secs}s"),
+                            ),
+                        );
+                    }
+                }
+                Err(e) => {
+                    if is_http {
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::error(&format!("set_wakeup_duration({secs})"), &e),
+                        );
+                    } else {
+                        self.error_message = Some(e);
+                    }
+                }
+            }
+        }
+
+        // Fade toggle
+        if response.fade_toggle_clicked {
+            let dm = &self.device_manager;
+            match rt.block_on(dm.enable_fade(device_id)) {
+                Ok(()) => {
+                    if is_http {
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::success("enable_fade()", "Fade = ON"),
+                        );
+                    }
+                }
+                Err(e) => {
+                    if is_http {
+                        self.log_to_console(device_id, ConsoleEntry::error("enable_fade()", &e));
+                    } else {
+                        self.error_message = Some(e);
+                    }
+                }
+            }
+        }
+
+        // Fade speed changed (0 means disable fade)
+        if let Some(speed) = response.fade_speed_changed {
+            let dm = &self.device_manager;
+            if speed == 0 {
+                match rt.block_on(dm.disable_fade(device_id)) {
+                    Ok(()) => {
+                        if is_http {
+                            self.log_to_console(
+                                device_id,
+                                ConsoleEntry::success("disable_fade()", "Fade = OFF"),
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        if is_http {
+                            self.log_to_console(
+                                device_id,
+                                ConsoleEntry::error("disable_fade()", &e),
+                            );
+                        } else {
+                            self.error_message = Some(e);
+                        }
+                    }
+                }
+            } else {
+                match rt.block_on(dm.set_fade_speed(device_id, speed)) {
+                    Ok(()) => {
+                        if is_http {
+                            self.log_to_console(
+                                device_id,
+                                ConsoleEntry::success(
+                                    &format!("set_fade_speed({speed})"),
+                                    &format!("Speed = {speed}"),
+                                ),
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        if is_http {
+                            self.log_to_console(
+                                device_id,
+                                ConsoleEntry::error(&format!("set_fade_speed({speed})"), &e),
+                            );
+                        } else {
+                            self.error_message = Some(e);
+                        }
+                    }
+                }
+            }
+        }
+
+        // RGB color changed
+        if let Some(hex) = &response.rgb_color_changed {
+            let dm = &self.device_manager;
+            match rt.block_on(dm.set_rgb_color(device_id, hex)) {
+                Ok(()) => {
+                    if is_http {
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::success(
+                                &format!("set_rgb_color({hex})"),
+                                &format!("Color = {hex}"),
+                            ),
+                        );
+                    }
+                }
+                Err(e) => {
+                    if is_http {
+                        self.log_to_console(
+                            device_id,
+                            ConsoleEntry::error(&format!("set_rgb_color({hex})"), &e),
+                        );
+                    } else {
+                        self.error_message = Some(e);
+                    }
+                }
+            }
+        }
     }
 
     /// Handles add device dialog.
