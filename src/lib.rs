@@ -110,6 +110,86 @@
 //!     Ok(())
 //! }
 //! ```
+//!
+//! # HTTP vs MQTT: Choosing a Protocol
+//!
+//! This library supports two protocols for communicating with Tasmota devices.
+//! Each has distinct characteristics suited to different use cases.
+//!
+//! ## Feature Comparison
+//!
+//! | Feature | HTTP | MQTT |
+//! |---------|------|------|
+//! | Connection type | Stateless (request/response) | Persistent (pub/sub) |
+//! | Real-time events | ❌ Not supported | ✅ Full support |
+//! | Event subscriptions | ❌ Compile-time error | ✅ [`Subscribable`] trait |
+//! | Connection overhead | New connection per command | Single persistent connection |
+//! | Network requirements | Direct device access | MQTT broker required |
+//! | Firewall friendly | ✅ Standard HTTP/HTTPS | May require port forwarding |
+//! | Multi-device efficiency | One connection per device | Shared broker connection |
+//!
+//! ## When to Use HTTP
+//!
+//! - **Simple scripts**: One-off commands or automation scripts
+//! - **Direct device access**: No MQTT broker available
+//! - **Firewall constraints**: Only HTTP ports are open
+//! - **Low-frequency control**: Occasional commands without state tracking
+//!
+//! ```no_run
+//! use tasmor_lib::Device;
+//!
+//! # async fn example() -> tasmor_lib::Result<()> {
+//! // HTTP: Simple, direct control
+//! let (device, _) = Device::http("192.168.1.100").build().await?;
+//! device.power_on().await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## When to Use MQTT
+//!
+//! - **Real-time monitoring**: React to device state changes instantly
+//! - **Home automation**: Integration with existing MQTT infrastructure
+//! - **Multi-device setups**: Efficiently manage many devices via one broker
+//! - **State synchronization**: Keep local state in sync with device state
+//!
+//! ```ignore
+//! use tasmor_lib::{Device, subscription::Subscribable};
+//!
+//! # async fn example() -> tasmor_lib::Result<()> {
+//! // MQTT: Real-time events and state tracking
+//! let (device, initial_state) = Device::mqtt("mqtt://broker:1883", "tasmota_plug")
+//!     .build()
+//!     .await?;
+//!
+//! // React to external changes (physical button, other apps, etc.)
+//! device.on_power_changed(|idx, state| {
+//!     println!("Relay {idx} changed to {state:?}");
+//! });
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Type Safety
+//!
+//! The protocol choice is encoded in the type system. Attempting to use
+//! subscription methods on an HTTP device results in a **compile-time error**:
+//!
+//! ```compile_fail
+//! use tasmor_lib::{Device, subscription::Subscribable};
+//!
+//! # async fn example() -> tasmor_lib::Result<()> {
+//! let (device, _) = Device::http("192.168.1.100").build().await?;
+//!
+//! // This will NOT compile - HTTP devices don't implement Subscribable
+//! device.on_power_changed(|idx, state| {
+//!     println!("Power changed");
+//! });
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! [`Subscribable`]: subscription::Subscribable
 
 mod capabilities;
 pub mod command;

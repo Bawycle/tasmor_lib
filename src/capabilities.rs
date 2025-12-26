@@ -48,7 +48,7 @@ use crate::response::StatusResponse;
 /// assert!(neo_coolcam.supports_energy_monitoring());
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 // Each boolean represents an independent device feature flag that cannot be
 // meaningfully combined into an enum or state machine.
 #[allow(clippy::struct_excessive_bools)]

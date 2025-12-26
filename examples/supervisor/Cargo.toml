@@ -6,7 +6,7 @@ rust-version = "1.92.0"
 license = "MPL-2.0"
 
 [dependencies]
-tasmor_lib = { path = "../..", features = ["serde"] }
+tasmor_lib = { path = "../.." }
 chrono = "0.4"
 eframe = "0.33"
 egui = "0.33"

@@ -35,7 +35,7 @@ use crate::error::ValueError;
 /// let warm = ColorTemperature::WARM;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct ColorTemperature(u16);
 
 impl ColorTemperature {
@@ -155,7 +155,7 @@ impl fmt::Display for ColorTemperature {
 /// let green = HsbColor::new(120, 100, 100).unwrap();
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct HsbColor {
     hue: u16,
     saturation: u8,
