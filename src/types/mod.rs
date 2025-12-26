@@ -17,7 +17,10 @@
 //! | [`PowerIndex`] | 0-8 | Relay index (0 = all relays) |
 //! | [`Dimmer`] | 0-100 | Brightness percentage |
 //! | [`ColorTemperature`] | 153-500 mireds | White color temperature |
-//! | [`HsbColor`] | H:0-360, S:0-100, B:0-100 | RGB color in HSB format |
+//! | [`HsbColor`] | H:0-360, S:0-100, B:0-100 | Color in HSB format |
+//! | [`RgbColor`] | R:0-255, G:0-255, B:0-255 | Color in RGB format |
+//! | [`Scheme`] | 0-4 | Light effect (Single/Wakeup/Cycle/Random) |
+//! | [`WakeupDuration`] | 1-3000 seconds | Duration for wakeup effect |
 //! | [`FadeSpeed`] | 1-40 | Transition speed (1=fastest) |
 //! | [`TasmotaDateTime`] | ISO 8601 | Datetime from telemetry |
 //!
@@ -65,10 +68,16 @@ mod color;
 mod datetime;
 mod dimmer;
 mod power;
+mod rgb_color;
+mod scheme;
 mod speed;
+mod wakeup_duration;
 
 pub use color::{ColorTemperature, HsbColor};
 pub use datetime::{DateTimeParseError, TasmotaDateTime};
 pub use dimmer::Dimmer;
 pub use power::{PowerIndex, PowerState};
+pub use rgb_color::RgbColor;
+pub use scheme::Scheme;
 pub use speed::FadeSpeed;
+pub use wakeup_duration::WakeupDuration;

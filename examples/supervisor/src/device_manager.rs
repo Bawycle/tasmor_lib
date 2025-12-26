@@ -384,6 +384,157 @@ impl DeviceManager {
         Ok(())
     }
 
+    /// Sets the RGB color (convenience method that converts to HSB internally).
+    pub async fn set_rgb_color(&self, config_id: Uuid, hex: &str) -> Result<(), String> {
+        let color = tasmor_lib::RgbColor::from_hex(hex).map_err(|e| e.to_string())?;
+
+        let devices = self.devices.read().await;
+        let entry = devices.get(&config_id).ok_or("Device not found")?;
+
+        let response = match &entry.handle {
+            DeviceHandle::Http(device) => device
+                .set_rgb_color(color)
+                .await
+                .map_err(|e| e.to_string())?,
+            DeviceHandle::Mqtt(device) => device
+                .set_rgb_color(color)
+                .await
+                .map_err(|e| e.to_string())?,
+        };
+
+        // Update local state for HTTP devices
+        drop(devices);
+        let mut devices = self.devices.write().await;
+        if let Some(entry) = devices.get_mut(&config_id) {
+            if matches!(entry.handle, DeviceHandle::Http(_)) {
+                entry.managed.state.set_hsb_color(response.hsb_color());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Sets the light scheme/effect (0-4).
+    pub async fn set_scheme(&self, config_id: Uuid, value: u8) -> Result<(), String> {
+        let scheme = tasmor_lib::Scheme::new(value).map_err(|e| e.to_string())?;
+
+        let devices = self.devices.read().await;
+        let entry = devices.get(&config_id).ok_or("Device not found")?;
+
+        let response = match &entry.handle {
+            DeviceHandle::Http(device) => {
+                device.set_scheme(scheme).await.map_err(|e| e.to_string())?
+            }
+            DeviceHandle::Mqtt(device) => {
+                device.set_scheme(scheme).await.map_err(|e| e.to_string())?
+            }
+        };
+
+        // Update local state for HTTP devices
+        drop(devices);
+        let mut devices = self.devices.write().await;
+        if let Some(entry) = devices.get_mut(&config_id) {
+            if matches!(entry.handle, DeviceHandle::Http(_)) {
+                if let Ok(s) = response.scheme() {
+                    entry.managed.state.set_scheme(s);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Sets the wakeup duration (1-3000 seconds).
+    pub async fn set_wakeup_duration(&self, config_id: Uuid, seconds: u16) -> Result<(), String> {
+        let duration = tasmor_lib::WakeupDuration::new(seconds).map_err(|e| e.to_string())?;
+
+        let devices = self.devices.read().await;
+        let entry = devices.get(&config_id).ok_or("Device not found")?;
+
+        let response = match &entry.handle {
+            DeviceHandle::Http(device) => device
+                .set_wakeup_duration(duration)
+                .await
+                .map_err(|e| e.to_string())?,
+            DeviceHandle::Mqtt(device) => device
+                .set_wakeup_duration(duration)
+                .await
+                .map_err(|e| e.to_string())?,
+        };
+
+        // Update local state for HTTP devices
+        drop(devices);
+        let mut devices = self.devices.write().await;
+        if let Some(entry) = devices.get_mut(&config_id) {
+            if matches!(entry.handle, DeviceHandle::Http(_)) {
+                if let Ok(d) = response.duration() {
+                    entry.managed.state.set_wakeup_duration(d);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Enables fade transitions.
+    pub async fn enable_fade(&self, config_id: Uuid) -> Result<(), String> {
+        let devices = self.devices.read().await;
+        let entry = devices.get(&config_id).ok_or("Device not found")?;
+
+        match &entry.handle {
+            DeviceHandle::Http(device) => {
+                device.enable_fade().await.map_err(|e| e.to_string())?;
+            }
+            DeviceHandle::Mqtt(device) => {
+                device.enable_fade().await.map_err(|e| e.to_string())?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Disables fade transitions.
+    pub async fn disable_fade(&self, config_id: Uuid) -> Result<(), String> {
+        let devices = self.devices.read().await;
+        let entry = devices.get(&config_id).ok_or("Device not found")?;
+
+        match &entry.handle {
+            DeviceHandle::Http(device) => {
+                device.disable_fade().await.map_err(|e| e.to_string())?;
+            }
+            DeviceHandle::Mqtt(device) => {
+                device.disable_fade().await.map_err(|e| e.to_string())?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Sets the fade transition speed (1-40).
+    pub async fn set_fade_speed(&self, config_id: Uuid, speed: u8) -> Result<(), String> {
+        let fade_speed = tasmor_lib::FadeSpeed::new(speed).map_err(|e| e.to_string())?;
+
+        let devices = self.devices.read().await;
+        let entry = devices.get(&config_id).ok_or("Device not found")?;
+
+        match &entry.handle {
+            DeviceHandle::Http(device) => {
+                device
+                    .set_fade_speed(fade_speed)
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+            DeviceHandle::Mqtt(device) => {
+                device
+                    .set_fade_speed(fade_speed)
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Resets the total energy counter and returns the updated energy data.
     ///
     /// Returns the updated `DeviceState` with the new energy values including `TotalStartTime`.
@@ -397,12 +548,14 @@ impl DeviceManager {
             let entry = devices.get(&config_id).ok_or("Device not found")?;
 
             match &entry.handle {
-                DeviceHandle::Http(device) => {
-                    device.reset_energy_total().await.map_err(|e| e.to_string())?
-                }
-                DeviceHandle::Mqtt(device) => {
-                    device.reset_energy_total().await.map_err(|e| e.to_string())?
-                }
+                DeviceHandle::Http(device) => device
+                    .reset_energy_total()
+                    .await
+                    .map_err(|e| e.to_string())?,
+                DeviceHandle::Mqtt(device) => device
+                    .reset_energy_total()
+                    .await
+                    .map_err(|e| e.to_string())?,
             }
         };
 

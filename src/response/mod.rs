@@ -16,7 +16,10 @@
 //! | [`PowerResponse`] | `Power`, `Power1`-`Power8` | Relay on/off state |
 //! | [`DimmerResponse`] | `Dimmer` | Brightness level (0-100) |
 //! | [`HsbColorResponse`] | `HSBColor` | Color in HSB format |
+//! | [`RgbColorResponse`] | `HSBColor` (via RGB) | Color in RGB format |
 //! | [`ColorTemperatureResponse`] | `CT` | White color temperature |
+//! | [`SchemeResponse`] | `Scheme` | Light scheme/effect (0-4) |
+//! | [`WakeupDurationResponse`] | `WakeupDuration` | Wakeup effect duration |
 //! | [`FadeResponse`] | `Fade` | Fade transition enable/disable |
 //! | [`FadeSpeedResponse`] | `Speed` | Fade transition speed (1-40) |
 //! | [`StartupFadeResponse`] | `SetOption91` | Fade at startup setting |
@@ -45,6 +48,8 @@ mod dimmer;
 mod energy;
 mod fade;
 mod power;
+mod rgb_color;
+mod scheme;
 mod status;
 
 pub use color::{ColorTemperatureResponse, HsbColorResponse};
@@ -52,6 +57,8 @@ pub use dimmer::DimmerResponse;
 pub use energy::EnergyResponse;
 pub use fade::{FadeResponse, FadeSpeedResponse, StartupFadeResponse};
 pub use power::PowerResponse;
+pub use rgb_color::RgbColorResponse;
+pub use scheme::{SchemeResponse, WakeupDurationResponse};
 pub use status::{
     StatusDeviceParameters, StatusFirmware, StatusMemory, StatusMqtt, StatusNetwork, StatusResponse,
 };

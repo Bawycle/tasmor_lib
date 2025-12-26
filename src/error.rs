@@ -78,6 +78,10 @@ pub enum ValueError {
     /// A brightness value is outside the valid range (0-100).
     #[error("brightness value {0} is out of range [0, 100]")]
     InvalidBrightness(u8),
+
+    /// An invalid hex color string was provided.
+    #[error("invalid hex color: {0}")]
+    InvalidHexColor(String),
 }
 
 /// Errors related to protocol communication (HTTP/MQTT).
