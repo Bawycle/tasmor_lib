@@ -34,8 +34,9 @@ use crate::error::ValueError;
 /// let cool = ColorTemperature::COOL;
 /// let warm = ColorTemperature::WARM;
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct ColorTemperature(u16);
 
 impl ColorTemperature {
@@ -138,6 +139,14 @@ impl fmt::Display for ColorTemperature {
     }
 }
 
+impl TryFrom<u16> for ColorTemperature {
+    type Error = ValueError;
+
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
 /// HSB color representation (Hue, Saturation, Brightness).
 ///
 /// # Examples
@@ -154,8 +163,7 @@ impl fmt::Display for ColorTemperature {
 /// // Create a green color
 /// let green = HsbColor::new(120, 100, 100).unwrap();
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct HsbColor {
     hue: u16,
     saturation: u8,
@@ -308,6 +316,14 @@ impl fmt::Display for HsbColor {
     }
 }
 
+impl TryFrom<(u16, u8, u8)> for HsbColor {
+    type Error = ValueError;
+
+    fn try_from((hue, saturation, brightness): (u16, u8, u8)) -> Result<Self, Self::Error> {
+        Self::new(hue, saturation, brightness)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -396,5 +412,31 @@ mod tests {
         let green = color.with_hue(120).unwrap();
         assert_eq!(green.hue(), 120);
         assert_eq!(green.saturation(), 100);
+    }
+
+    #[test]
+    fn color_temperature_try_from() {
+        let ct: ColorTemperature = 250u16.try_into().unwrap();
+        assert_eq!(ct.value(), 250);
+
+        let result: Result<ColorTemperature, _> = 100u16.try_into();
+        assert!(result.is_err());
+
+        let result: Result<ColorTemperature, _> = 600u16.try_into();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn hsb_color_try_from() {
+        let color: HsbColor = (180u16, 50u8, 75u8).try_into().unwrap();
+        assert_eq!(color.hue(), 180);
+        assert_eq!(color.saturation(), 50);
+        assert_eq!(color.brightness(), 75);
+
+        let result: Result<HsbColor, _> = (361u16, 50u8, 50u8).try_into();
+        assert!(result.is_err());
+
+        let result: Result<HsbColor, _> = (180u16, 101u8, 50u8).try_into();
+        assert!(result.is_err());
     }
 }

@@ -60,10 +60,14 @@
 //! # }
 //! ```
 
+#[cfg(feature = "http")]
 mod http_builder;
+#[cfg(feature = "mqtt")]
 mod mqtt_builder;
 
+#[cfg(feature = "http")]
 pub use http_builder::HttpDeviceBuilder;
+#[cfg(feature = "mqtt")]
 pub use mqtt_builder::MqttDeviceBuilder;
 
 use std::sync::Arc;
@@ -74,7 +78,9 @@ use crate::command::{
     HsbColorCommand, PowerCommand, StartupFadeCommand, StatusCommand,
 };
 use crate::error::{DeviceError, Error};
-use crate::protocol::{CommandResponse, HttpClient, Protocol};
+#[cfg(feature = "http")]
+use crate::protocol::HttpClient;
+use crate::protocol::{CommandResponse, Protocol};
 use crate::response::{
     ColorTemperatureResponse, DimmerResponse, EnergyResponse, FadeResponse, FadeSpeedResponse,
     HsbColorResponse, PowerResponse, StartupFadeResponse, StatusResponse,
@@ -92,7 +98,21 @@ use crate::types::{ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerIndex, Po
 ///
 /// The type parameter `P` determines the underlying protocol:
 /// - `HttpClient` for HTTP devices (no subscriptions)
-/// - `MqttDeviceHandle` for MQTT devices (supports subscriptions)
+/// - `MqttClient` for MQTT devices (supports subscriptions)
+///
+/// # Thread Safety
+///
+/// `Device<P>` is `Send + Sync` when the protocol `P` is `Send + Sync`.
+/// Both `HttpClient` and `MqttClient` are `Send + Sync`, so devices can be
+/// safely shared across threads and used in async contexts with Tokio.
+///
+/// ```
+/// use tasmor_lib::Device;
+/// use tasmor_lib::protocol::HttpClient;
+///
+/// fn assert_send_sync<T: Send + Sync>() {}
+/// assert_send_sync::<Device<HttpClient>>();
+/// ```
 ///
 /// # Creating a Device
 ///
@@ -744,6 +764,7 @@ impl<P: Protocol> Device<P> {
 
 // ========== HTTP Device Entry Point ==========
 
+#[cfg(feature = "http")]
 impl Device<HttpClient> {
     /// Creates a builder for an HTTP-based device from a host string.
     ///
@@ -804,10 +825,14 @@ impl Device<HttpClient> {
 
 // ========== MQTT Device Subscriptions ==========
 
+#[cfg(feature = "mqtt")]
 use crate::protocol::MqttClient;
+#[cfg(feature = "mqtt")]
 use crate::state::StateChange;
+#[cfg(feature = "mqtt")]
 use crate::subscription::{EnergyData, Subscribable, SubscriptionId};
 
+#[cfg(feature = "mqtt")]
 impl Device<MqttClient> {
     /// Registers the device's callbacks with the MQTT client for message routing.
     ///
@@ -817,6 +842,7 @@ impl Device<MqttClient> {
     }
 }
 
+#[cfg(feature = "mqtt")]
 impl Subscribable for Device<MqttClient> {
     fn on_power_changed<F>(&self, callback: F) -> SubscriptionId
     where

@@ -40,13 +40,16 @@ tasmor_lib = "0.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
-### Optional Features
+### Feature Flags
 
-Enable `serde` for serialization support:
+Both HTTP and MQTT protocols are enabled by default. To reduce compile time and binary size, you can enable only the protocol you need:
 
 ```toml
-[dependencies]
-tasmor_lib = { version = "0.1", features = ["serde"] }
+# HTTP only (no MQTT dependencies)
+tasmor_lib = { version = "0.1", default-features = false, features = ["http"] }
+
+# MQTT only (no HTTP dependencies)
+tasmor_lib = { version = "0.1", default-features = false, features = ["mqtt"] }
 ```
 
 ## Quick Start
@@ -267,11 +270,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Dimmer level: {}", dimmer_resp.dimmer());
 
     // ColorTemperatureResponse
-    let ct_resp = device.set_color_temperature(153.try_into()?).await?;
+    let ct_resp = device.set_color_temperature(153u16.try_into()?).await?;
     println!("Color temp: {} mireds", ct_resp.color_temperature());
 
     // HsbColorResponse
-    let hsb_resp = device.set_hsb_color((180, 100, 100).try_into()?).await?;
+    let hsb_resp = device.set_hsb_color((180u16, 100u8, 100u8).try_into()?).await?;
     println!("HSB: {:?}", hsb_resp.hsb_color());
 
     Ok(())

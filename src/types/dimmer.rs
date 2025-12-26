@@ -35,8 +35,9 @@ use crate::error::ValueError;
 /// // Invalid values return error
 /// assert!(Dimmer::new(101).is_err());
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct Dimmer(u8);
 
 impl Dimmer {

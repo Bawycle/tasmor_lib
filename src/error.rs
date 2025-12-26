@@ -84,10 +84,12 @@ pub enum ValueError {
 #[derive(Debug, Error)]
 pub enum ProtocolError {
     /// HTTP request failed.
+    #[cfg(feature = "http")]
     #[error("HTTP request failed: {0}")]
     Http(#[from] reqwest::Error),
 
     /// MQTT connection or communication failed.
+    #[cfg(feature = "mqtt")]
     #[error("MQTT error: {0}")]
     Mqtt(#[from] rumqttc::ClientError),
 

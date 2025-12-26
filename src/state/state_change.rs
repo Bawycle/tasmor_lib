@@ -68,8 +68,7 @@ use crate::types::{ColorTemperature, Dimmer, HsbColor, PowerState, TasmotaDateTi
 ///
 /// let change = StateChange::Power { index: 1, state: PowerState::On };
 /// ```
-#[derive(Debug, Clone, PartialEq)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum StateChange {
     /// Power state changed for a specific relay.
     Power {

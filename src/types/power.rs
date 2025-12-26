@@ -28,8 +28,7 @@ use crate::error::ValueError;
 /// assert_eq!(off.as_str(), "OFF");
 /// assert_eq!(toggle.as_str(), "TOGGLE");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum PowerState {
     /// Power is off.
     Off,
@@ -117,8 +116,9 @@ impl From<bool> for PowerState {
 /// // Invalid index returns error
 /// assert!(PowerIndex::new(9).is_err());
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 pub struct PowerIndex(u8);
 
 impl PowerIndex {
@@ -183,6 +183,14 @@ impl fmt::Display for PowerIndex {
         } else {
             write!(f, "{}", self.0)
         }
+    }
+}
+
+impl TryFrom<u8> for PowerIndex {
+    type Error = ValueError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Self::new(value)
     }
 }
 
@@ -251,5 +259,14 @@ mod tests {
     fn power_index_display() {
         assert_eq!(PowerIndex::all().to_string(), "all");
         assert_eq!(PowerIndex::one().to_string(), "1");
+    }
+
+    #[test]
+    fn power_index_try_from() {
+        let idx: PowerIndex = 3u8.try_into().unwrap();
+        assert_eq!(idx.value(), 3);
+
+        let result: Result<PowerIndex, _> = 9u8.try_into();
+        assert!(result.is_err());
     }
 }

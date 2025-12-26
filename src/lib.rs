@@ -20,6 +20,23 @@
 //! - Generic (Module 18): Flexible GPIO configuration
 //! - Neo Coolcam (Module 49): Smart plugs with energy monitoring
 //!
+//! # Feature Flags
+//!
+//! This library supports optional features to reduce compile time and binary size:
+//!
+//! - `http` - Enables HTTP protocol support (enabled by default)
+//! - `mqtt` - Enables MQTT protocol support (enabled by default)
+//!
+//! Both features are enabled by default. To use only one protocol:
+//!
+//! ```toml
+//! # HTTP only
+//! tasmor_lib = { version = "0.1", default-features = false, features = ["http"] }
+//!
+//! # MQTT only
+//! tasmor_lib = { version = "0.1", default-features = false, features = ["mqtt"] }
+//! ```
+//!
 //! # Quick Start
 //!
 //! ## HTTP Device with Auto-Detection
@@ -207,14 +224,23 @@ pub use command::{
     ColorTemperatureCommand, Command, DimmerCommand, EnergyCommand, FadeCommand, FadeSpeedCommand,
     HsbColorCommand, PowerCommand, StartupFadeCommand, StateCommand, StatusCommand,
 };
-pub use device::{Device, HttpDeviceBuilder, MqttDeviceBuilder};
+pub use device::Device;
+#[cfg(feature = "http")]
+pub use device::HttpDeviceBuilder;
+#[cfg(feature = "mqtt")]
+pub use device::MqttDeviceBuilder;
 pub use error::{DeviceError, Error, ParseError, ProtocolError, Result, ValueError};
-pub use protocol::{HttpConfig, MqttBroker, MqttBrokerBuilder, MqttBrokerConfig, TopicRouter};
+#[cfg(feature = "http")]
+pub use protocol::HttpConfig;
+#[cfg(feature = "mqtt")]
+pub use protocol::{MqttBroker, MqttBrokerBuilder, MqttBrokerConfig, TopicRouter};
 pub use response::{
     ColorTemperatureResponse, DimmerResponse, EnergyResponse, FadeResponse, FadeSpeedResponse,
     HsbColorResponse, PowerResponse, StartupFadeResponse, StatusResponse,
 };
-pub use subscription::{CallbackRegistry, Subscribable, SubscriptionId};
+pub use subscription::CallbackRegistry;
+#[cfg(feature = "mqtt")]
+pub use subscription::{Subscribable, SubscriptionId};
 pub use types::{
     ColorTemperature, DateTimeParseError, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState,
     TasmotaDateTime,

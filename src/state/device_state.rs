@@ -69,8 +69,7 @@ use super::StateChange;
 /// state.set_power(1, PowerState::On);
 /// assert_eq!(state.power(1), Some(PowerState::On));
 /// ```
-#[derive(Debug, Clone, Default, PartialEq)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DeviceState {
     /// Power state for each relay (indexed 0-7 for POWER1-POWER8).
     power: [Option<PowerState>; 8],
