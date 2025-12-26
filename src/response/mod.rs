@@ -17,6 +17,9 @@
 //! | [`DimmerResponse`] | `Dimmer` | Brightness level (0-100) |
 //! | [`HsbColorResponse`] | `HSBColor` | Color in HSB format |
 //! | [`ColorTemperatureResponse`] | `CT` | White color temperature |
+//! | [`FadeResponse`] | `Fade` | Fade transition enable/disable |
+//! | [`FadeSpeedResponse`] | `Speed` | Fade transition speed (1-40) |
+//! | [`StartupFadeResponse`] | `SetOption91` | Fade at startup setting |
 //! | [`EnergyResponse`] | `Status 10` | Power consumption data |
 //! | [`StatusResponse`] | `Status 0` | Full device status |
 //!
@@ -40,12 +43,14 @@
 mod color;
 mod dimmer;
 mod energy;
+mod fade;
 mod power;
 mod status;
 
 pub use color::{ColorTemperatureResponse, HsbColorResponse};
 pub use dimmer::DimmerResponse;
 pub use energy::EnergyResponse;
+pub use fade::{FadeResponse, FadeSpeedResponse, StartupFadeResponse};
 pub use power::PowerResponse;
 pub use status::{
     StatusDeviceParameters, StatusFirmware, StatusMemory, StatusMqtt, StatusNetwork, StatusResponse,

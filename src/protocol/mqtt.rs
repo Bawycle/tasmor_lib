@@ -17,7 +17,8 @@ use tokio::sync::{Mutex, mpsc};
 
 use crate::command::Command;
 use crate::error::ProtocolError;
-use crate::protocol::{CommandResponse, Protocol};
+use crate::protocol::{CommandResponse, Protocol, TopicRouter};
+use crate::subscription::CallbackRegistry;
 
 /// MQTT client for communicating with Tasmota devices.
 ///
@@ -44,6 +45,7 @@ pub struct MqttClient {
     client: AsyncClient,
     topic: String,
     response_rx: Arc<Mutex<mpsc::Receiver<String>>>,
+    router: Arc<TopicRouter>,
 }
 
 impl MqttClient {
@@ -80,17 +82,26 @@ impl MqttClient {
         // Create channel for receiving responses
         let (response_tx, response_rx) = mpsc::channel::<String>(10);
 
-        // Subscribe to response topics
+        // Create router for dispatching messages to callbacks
+        let router = Arc::new(TopicRouter::new());
+
+        // Subscribe to response and telemetry topics
         let stat_topic = format!("stat/{device_topic}/+");
+        let tele_topic = format!("tele/{device_topic}/+");
         client
             .subscribe(&stat_topic, QoS::AtLeastOnce)
             .await
             .map_err(ProtocolError::Mqtt)?;
+        client
+            .subscribe(&tele_topic, QoS::AtLeastOnce)
+            .await
+            .map_err(ProtocolError::Mqtt)?;
 
-        // Spawn event loop handler
+        // Spawn event loop handler with router
         let topic_clone = device_topic.clone();
+        let router_clone = Arc::clone(&router);
         tokio::spawn(async move {
-            handle_mqtt_events(event_loop, topic_clone, response_tx).await;
+            handle_mqtt_events(event_loop, topic_clone, response_tx, router_clone).await;
         });
 
         // Give time for connection establishment and subscription acknowledgment
@@ -103,6 +114,7 @@ impl MqttClient {
             client,
             topic: device_topic,
             response_rx: Arc::new(Mutex::new(response_rx)),
+            router,
         })
     }
 
@@ -110,6 +122,14 @@ impl MqttClient {
     #[must_use]
     pub fn topic(&self) -> &str {
         &self.topic
+    }
+
+    /// Registers a callback registry for receiving state updates.
+    ///
+    /// This should be called after creating the device to enable
+    /// callback dispatch for incoming MQTT messages.
+    pub fn register_callbacks(&self, callbacks: &Arc<CallbackRegistry>) {
+        self.router.register(&self.topic, callbacks);
     }
 
     /// Publishes a message to the command topic.
@@ -201,6 +221,7 @@ async fn handle_mqtt_events(
     mut event_loop: EventLoop,
     topic: String,
     response_tx: mpsc::Sender<String>,
+    router: Arc<TopicRouter>,
 ) {
     use rumqttc::{Event, Packet};
 
@@ -213,25 +234,45 @@ async fn handle_mqtt_events(
                 tracing::debug!(?suback, "MQTT subscription acknowledged");
             }
             Ok(Event::Incoming(Packet::Publish(publish))) => {
-                // Check if this is a response for our device
+                let Ok(payload) = String::from_utf8(publish.payload.to_vec()) else {
+                    continue;
+                };
+
+                // Route the message to callbacks
+                router.route(&publish.topic, &payload);
+
+                // Also handle command responses for the response channel
                 // Tasmota sends responses on:
                 // - stat/<topic>/RESULT (JSON) for most commands
                 // - stat/<topic>/STATUS<n> (JSON) for Status commands
-                // - stat/<topic>/<COMMAND> (plain text) which we ignore
+                // - stat/<topic>/POWER[n] (plain text) for power commands
+                //
+                // NOTE: We intentionally do NOT send POWER responses to the response channel.
+                // POWER responses arrive asynchronously and can interfere with other commands
+                // (e.g., when waiting for STATUS10, a POWER response might arrive first).
+                // POWER state changes are handled via the topic router callbacks instead.
                 let stat_prefix = format!("stat/{topic}/");
                 if publish.topic.starts_with(&stat_prefix) {
                     let suffix = &publish.topic[stat_prefix.len()..];
-                    // Accept RESULT and STATUS* responses (both are JSON)
+
+                    // Check for JSON responses (RESULT or STATUS*)
                     let is_json_response = suffix == "RESULT" || suffix.starts_with("STATUS");
-                    if is_json_response
-                        && let Ok(payload) = String::from_utf8(publish.payload.to_vec())
-                    {
+                    if is_json_response {
                         tracing::debug!(
                             topic = %publish.topic,
                             payload = %payload,
-                            "Received MQTT message"
+                            "Received MQTT response"
                         );
                         let _ = response_tx.send(payload).await;
+                    }
+                    // Log POWER responses but don't send to response channel
+                    // (they are already routed to callbacks via the topic router)
+                    else if suffix == "POWER" || suffix.starts_with("POWER") {
+                        tracing::debug!(
+                            topic = %publish.topic,
+                            payload = %payload,
+                            "Received MQTT power response (handled via callbacks)"
+                        );
                     }
                 }
             }
@@ -356,17 +397,26 @@ impl MqttClientBuilder {
         // Create channel for receiving responses
         let (response_tx, response_rx) = mpsc::channel::<String>(10);
 
-        // Subscribe to response topics
+        // Create router for dispatching messages to callbacks
+        let router = Arc::new(TopicRouter::new());
+
+        // Subscribe to response and telemetry topics
         let stat_topic = format!("stat/{device_topic}/+");
+        let tele_topic = format!("tele/{device_topic}/+");
         client
             .subscribe(&stat_topic, QoS::AtLeastOnce)
             .await
             .map_err(ProtocolError::Mqtt)?;
+        client
+            .subscribe(&tele_topic, QoS::AtLeastOnce)
+            .await
+            .map_err(ProtocolError::Mqtt)?;
 
-        // Spawn event loop handler
+        // Spawn event loop handler with router
         let topic_clone = device_topic.clone();
+        let router_clone = Arc::clone(&router);
         tokio::spawn(async move {
-            handle_mqtt_events(event_loop, topic_clone, response_tx).await;
+            handle_mqtt_events(event_loop, topic_clone, response_tx, router_clone).await;
         });
 
         // Give time for connection establishment and subscription acknowledgment
@@ -379,6 +429,7 @@ impl MqttClientBuilder {
             client,
             topic: device_topic,
             response_rx: Arc::new(Mutex::new(response_rx)),
+            router,
         })
     }
 }

@@ -22,12 +22,16 @@
 mod broker_pool;
 mod http;
 mod mqtt;
+mod mqtt_broker;
 mod mqtt_pooled;
+mod topic_router;
 
 pub use broker_pool::BrokerPool;
-pub use http::{HttpClient, HttpClientBuilder};
+pub use http::{HttpClient, HttpClientBuilder, HttpConfig};
 pub use mqtt::{MqttClient, MqttClientBuilder};
+pub use mqtt_broker::{MqttBroker, MqttBrokerBuilder, MqttBrokerConfig};
 pub use mqtt_pooled::PooledMqttClient;
+pub use topic_router::TopicRouter;
 
 use crate::command::Command;
 use crate::error::ProtocolError;

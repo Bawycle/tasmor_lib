@@ -13,6 +13,176 @@ use crate::command::Command;
 use crate::error::ProtocolError;
 use crate::protocol::{CommandResponse, Protocol};
 
+// ============================================================================
+// HttpConfig - Configuration for HTTP devices (new device-centric API)
+// ============================================================================
+
+/// Configuration for an HTTP Tasmota device.
+///
+/// This is a simple configuration struct that holds connection parameters.
+/// HTTP is stateless - each command is an independent request.
+/// No persistent connection, no event subscriptions.
+///
+/// # Examples
+///
+/// ```
+/// use tasmor_lib::protocol::HttpConfig;
+/// use std::time::Duration;
+///
+/// // Simple configuration
+/// let config = HttpConfig::new("192.168.1.100");
+///
+/// // With all options
+/// let config = HttpConfig::new("192.168.1.100")
+///     .with_port(8080)
+///     .with_https()
+///     .with_credentials("admin", "password")
+///     .with_timeout(Duration::from_secs(5));
+/// ```
+#[derive(Debug, Clone)]
+pub struct HttpConfig {
+    host: String,
+    port: u16,
+    use_https: bool,
+    credentials: Option<(String, String)>,
+    timeout: Duration,
+}
+
+impl HttpConfig {
+    /// Default HTTP port.
+    pub const DEFAULT_PORT: u16 = 80;
+    /// Default HTTPS port.
+    pub const DEFAULT_HTTPS_PORT: u16 = 443;
+    /// Default request timeout.
+    pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
+
+    /// Creates a new HTTP configuration for the specified host.
+    ///
+    /// # Arguments
+    ///
+    /// * `host` - The hostname or IP address of the Tasmota device
+    #[must_use]
+    pub fn new(host: impl Into<String>) -> Self {
+        Self {
+            host: host.into(),
+            port: Self::DEFAULT_PORT,
+            use_https: false,
+            credentials: None,
+            timeout: Self::DEFAULT_TIMEOUT,
+        }
+    }
+
+    /// Sets a custom port.
+    #[must_use]
+    pub fn with_port(mut self, port: u16) -> Self {
+        self.port = port;
+        self
+    }
+
+    /// Enables HTTPS.
+    ///
+    /// If port hasn't been explicitly set, it will be changed to 443.
+    #[must_use]
+    pub fn with_https(mut self) -> Self {
+        self.use_https = true;
+        if self.port == Self::DEFAULT_PORT {
+            self.port = Self::DEFAULT_HTTPS_PORT;
+        }
+        self
+    }
+
+    /// Sets authentication credentials.
+    #[must_use]
+    pub fn with_credentials(
+        mut self,
+        username: impl Into<String>,
+        password: impl Into<String>,
+    ) -> Self {
+        self.credentials = Some((username.into(), password.into()));
+        self
+    }
+
+    /// Sets the request timeout.
+    #[must_use]
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    /// Returns the host.
+    #[must_use]
+    pub fn host(&self) -> &str {
+        &self.host
+    }
+
+    /// Returns the port.
+    #[must_use]
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    /// Returns whether HTTPS is enabled.
+    #[must_use]
+    pub fn use_https(&self) -> bool {
+        self.use_https
+    }
+
+    /// Returns the credentials if set.
+    #[must_use]
+    pub fn credentials(&self) -> Option<(&str, &str)> {
+        self.credentials
+            .as_ref()
+            .map(|(u, p)| (u.as_str(), p.as_str()))
+    }
+
+    /// Returns the timeout.
+    #[must_use]
+    pub fn timeout(&self) -> Duration {
+        self.timeout
+    }
+
+    /// Builds the base URL from this configuration.
+    #[must_use]
+    pub fn base_url(&self) -> String {
+        let scheme = if self.use_https { "https" } else { "http" };
+        let port_suffix =
+            if (self.use_https && self.port == 443) || (!self.use_https && self.port == 80) {
+                String::new()
+            } else {
+                format!(":{}", self.port)
+            };
+        format!("{scheme}://{}{port_suffix}", self.host)
+    }
+
+    /// Creates an `HttpClient` from this configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the HTTP client cannot be created.
+    pub fn into_client(self) -> Result<HttpClient, ProtocolError> {
+        let base_url = self.base_url();
+
+        let client = Client::builder()
+            .timeout(self.timeout)
+            .build()
+            .map_err(ProtocolError::Http)?;
+
+        let credentials = self
+            .credentials
+            .map(|(username, password)| Credentials { username, password });
+
+        Ok(HttpClient {
+            base_url,
+            client,
+            credentials,
+        })
+    }
+}
+
+// ============================================================================
+// HttpClient - Internal HTTP client implementation
+// ============================================================================
+
 /// HTTP client for communicating with Tasmota devices.
 ///
 /// Uses the Tasmota web API endpoint `/cm?cmnd=<command>` for sending commands.
@@ -274,5 +444,103 @@ mod tests {
             .unwrap();
 
         assert!(client.credentials.is_some());
+    }
+
+    // =========================================================================
+    // HttpConfig tests
+    // =========================================================================
+
+    #[test]
+    fn http_config_default_values() {
+        let config = HttpConfig::new("192.168.1.100");
+        assert_eq!(config.host(), "192.168.1.100");
+        assert_eq!(config.port(), 80);
+        assert!(!config.use_https());
+        assert!(config.credentials().is_none());
+        assert_eq!(config.timeout(), Duration::from_secs(10));
+    }
+
+    #[test]
+    fn http_config_with_port() {
+        let config = HttpConfig::new("192.168.1.100").with_port(8080);
+        assert_eq!(config.port(), 8080);
+    }
+
+    #[test]
+    fn http_config_with_https() {
+        let config = HttpConfig::new("192.168.1.100").with_https();
+        assert!(config.use_https());
+        assert_eq!(config.port(), 443); // Port should change to 443
+    }
+
+    #[test]
+    fn http_config_with_https_custom_port() {
+        let config = HttpConfig::new("192.168.1.100")
+            .with_port(8443)
+            .with_https();
+        assert!(config.use_https());
+        assert_eq!(config.port(), 8443); // Port should stay as explicitly set
+    }
+
+    #[test]
+    fn http_config_with_credentials() {
+        let config = HttpConfig::new("192.168.1.100").with_credentials("admin", "secret");
+        let creds = config.credentials().unwrap();
+        assert_eq!(creds.0, "admin");
+        assert_eq!(creds.1, "secret");
+    }
+
+    #[test]
+    fn http_config_with_timeout() {
+        let config = HttpConfig::new("192.168.1.100").with_timeout(Duration::from_secs(30));
+        assert_eq!(config.timeout(), Duration::from_secs(30));
+    }
+
+    #[test]
+    fn http_config_base_url_http() {
+        let config = HttpConfig::new("192.168.1.100");
+        assert_eq!(config.base_url(), "http://192.168.1.100");
+    }
+
+    #[test]
+    fn http_config_base_url_http_custom_port() {
+        let config = HttpConfig::new("192.168.1.100").with_port(8080);
+        assert_eq!(config.base_url(), "http://192.168.1.100:8080");
+    }
+
+    #[test]
+    fn http_config_base_url_https() {
+        let config = HttpConfig::new("192.168.1.100").with_https();
+        assert_eq!(config.base_url(), "https://192.168.1.100");
+    }
+
+    #[test]
+    fn http_config_base_url_https_custom_port() {
+        let config = HttpConfig::new("192.168.1.100")
+            .with_port(8443)
+            .with_https();
+        assert_eq!(config.base_url(), "https://192.168.1.100:8443");
+    }
+
+    #[test]
+    fn http_config_into_client() {
+        let config = HttpConfig::new("192.168.1.100").with_credentials("user", "pass");
+        let client = config.into_client().unwrap();
+        assert_eq!(client.base_url(), "http://192.168.1.100");
+        assert!(client.credentials.is_some());
+    }
+
+    #[test]
+    fn http_config_builder_chain() {
+        let config = HttpConfig::new("192.168.1.100")
+            .with_port(8080)
+            .with_credentials("admin", "password")
+            .with_timeout(Duration::from_secs(5));
+
+        assert_eq!(config.host(), "192.168.1.100");
+        assert_eq!(config.port(), 8080);
+        assert!(!config.use_https());
+        assert!(config.credentials().is_some());
+        assert_eq!(config.timeout(), Duration::from_secs(5));
     }
 }

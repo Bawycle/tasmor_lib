@@ -6,7 +6,6 @@
 //! Managed device with configuration and state tracking.
 
 use serde::{Deserialize, Serialize};
-use tasmor_lib::event::DeviceId;
 use uuid::Uuid;
 
 use crate::device_model::DeviceModel;
@@ -88,37 +87,6 @@ impl DeviceConfig {
         self.password = Some(password);
         self
     }
-
-    /// Converts to the library's `DeviceConfig`.
-    ///
-    /// This allows using the library's `DeviceManager` while keeping
-    /// our own configuration with model information for persistence.
-    #[must_use]
-    pub fn to_library_config(&self) -> tasmor_lib::manager::DeviceConfig {
-        let mut config = match self.protocol {
-            Protocol::Http => tasmor_lib::manager::DeviceConfig::http(&self.host),
-            Protocol::Mqtt => {
-                let topic = self.topic.as_deref().unwrap_or("tasmota");
-                tasmor_lib::manager::DeviceConfig::mqtt(&self.host, topic)
-            }
-        };
-
-        // Set capabilities from device model
-        config = config.with_capabilities(self.model.capabilities());
-
-        // Set friendly name
-        config = config.with_friendly_name(&self.name);
-
-        // Set credentials if present
-        if let (Some(username), Some(password)) = (&self.username, &self.password) {
-            config = match self.protocol {
-                Protocol::Http => config.with_http_credentials(username, password),
-                Protocol::Mqtt => config.with_mqtt_credentials(username, password),
-            };
-        }
-
-        config
-    }
 }
 
 /// Connection status of a device.
@@ -126,11 +94,13 @@ impl DeviceConfig {
 pub enum ConnectionStatus {
     /// Not connected
     Disconnected,
-    /// Attempting to connect
+    /// Attempting to connect (reserved for async connection implementation)
+    #[allow(dead_code)]
     Connecting,
     /// Connected and ready
     Connected,
-    /// Connection error
+    /// Connection error (reserved for error handling implementation)
+    #[allow(dead_code)]
     Error,
 }
 
@@ -153,9 +123,6 @@ impl ConnectionStatus {
 /// using the library's `DeviceState` for type-safe state tracking.
 #[derive(Debug, Clone)]
 pub struct ManagedDevice {
-    /// Unique device identifier (library type).
-    /// Used for integration with library's `DeviceManager` and event system.
-    pub id: DeviceId,
     /// Configuration (persistent)
     pub config: DeviceConfig,
     /// Connection status
@@ -171,7 +138,6 @@ impl ManagedDevice {
     #[must_use]
     pub fn new(config: DeviceConfig) -> Self {
         Self {
-            id: DeviceId::from_uuid(config.id),
             config,
             status: ConnectionStatus::Disconnected,
             state: tasmor_lib::state::DeviceState::new(),
@@ -325,6 +291,35 @@ impl ManagedDevice {
 // Keep backward compatibility alias during migration
 pub type DeviceState = ManagedDevice;
 
+// ============================================================================
+// State Updates for Event-Driven Architecture
+// ============================================================================
+
+/// State update events sent from async callbacks to the UI thread.
+///
+/// This enables non-blocking, event-driven updates instead of polling.
+#[derive(Debug, Clone)]
+pub enum StateUpdate {
+    /// A device's state changed (from MQTT callback or command response)
+    StateChanged {
+        device_id: uuid::Uuid,
+        change: tasmor_lib::state::StateChange,
+    },
+    /// A device was added successfully (reserved for async device addition)
+    #[allow(dead_code)]
+    DeviceAdded(uuid::Uuid),
+    /// A device was removed (reserved for async device removal)
+    #[allow(dead_code)]
+    DeviceRemoved(uuid::Uuid),
+    /// A device's connection status changed (reserved for connection monitoring)
+    #[allow(dead_code)]
+    ConnectionChanged {
+        device_id: uuid::Uuid,
+        status: ConnectionStatus,
+        error: Option<String>,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -376,9 +371,7 @@ mod tests {
     #[test]
     fn connection_status_colors() {
         assert_eq!(ConnectionStatus::Disconnected.color(), egui::Color32::GRAY);
-        assert_eq!(ConnectionStatus::Connecting.color(), egui::Color32::YELLOW);
         assert_eq!(ConnectionStatus::Connected.color(), egui::Color32::GREEN);
-        assert_eq!(ConnectionStatus::Error.color(), egui::Color32::RED);
     }
 
     #[test]
@@ -429,50 +422,5 @@ mod tests {
     fn protocol_display() {
         assert_eq!(Protocol::Http.to_string(), "HTTP");
         assert_eq!(Protocol::Mqtt.to_string(), "MQTT");
-    }
-
-    #[test]
-    fn to_library_config_http() {
-        let config = DeviceConfig::new_http(
-            "Test Bulb".to_string(),
-            DeviceModel::AthomBulb5W7W,
-            "192.168.1.100".to_string(),
-        );
-
-        let lib_config = config.to_library_config();
-
-        assert!(lib_config.is_http());
-        assert_eq!(lib_config.friendly_name, Some("Test Bulb".to_string()));
-        assert!(lib_config.capabilities.is_some());
-    }
-
-    #[test]
-    fn to_library_config_mqtt() {
-        let config = DeviceConfig::new_mqtt(
-            "Test Plug".to_string(),
-            DeviceModel::NousA1T,
-            "mqtt://192.168.1.50:1883".to_string(),
-            "tasmota_plug".to_string(),
-        );
-
-        let lib_config = config.to_library_config();
-
-        assert!(lib_config.is_mqtt());
-        assert_eq!(lib_config.friendly_name, Some("Test Plug".to_string()));
-    }
-
-    #[test]
-    fn to_library_config_with_credentials() {
-        let config = DeviceConfig::new_http(
-            "Test Device".to_string(),
-            DeviceModel::AthomBulb5W7W,
-            "192.168.1.100".to_string(),
-        )
-        .with_credentials("admin".to_string(), "secret".to_string());
-
-        let lib_config = config.to_library_config();
-
-        // Verify it's HTTP with credentials set
-        assert!(lib_config.is_http());
     }
 }

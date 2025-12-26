@@ -44,13 +44,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_color_temperature_control()
         .build();
 
-    let device = Device::mqtt(broker, topic)
+    let (device, initial_state) = Device::mqtt(broker, topic)
         .with_credentials(username, password)
         .with_capabilities(capabilities)
         .build_without_probe()
         .await?;
 
-    println!("Connected! Turning on the bulb...");
+    println!("Connected!");
+    if let Some(power) = initial_state.power(1) {
+        println!("Initial power state: {power:?}");
+    }
+    println!("Turning on the bulb...");
     match device.power_on().await {
         Ok(resp) => println!("Bulb ON: {:?}", resp),
         Err(e) => println!("Power ON sent (response parse error: {e})"),

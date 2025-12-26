@@ -3104,6 +3104,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "mockforge-mqtt",
+ "parking_lot",
  "reqwest",
  "rumqttc",
  "serde",
