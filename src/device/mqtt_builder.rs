@@ -96,15 +96,15 @@ impl MqttDeviceBuilder {
     pub async fn build(self) -> Result<Device<MqttClient>, Error> {
         let client = self.create_client().await?;
 
-        // Auto-detect capabilities if not set
-        let capabilities = if let Some(caps) = self.capabilities {
-            caps
-        } else {
-            let cmd = StatusCommand::all();
-            let response = client.send_command(&cmd).await.map_err(Error::Protocol)?;
-            let status: StatusResponse = response.parse().map_err(Error::Parse)?;
-            Capabilities::from_status(&status)
-        };
+        // Query device status for capabilities
+        let cmd = StatusCommand::all();
+        let response = client.send_command(&cmd).await.map_err(Error::Protocol)?;
+        let status: StatusResponse = response.parse().map_err(Error::Parse)?;
+
+        // Use provided capabilities or auto-detect from status
+        let capabilities = self
+            .capabilities
+            .unwrap_or_else(|| Capabilities::from_status(&status));
 
         let device = Device::new(client, capabilities);
 

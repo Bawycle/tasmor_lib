@@ -291,6 +291,35 @@ impl ManagedDevice {
 // Keep backward compatibility alias during migration
 pub type DeviceState = ManagedDevice;
 
+// ============================================================================
+// State Updates for Event-Driven Architecture
+// ============================================================================
+
+/// State update events sent from async callbacks to the UI thread.
+///
+/// This enables non-blocking, event-driven updates instead of polling.
+#[derive(Debug, Clone)]
+pub enum StateUpdate {
+    /// A device's state changed (from MQTT callback or command response)
+    StateChanged {
+        device_id: uuid::Uuid,
+        change: tasmor_lib::state::StateChange,
+    },
+    /// A device was added successfully (reserved for async device addition)
+    #[allow(dead_code)]
+    DeviceAdded(uuid::Uuid),
+    /// A device was removed (reserved for async device removal)
+    #[allow(dead_code)]
+    DeviceRemoved(uuid::Uuid),
+    /// A device's connection status changed (reserved for connection monitoring)
+    #[allow(dead_code)]
+    ConnectionChanged {
+        device_id: uuid::Uuid,
+        status: ConnectionStatus,
+        error: Option<String>,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

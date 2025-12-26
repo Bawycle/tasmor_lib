@@ -6,17 +6,20 @@
 //! Device manager using the library's device-centric API.
 //!
 //! This module provides device management using individual `Device` instances.
-//! State updates are handled through explicit status queries.
+//! MQTT devices receive real-time state updates via callbacks.
 
 use std::collections::HashMap;
+use std::sync::mpsc;
 use std::sync::Arc;
 
+use eframe::egui;
 use tasmor_lib::protocol::{HttpClient, MqttClient};
-use tasmor_lib::{Device, PowerState};
+use tasmor_lib::subscription::Subscribable;
+use tasmor_lib::Device;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::device_config::{ConnectionStatus, DeviceConfig, ManagedDevice, Protocol};
+use crate::device_config::{ConnectionStatus, DeviceConfig, ManagedDevice, Protocol, StateUpdate};
 
 /// Wrapper for different device types.
 enum DeviceHandle {
@@ -35,18 +38,29 @@ struct DeviceEntry {
 /// Manager for Tasmota devices using the library's device-centric API.
 ///
 /// This manager creates and stores individual devices directly.
-/// State updates are refreshed through explicit status queries.
+/// State updates are sent via channel for event-driven UI updates.
 pub struct DeviceManager {
     /// Mapping from config ID to device entry
     devices: Arc<RwLock<HashMap<Uuid, DeviceEntry>>>,
+    /// Channel sender for state updates to the UI
+    update_tx: mpsc::Sender<StateUpdate>,
+    /// Egui context for triggering repaints
+    egui_ctx: egui::Context,
 }
 
 impl DeviceManager {
-    /// Creates a new device manager.
+    /// Creates a new device manager with a channel for state updates.
+    ///
+    /// # Arguments
+    ///
+    /// * `update_tx` - Channel sender for state updates to the UI thread
+    /// * `egui_ctx` - Egui context for triggering repaints when state changes
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(update_tx: mpsc::Sender<StateUpdate>, egui_ctx: egui::Context) -> Self {
         Self {
             devices: Arc::new(RwLock::new(HashMap::new())),
+            update_tx,
+            egui_ctx,
         }
     }
 
@@ -75,9 +89,10 @@ impl DeviceManager {
     /// Returns an error if the device creation fails.
     pub async fn add_device(&self, config: DeviceConfig) -> Result<(), String> {
         let config_id = config.id;
+        let protocol = config.protocol;
         let capabilities = config.model.capabilities();
 
-        let handle = match config.protocol {
+        let handle = match protocol {
             Protocol::Http => {
                 let mut builder = Device::http(&config.host).with_capabilities(capabilities);
 
@@ -100,6 +115,42 @@ impl DeviceManager {
                     .build_without_probe()
                     .await
                     .map_err(|e| e.to_string())?;
+
+                // Set up callback to receive state changes from MQTT
+                let devices_clone = Arc::clone(&self.devices);
+                let update_tx = self.update_tx.clone();
+                let egui_ctx = self.egui_ctx.clone();
+                device.on_state_changed(move |change| {
+                    // Clone change for the async task
+                    let change = change.clone();
+                    let devices = Arc::clone(&devices_clone);
+                    let update_tx = update_tx.clone();
+                    let egui_ctx = egui_ctx.clone();
+
+                    // Spawn async task to update state without blocking the callback
+                    tokio::spawn(async move {
+                        let mut devices = devices.write().await;
+                        if let Some(entry) = devices.get_mut(&config_id) {
+                            if entry.managed.apply_state_change(&change) {
+                                tracing::debug!(
+                                    device_id = %config_id,
+                                    ?change,
+                                    "Applied state change from MQTT callback"
+                                );
+
+                                // Send update to UI thread via channel
+                                let _ = update_tx.send(StateUpdate::StateChanged {
+                                    device_id: config_id,
+                                    change: change.clone(),
+                                });
+
+                                // Request UI repaint
+                                egui_ctx.request_repaint();
+                            }
+                        }
+                    });
+                });
+
                 DeviceHandle::Mqtt(device)
             }
         };
@@ -110,6 +161,18 @@ impl DeviceManager {
 
         let entry = DeviceEntry { handle, managed };
         self.devices.write().await.insert(config_id, entry);
+
+        // Query initial status for MQTT devices
+        // This will trigger a response that updates the state via callbacks
+        if protocol == Protocol::Mqtt {
+            if let Err(e) = self.query_status(config_id).await {
+                tracing::warn!(
+                    device_id = %config_id,
+                    error = %e,
+                    "Failed to query initial status for MQTT device"
+                );
+            }
+        }
 
         Ok(())
     }
@@ -157,15 +220,25 @@ impl DeviceManager {
 
     /// Toggles the power state.
     pub async fn toggle_power(&self, config_id: Uuid) -> Result<(), String> {
-        let devices = self.devices.read().await;
-        let entry = devices.get(&config_id).ok_or("Device not found")?;
+        let response = {
+            let devices = self.devices.read().await;
+            let entry = devices.get(&config_id).ok_or("Device not found")?;
 
-        match &entry.handle {
-            DeviceHandle::Http(device) => {
-                device.power_toggle().await.map_err(|e| e.to_string())?;
+            match &entry.handle {
+                DeviceHandle::Http(device) => {
+                    device.power_toggle().await.map_err(|e| e.to_string())
+                }
+                DeviceHandle::Mqtt(device) => {
+                    device.power_toggle().await.map_err(|e| e.to_string())
+                }
             }
-            DeviceHandle::Mqtt(device) => {
-                device.power_toggle().await.map_err(|e| e.to_string())?;
+        }?;
+
+        // Update local state from the response
+        let mut devices = self.devices.write().await;
+        if let Some(entry) = devices.get_mut(&config_id) {
+            if let Ok(Some(power_state)) = response.power_state(1) {
+                entry.managed.state.set_power(1, power_state);
             }
         }
 
@@ -174,24 +247,21 @@ impl DeviceManager {
 
     /// Turns the power on.
     pub async fn power_on(&self, config_id: Uuid) -> Result<(), String> {
-        let devices = self.devices.read().await;
-        let entry = devices.get(&config_id).ok_or("Device not found")?;
+        let response = {
+            let devices = self.devices.read().await;
+            let entry = devices.get(&config_id).ok_or("Device not found")?;
 
-        match &entry.handle {
-            DeviceHandle::Http(device) => {
-                device.power_on().await.map_err(|e| e.to_string())?;
+            match &entry.handle {
+                DeviceHandle::Http(device) => device.power_on().await.map_err(|e| e.to_string()),
+                DeviceHandle::Mqtt(device) => device.power_on().await.map_err(|e| e.to_string()),
             }
-            DeviceHandle::Mqtt(device) => {
-                device.power_on().await.map_err(|e| e.to_string())?;
-            }
-        }
+        }?;
 
-        // Update local state for HTTP devices
-        drop(devices);
+        // Update local state from the response
         let mut devices = self.devices.write().await;
         if let Some(entry) = devices.get_mut(&config_id) {
-            if matches!(entry.handle, DeviceHandle::Http(_)) {
-                entry.managed.state.set_power(1, PowerState::On);
+            if let Ok(Some(power_state)) = response.power_state(1) {
+                entry.managed.state.set_power(1, power_state);
             }
         }
 
@@ -200,24 +270,21 @@ impl DeviceManager {
 
     /// Turns the power off.
     pub async fn power_off(&self, config_id: Uuid) -> Result<(), String> {
-        let devices = self.devices.read().await;
-        let entry = devices.get(&config_id).ok_or("Device not found")?;
+        let response = {
+            let devices = self.devices.read().await;
+            let entry = devices.get(&config_id).ok_or("Device not found")?;
 
-        match &entry.handle {
-            DeviceHandle::Http(device) => {
-                device.power_off().await.map_err(|e| e.to_string())?;
+            match &entry.handle {
+                DeviceHandle::Http(device) => device.power_off().await.map_err(|e| e.to_string()),
+                DeviceHandle::Mqtt(device) => device.power_off().await.map_err(|e| e.to_string()),
             }
-            DeviceHandle::Mqtt(device) => {
-                device.power_off().await.map_err(|e| e.to_string())?;
-            }
-        }
+        }?;
 
-        // Update local state for HTTP devices
-        drop(devices);
+        // Update local state from the response
         let mut devices = self.devices.write().await;
         if let Some(entry) = devices.get_mut(&config_id) {
-            if matches!(entry.handle, DeviceHandle::Http(_)) {
-                entry.managed.state.set_power(1, PowerState::Off);
+            if let Ok(Some(power_state)) = response.power_state(1) {
+                entry.managed.state.set_power(1, power_state);
             }
         }
 
@@ -419,27 +486,28 @@ impl DeviceManager {
     }
 }
 
-impl Default for DeviceManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::device_model::DeviceModel;
 
+    /// Creates a test device manager with mock channel and context.
+    fn create_test_manager() -> (DeviceManager, mpsc::Receiver<StateUpdate>) {
+        let (tx, rx) = mpsc::channel();
+        let ctx = egui::Context::default();
+        (DeviceManager::new(tx, ctx), rx)
+    }
+
     #[tokio::test]
     async fn create_manager() {
-        let manager = DeviceManager::new();
+        let (manager, _rx) = create_test_manager();
         let devices = manager.devices().await;
         assert!(devices.is_empty());
     }
 
     #[tokio::test]
     async fn add_http_device() {
-        let manager = DeviceManager::new();
+        let (manager, _rx) = create_test_manager();
 
         let config = DeviceConfig::new_http(
             "Test Bulb".to_string(),
@@ -457,7 +525,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_device() {
-        let manager = DeviceManager::new();
+        let (manager, _rx) = create_test_manager();
 
         let config = DeviceConfig::new_http(
             "Test Bulb".to_string(),

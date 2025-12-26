@@ -18,11 +18,12 @@ mod persistence;
 mod ui;
 
 use std::collections::HashMap;
+use std::sync::mpsc;
 
 use eframe::egui;
 use uuid::Uuid;
 
-use device_config::{DeviceConfig, DeviceState, Protocol};
+use device_config::{DeviceConfig, DeviceState, Protocol, StateUpdate};
 use device_manager::DeviceManager;
 use persistence::AppConfig;
 use ui::{
@@ -35,8 +36,10 @@ struct TasmotaSupervisor {
     device_manager: DeviceManager,
     /// Persisted application configuration
     app_config: AppConfig,
-    /// List of devices for UI display
-    devices: Vec<DeviceState>,
+    /// Local device state for UI display (keyed by device UUID)
+    devices: HashMap<Uuid, DeviceState>,
+    /// Channel receiver for state updates from async callbacks
+    update_rx: mpsc::Receiver<StateUpdate>,
     /// Console logs for HTTP devices (keyed by device UUID)
     console_logs: HashMap<Uuid, ConsoleLog>,
     /// Whether the add device dialog is open
@@ -51,8 +54,12 @@ struct TasmotaSupervisor {
 
 impl TasmotaSupervisor {
     /// Creates a new application instance.
-    fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        let device_manager = DeviceManager::new();
+    fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        // Create channel for state updates from async callbacks
+        let (update_tx, update_rx) = mpsc::channel();
+
+        // Create device manager with channel and egui context
+        let device_manager = DeviceManager::new(update_tx, cc.egui_ctx.clone());
         let app_config = AppConfig::load();
 
         let rt = tokio::runtime::Handle::current();
@@ -64,18 +71,60 @@ impl TasmotaSupervisor {
             }
         }
 
-        // Get initial device list
-        let devices = rt.block_on(device_manager.devices());
+        // Get initial device list as HashMap
+        let devices: HashMap<Uuid, DeviceState> = rt
+            .block_on(device_manager.devices())
+            .into_iter()
+            .map(|d| (d.config.id, d))
+            .collect();
 
         Self {
             device_manager,
             app_config,
             devices,
+            update_rx,
             console_logs: HashMap::new(),
             show_add_dialog: false,
             add_dialog_state: AddDeviceDialogState::new(),
             edit_dialog_state: None,
             error_message: None,
+        }
+    }
+
+    /// Processes pending state updates from the channel (non-blocking).
+    fn process_state_updates(&mut self) {
+        // Drain all pending updates from the channel
+        while let Ok(update) = self.update_rx.try_recv() {
+            match update {
+                StateUpdate::StateChanged { device_id, change } => {
+                    if let Some(device) = self.devices.get_mut(&device_id) {
+                        device.state.apply(&change);
+                        tracing::trace!(
+                            device_id = %device_id,
+                            ?change,
+                            "Applied state change to local UI state"
+                        );
+                    }
+                }
+                StateUpdate::DeviceAdded(device_id) => {
+                    tracing::debug!(device_id = %device_id, "Device added event received");
+                    // Device is added via add_device, this is just a notification
+                }
+                StateUpdate::DeviceRemoved(device_id) => {
+                    tracing::debug!(device_id = %device_id, "Device removed event received");
+                    self.devices.remove(&device_id);
+                }
+                StateUpdate::ConnectionChanged {
+                    device_id,
+                    status,
+                    error,
+                } => {
+                    if let Some(device) = self.devices.get_mut(&device_id) {
+                        device.status = status;
+                        device.error = error;
+                    }
+                }
+            }
         }
     }
 
@@ -111,17 +160,22 @@ impl TasmotaSupervisor {
 
         if response.refresh_clicked {
             let dm = &self.device_manager;
-            if let Err(e) = rt.block_on(dm.query_status(device_id)) {
-                self.error_message = Some(e);
-            } else {
-                // Refresh local device list to get updated state
-                self.devices = rt.block_on(self.device_manager.devices());
+            match rt.block_on(dm.query_status(device_id)) {
+                Ok(state) => {
+                    // Update local device state
+                    if let Some(device) = self.devices.get_mut(&device_id) {
+                        device.state = state;
+                    }
+                }
+                Err(e) => {
+                    self.error_message = Some(e);
+                }
             }
         }
 
         if response.settings_clicked {
             // Find the device config and open edit dialog
-            if let Some(device) = self.devices.iter().find(|d| d.config.id == device_id) {
+            if let Some(device) = self.devices.get(&device_id) {
                 self.edit_dialog_state = Some(EditDeviceDialogState::from_config(&device.config));
                 self.error_message = None;
             }
@@ -132,6 +186,8 @@ impl TasmotaSupervisor {
             self.app_config.remove_device(device_id);
             // Remove console log
             self.console_logs.remove(&device_id);
+            // Remove from local state
+            self.devices.remove(&device_id);
 
             let dm = &self.device_manager;
             rt.block_on(dm.remove_device(device_id));
@@ -305,8 +361,10 @@ impl TasmotaSupervisor {
             let dm = &self.device_manager;
             match rt.block_on(dm.query_status(device_id)) {
                 Ok(state) => {
-                    // Refresh local device list to get updated state
-                    self.devices = rt.block_on(self.device_manager.devices());
+                    // Update local device state
+                    if let Some(device) = self.devices.get_mut(&device_id) {
+                        device.state = state.clone();
+                    }
 
                     // Display the queried state in console
                     let power_str = state
@@ -355,10 +413,15 @@ impl TasmotaSupervisor {
                     match self.add_dialog_state.validate() {
                         Ok(()) => {
                             let config = self.create_device_config();
+                            let device_id = config.id;
 
                             // Add to device manager
                             match rt.block_on(self.device_manager.add_device(config.clone())) {
                                 Ok(()) => {
+                                    // Add to local device state
+                                    let mut managed = DeviceState::new(config.clone());
+                                    managed.status = device_config::ConnectionStatus::Connected;
+                                    self.devices.insert(device_id, managed);
                                     // Save to persistent config only on success
                                     self.app_config.add_device(config);
                                     self.show_add_dialog = false;
@@ -435,8 +498,13 @@ impl TasmotaSupervisor {
 
             // Update in device manager (remove and re-add)
             rt.block_on(self.device_manager.remove_device(device_id));
+            self.devices.remove(&device_id);
             match rt.block_on(self.device_manager.add_device(updated_config.clone())) {
                 Ok(()) => {
+                    // Add to local device state with new config
+                    let mut managed = DeviceState::new(updated_config.clone());
+                    managed.status = device_config::ConnectionStatus::Connected;
+                    self.devices.insert(device_id, managed);
                     // Update in persistent config only on success
                     self.app_config.update_device(updated_config);
                     self.edit_dialog_state = None;
@@ -524,6 +592,9 @@ impl eframe::App for TasmotaSupervisor {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Process any pending state updates from async callbacks (non-blocking)
+        self.process_state_updates();
+
         // Top panel with actions
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -553,7 +624,7 @@ impl eframe::App for TasmotaSupervisor {
                 let responses: Vec<_> = egui::ScrollArea::vertical()
                     .show(ui, |ui| {
                         self.devices
-                            .iter()
+                            .values()
                             .map(|device| {
                                 let console_log = self.console_logs.get(&device.config.id);
                                 let response = ui::device_card(ui, device, console_log);
@@ -611,21 +682,30 @@ fn main() -> eframe::Result<()> {
 mod tests {
     use super::*;
     use crate::device_config::Protocol;
+    use eframe::egui;
 
-    #[tokio::test]
-    async fn create_http_config() {
-        let device_manager = DeviceManager::new();
-        let devices = device_manager.devices().await;
-        let mut app = TasmotaSupervisor {
+    /// Creates a test supervisor with mock channel and context.
+    fn create_test_supervisor() -> TasmotaSupervisor {
+        let (tx, rx) = mpsc::channel();
+        let ctx = egui::Context::default();
+        let device_manager = DeviceManager::new(tx, ctx);
+
+        TasmotaSupervisor {
             device_manager,
             app_config: AppConfig::default(),
-            devices,
+            devices: HashMap::new(),
+            update_rx: rx,
             console_logs: HashMap::new(),
             show_add_dialog: false,
             add_dialog_state: AddDeviceDialogState::new(),
             edit_dialog_state: None,
             error_message: None,
-        };
+        }
+    }
+
+    #[tokio::test]
+    async fn create_http_config() {
+        let mut app = create_test_supervisor();
 
         app.add_dialog_state.name = "Test Bulb".to_string();
         app.add_dialog_state.model = device_model::DeviceModel::AthomBulb5W7W;
@@ -642,18 +722,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_mqtt_config() {
-        let device_manager = DeviceManager::new();
-        let devices = device_manager.devices().await;
-        let mut app = TasmotaSupervisor {
-            device_manager,
-            app_config: AppConfig::default(),
-            devices,
-            console_logs: HashMap::new(),
-            show_add_dialog: false,
-            add_dialog_state: AddDeviceDialogState::new(),
-            edit_dialog_state: None,
-            error_message: None,
-        };
+        let mut app = create_test_supervisor();
 
         app.add_dialog_state.name = "Test Plug".to_string();
         app.add_dialog_state.model = device_model::DeviceModel::NousA1T;
@@ -672,18 +741,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_config_with_auth() {
-        let device_manager = DeviceManager::new();
-        let devices = device_manager.devices().await;
-        let mut app = TasmotaSupervisor {
-            device_manager,
-            app_config: AppConfig::default(),
-            devices,
-            console_logs: HashMap::new(),
-            show_add_dialog: false,
-            add_dialog_state: AddDeviceDialogState::new(),
-            edit_dialog_state: None,
-            error_message: None,
-        };
+        let mut app = create_test_supervisor();
 
         app.add_dialog_state.name = "Test Device".to_string();
         app.add_dialog_state.use_http = true;

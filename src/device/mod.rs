@@ -68,8 +68,6 @@ pub use mqtt_builder::MqttDeviceBuilder;
 
 use std::sync::Arc;
 
-use parking_lot::RwLock;
-
 use crate::capabilities::Capabilities;
 use crate::command::{
     ColorTemperatureCommand, Command, DimmerCommand, EnergyCommand, FadeCommand, FadeSpeedCommand,
@@ -120,7 +118,6 @@ use crate::types::{ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerIndex, Po
 pub struct Device<P: Protocol> {
     protocol: Arc<P>,
     capabilities: Capabilities,
-    state: Arc<RwLock<DeviceState>>,
     callbacks: Arc<CallbackRegistry>,
 }
 
@@ -130,7 +127,6 @@ impl<P: Protocol> Device<P> {
         Self {
             protocol: Arc::new(protocol),
             capabilities,
-            state: Arc::new(RwLock::new(DeviceState::new())),
             callbacks: Arc::new(CallbackRegistry::new()),
         }
     }
@@ -139,15 +135,6 @@ impl<P: Protocol> Device<P> {
     #[must_use]
     pub fn capabilities(&self) -> &Capabilities {
         &self.capabilities
-    }
-
-    /// Returns a snapshot of the current device state.
-    ///
-    /// For MQTT devices, this reflects the latest known state from telemetry.
-    /// For HTTP devices, this is updated after each command response.
-    #[must_use]
-    pub fn state(&self) -> DeviceState {
-        self.state.read().clone()
     }
 
     /// Sends a command to the device.
@@ -220,7 +207,12 @@ impl<P: Protocol> Device<P> {
     pub async fn power_toggle_index(&self, index: PowerIndex) -> Result<PowerResponse, Error> {
         let cmd = PowerCommand::Toggle { index };
         let response = self.send_command(&cmd).await?;
-        response.parse().map_err(Error::Parse)
+        let parsed: PowerResponse = response.parse().map_err(Error::Parse)?;
+
+        // Dispatch callbacks for state changes
+        self.apply_power_response(&parsed);
+
+        Ok(parsed)
     }
 
     /// Sets the power state of a specific relay.
@@ -235,7 +227,12 @@ impl<P: Protocol> Device<P> {
     ) -> Result<PowerResponse, Error> {
         let cmd = PowerCommand::Set { index, state };
         let response = self.send_command(&cmd).await?;
-        response.parse().map_err(Error::Parse)
+        let parsed: PowerResponse = response.parse().map_err(Error::Parse)?;
+
+        // Dispatch callbacks for state changes
+        self.apply_power_response(&parsed);
+
+        Ok(parsed)
     }
 
     /// Gets the current power state.
@@ -255,7 +252,22 @@ impl<P: Protocol> Device<P> {
     pub async fn get_power_index(&self, index: PowerIndex) -> Result<PowerResponse, Error> {
         let cmd = PowerCommand::Get { index };
         let response = self.send_command(&cmd).await?;
-        response.parse().map_err(Error::Parse)
+        let parsed: PowerResponse = response.parse().map_err(Error::Parse)?;
+
+        // Dispatch callbacks for state changes
+        self.apply_power_response(&parsed);
+
+        Ok(parsed)
+    }
+
+    /// Dispatches power state changes from a response to callbacks.
+    fn apply_power_response(&self, response: &PowerResponse) {
+        for idx in 1..=8 {
+            if let Ok(Some(power_state)) = response.power_state(idx) {
+                let change = crate::state::StateChange::power(idx, power_state);
+                self.callbacks.dispatch(&change);
+            }
+        }
     }
 
     // ========== Status ==========
@@ -295,7 +307,12 @@ impl<P: Protocol> Device<P> {
         self.check_capability("dimmer", self.capabilities.supports_dimmer_control())?;
         let cmd = DimmerCommand::Set(value);
         let response = self.send_command(&cmd).await?;
-        response.parse().map_err(Error::Parse)
+        let parsed: DimmerResponse = response.parse().map_err(Error::Parse)?;
+
+        // Dispatch callbacks for state changes
+        self.apply_dimmer_response(&parsed);
+
+        Ok(parsed)
     }
 
     /// Gets the current dimmer level.
@@ -309,7 +326,25 @@ impl<P: Protocol> Device<P> {
         self.check_capability("dimmer", self.capabilities.supports_dimmer_control())?;
         let cmd = DimmerCommand::Get;
         let response = self.send_command(&cmd).await?;
-        response.parse().map_err(Error::Parse)
+        let parsed: DimmerResponse = response.parse().map_err(Error::Parse)?;
+
+        // Dispatch callbacks for state changes
+        self.apply_dimmer_response(&parsed);
+
+        Ok(parsed)
+    }
+
+    /// Dispatches dimmer state changes from a response to callbacks.
+    fn apply_dimmer_response(&self, response: &DimmerResponse) {
+        if let Ok(dimmer) = Dimmer::new(response.dimmer()) {
+            let change = crate::state::StateChange::dimmer(dimmer);
+            self.callbacks.dispatch(&change);
+        }
+
+        if let Ok(Some(power)) = response.power_state() {
+            let change = crate::state::StateChange::power(1, power);
+            self.callbacks.dispatch(&change);
+        }
     }
 
     // ========== Color Temperature ==========
@@ -331,7 +366,12 @@ impl<P: Protocol> Device<P> {
         )?;
         let cmd = ColorTemperatureCommand::Set(value);
         let response = self.send_command(&cmd).await?;
-        response.parse().map_err(Error::Parse)
+        let parsed: ColorTemperatureResponse = response.parse().map_err(Error::Parse)?;
+
+        // Dispatch callbacks for state changes
+        self.apply_color_temperature_response(&parsed);
+
+        Ok(parsed)
     }
 
     /// Gets the current color temperature.
@@ -348,7 +388,25 @@ impl<P: Protocol> Device<P> {
         )?;
         let cmd = ColorTemperatureCommand::Get;
         let response = self.send_command(&cmd).await?;
-        response.parse().map_err(Error::Parse)
+        let parsed: ColorTemperatureResponse = response.parse().map_err(Error::Parse)?;
+
+        // Dispatch callbacks for state changes
+        self.apply_color_temperature_response(&parsed);
+
+        Ok(parsed)
+    }
+
+    /// Dispatches color temperature state changes from a response to callbacks.
+    fn apply_color_temperature_response(&self, response: &ColorTemperatureResponse) {
+        if let Ok(ct) = ColorTemperature::new(response.color_temperature()) {
+            let change = crate::state::StateChange::color_temperature(ct);
+            self.callbacks.dispatch(&change);
+        }
+
+        if let Ok(Some(power)) = response.power_state() {
+            let change = crate::state::StateChange::power(1, power);
+            self.callbacks.dispatch(&change);
+        }
     }
 
     // ========== HSB Color ==========
@@ -364,7 +422,12 @@ impl<P: Protocol> Device<P> {
         self.check_capability("RGB color", self.capabilities.supports_rgb_control())?;
         let cmd = HsbColorCommand::Set(color);
         let response = self.send_command(&cmd).await?;
-        response.parse().map_err(Error::Parse)
+        let parsed: HsbColorResponse = response.parse().map_err(Error::Parse)?;
+
+        // Dispatch callbacks for state changes
+        self.apply_hsb_color_response(&parsed);
+
+        Ok(parsed)
     }
 
     /// Gets the current HSB color.
@@ -378,7 +441,32 @@ impl<P: Protocol> Device<P> {
         self.check_capability("RGB color", self.capabilities.supports_rgb_control())?;
         let cmd = HsbColorCommand::Get;
         let response = self.send_command(&cmd).await?;
-        response.parse().map_err(Error::Parse)
+        let parsed: HsbColorResponse = response.parse().map_err(Error::Parse)?;
+
+        // Dispatch callbacks for state changes
+        self.apply_hsb_color_response(&parsed);
+
+        Ok(parsed)
+    }
+
+    /// Dispatches HSB color state changes from a response to callbacks.
+    fn apply_hsb_color_response(&self, response: &HsbColorResponse) {
+        if let Ok(color) = response.hsb_color() {
+            let change = crate::state::StateChange::hsb_color(color);
+            self.callbacks.dispatch(&change);
+        }
+
+        if let Some(dimmer_value) = response.dimmer()
+            && let Ok(dimmer) = Dimmer::new(dimmer_value)
+        {
+            let change = crate::state::StateChange::dimmer(dimmer);
+            self.callbacks.dispatch(&change);
+        }
+
+        if let Ok(Some(power)) = response.power_state() {
+            let change = crate::state::StateChange::power(1, power);
+            self.callbacks.dispatch(&change);
+        }
     }
 
     // ========== Fade ==========

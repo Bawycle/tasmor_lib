@@ -245,10 +245,12 @@ async fn handle_mqtt_events(
                 // Tasmota sends responses on:
                 // - stat/<topic>/RESULT (JSON) for most commands
                 // - stat/<topic>/STATUS<n> (JSON) for Status commands
+                // - stat/<topic>/POWER[n] (plain text) for power commands
                 let stat_prefix = format!("stat/{topic}/");
                 if publish.topic.starts_with(&stat_prefix) {
                     let suffix = &publish.topic[stat_prefix.len()..];
-                    // Accept RESULT and STATUS* responses (both are JSON)
+
+                    // Check for JSON responses (RESULT or STATUS*)
                     let is_json_response = suffix == "RESULT" || suffix.starts_with("STATUS");
                     if is_json_response {
                         tracing::debug!(
@@ -257,6 +259,18 @@ async fn handle_mqtt_events(
                             "Received MQTT response"
                         );
                         let _ = response_tx.send(payload).await;
+                    }
+                    // Check for POWER responses (plain text like "ON" or "OFF")
+                    else if suffix == "POWER" || suffix.starts_with("POWER") {
+                        // Convert plain text to JSON format for PowerResponse parsing
+                        let json_payload = format!("{{\"{suffix}\": \"{payload}\"}}");
+                        tracing::debug!(
+                            topic = %publish.topic,
+                            payload = %payload,
+                            json = %json_payload,
+                            "Received MQTT power response"
+                        );
+                        let _ = response_tx.send(json_payload).await;
                     }
                 }
             }
