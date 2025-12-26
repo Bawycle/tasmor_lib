@@ -5,8 +5,16 @@ edition = "2024"
 rust-version = "1.92.0"
 license = "MPL-2.0"
 description = "Rust library to control Tasmota devices via MQTT and HTTP"
-keywords = ["tasmota", "mqtt", "home-automation", "iot"]
-categories = ["network-programming", "api-bindings"]
+repository = "https://codeberg.org/Bawycle/tasmor_lib.git"
+homepage = "https://codeberg.org/Bawycle/tasmor_lib"
+documentation = "https://docs.rs/tasmor_lib"
+readme = "README.md"
+keywords = ["tasmota", "mqtt", "home-automation", "iot", "smart-home"]
+categories = ["network-programming", "asynchronous"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["http", "mqtt"]

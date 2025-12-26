@@ -29,6 +29,8 @@ A modern, type-safe Rust library for controlling [Tasmota](https://tasmota.githu
 | Energy monitoring | Power, voltage, current, energy consumption tracking |
 | Device status | Query firmware, network, and sensor information |
 | Transitions | Fade effects and speed control |
+| Light schemes | Effects (wakeup, color cycling, random) |
+| RGB colors | Hex color input (#RRGGBB) with HSB conversion |
 
 ## Installation
 
@@ -433,17 +435,13 @@ cargo check && cargo build && cargo test && cargo fmt --check && cargo clippy --
 
 ## Contributing
 
-Contributions are welcome! This project follows Test-Driven Development (TDD):
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details on:
 
-1. Write tests first
-2. Implement code to pass tests
-3. Run full verification pipeline before committing
-
-Please ensure:
-- All tests pass (`cargo test`)
-- Code is formatted (`cargo fmt`)
-- No clippy warnings (`cargo clippy -- -D warnings`)
-- Add documentation for public APIs
+- Development setup
+- Code style and linting
+- Testing requirements
+- Commit message conventions
+- Pull request process
 
 ## License
 
