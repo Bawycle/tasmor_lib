@@ -16,6 +16,8 @@
 //! | [`DimmerCommand`] | Adjust brightness (0-100) | Set to 75% |
 //! | [`ColorTemperatureCommand`] | Set white color temperature | Warm, Cool |
 //! | [`HsbColorCommand`] | Set RGB color in HSB format | Red, Blue |
+//! | [`SchemeCommand`] | Set light scheme/effect (0-4) | Wakeup, Random |
+//! | [`WakeupDurationCommand`] | Set wakeup duration (1-3000s) | 5 minutes |
 //! | [`FadeSpeedCommand`] | Set fade transition speed (1-40) | Fast, Slow |
 //! | [`FadeCommand`] | Enable/disable fade transitions | On, Off |
 //! | [`EnergyCommand`] | Query energy consumption | Get, Reset |
@@ -63,6 +65,7 @@
 mod energy;
 mod light;
 mod power;
+mod scheme;
 mod status;
 
 pub use energy::EnergyCommand;
@@ -70,6 +73,7 @@ pub use light::{
     ColorTemperatureCommand, DimmerCommand, FadeSpeedCommand, HsbColorCommand, StateCommand,
 };
 pub use power::{FadeCommand, PowerCommand, StartupFadeCommand};
+pub use scheme::{SchemeCommand, WakeupDurationCommand};
 pub use status::{StatusCommand, StatusType};
 
 /// A command that can be sent to a Tasmota device.

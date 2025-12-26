@@ -298,6 +298,48 @@ impl HsbColor {
     pub fn with_brightness(&self, brightness: u8) -> Result<Self, ValueError> {
         Self::new(self.hue, self.saturation, brightness)
     }
+
+    /// Converts this HSB color to RGB format.
+    ///
+    /// Note: Due to rounding in the conversion, converting HSB to RGB and back
+    /// may not produce the exact same HSB values.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tasmor_lib::types::HsbColor;
+    ///
+    /// let red = HsbColor::red();
+    /// let rgb = red.to_rgb();
+    /// assert_eq!(rgb.red(), 255);
+    /// assert_eq!(rgb.green(), 0);
+    /// assert_eq!(rgb.blue(), 0);
+    /// ```
+    #[must_use]
+    pub fn to_rgb(&self) -> super::RgbColor {
+        super::RgbColor::from_hsb(self)
+    }
+
+    /// Creates an HSB color from an RGB color.
+    ///
+    /// Note: Due to rounding in the conversion, converting RGB to HSB and back
+    /// may not produce the exact same RGB values.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tasmor_lib::types::{HsbColor, RgbColor};
+    ///
+    /// let rgb = RgbColor::new(255, 0, 0);
+    /// let hsb = HsbColor::from_rgb(&rgb);
+    /// assert_eq!(hsb.hue(), 0);
+    /// assert_eq!(hsb.saturation(), 100);
+    /// assert_eq!(hsb.brightness(), 100);
+    /// ```
+    #[must_use]
+    pub fn from_rgb(rgb: &super::RgbColor) -> Self {
+        rgb.to_hsb()
+    }
 }
 
 impl Default for HsbColor {
