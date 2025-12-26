@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use parking_lot::RwLock;
 
 use crate::state::{DeviceState, StateChange};
-use crate::types::{ColorTemperature, Dimmer, HsbColor, PowerState};
+use crate::types::{ColorTemperature, Dimmer, HsbColor, PowerState, Scheme};
 
 /// Unique identifier for a subscription.
 ///
@@ -67,6 +67,9 @@ type HsbColorCallback = Arc<dyn Fn(HsbColor) + Send + Sync>;
 /// Type alias for color temperature callbacks.
 type ColorTempCallback = Arc<dyn Fn(ColorTemperature) + Send + Sync>;
 
+/// Type alias for scheme callbacks.
+type SchemeCallback = Arc<dyn Fn(Scheme) + Send + Sync>;
+
 /// Type alias for energy callbacks.
 type EnergyCallback = Arc<dyn Fn(EnergyData) + Send + Sync>;
 
@@ -115,6 +118,8 @@ pub struct CallbackRegistry {
     hsb_color_callbacks: RwLock<HashMap<SubscriptionId, HsbColorCallback>>,
     /// Color temperature change callbacks.
     color_temp_callbacks: RwLock<HashMap<SubscriptionId, ColorTempCallback>>,
+    /// Scheme change callbacks.
+    scheme_callbacks: RwLock<HashMap<SubscriptionId, SchemeCallback>>,
     /// Energy update callbacks.
     energy_callbacks: RwLock<HashMap<SubscriptionId, EnergyCallback>>,
     /// Connected callbacks (called when device becomes available).
@@ -135,6 +140,7 @@ impl CallbackRegistry {
             dimmer_callbacks: RwLock::new(HashMap::new()),
             hsb_color_callbacks: RwLock::new(HashMap::new()),
             color_temp_callbacks: RwLock::new(HashMap::new()),
+            scheme_callbacks: RwLock::new(HashMap::new()),
             energy_callbacks: RwLock::new(HashMap::new()),
             connected_callbacks: RwLock::new(HashMap::new()),
             disconnected_callbacks: RwLock::new(HashMap::new()),
@@ -194,6 +200,16 @@ impl CallbackRegistry {
         self.color_temp_callbacks
             .write()
             .insert(id, Arc::new(callback));
+        id
+    }
+
+    /// Registers a callback for scheme changes.
+    pub fn on_scheme_changed<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(Scheme) + Send + Sync + 'static,
+    {
+        let id = self.next_id();
+        self.scheme_callbacks.write().insert(id, Arc::new(callback));
         id
     }
 
@@ -268,6 +284,9 @@ impl CallbackRegistry {
         if self.color_temp_callbacks.write().remove(&id).is_some() {
             return true;
         }
+        if self.scheme_callbacks.write().remove(&id).is_some() {
+            return true;
+        }
         if self.energy_callbacks.write().remove(&id).is_some() {
             return true;
         }
@@ -289,6 +308,7 @@ impl CallbackRegistry {
         self.dimmer_callbacks.write().clear();
         self.hsb_color_callbacks.write().clear();
         self.color_temp_callbacks.write().clear();
+        self.scheme_callbacks.write().clear();
         self.energy_callbacks.write().clear();
         self.connected_callbacks.write().clear();
         self.disconnected_callbacks.write().clear();
@@ -337,6 +357,16 @@ impl CallbackRegistry {
                 for callback in callbacks.values() {
                     callback(*ct);
                 }
+            }
+            StateChange::Scheme(scheme) => {
+                let callbacks = self.scheme_callbacks.read();
+                for callback in callbacks.values() {
+                    callback(*scheme);
+                }
+            }
+            StateChange::WakeupDuration(_) => {
+                // WakeupDuration has no specific callbacks; changes are captured
+                // by generic state_changed callbacks
             }
             StateChange::Energy {
                 power,
@@ -394,6 +424,7 @@ impl CallbackRegistry {
             + self.dimmer_callbacks.read().len()
             + self.hsb_color_callbacks.read().len()
             + self.color_temp_callbacks.read().len()
+            + self.scheme_callbacks.read().len()
             + self.energy_callbacks.read().len()
             + self.connected_callbacks.read().len()
             + self.disconnected_callbacks.read().len()

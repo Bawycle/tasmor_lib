@@ -11,7 +11,7 @@
 
 use crate::state::{DeviceState, StateChange};
 use crate::subscription::{EnergyData, SubscriptionId};
-use crate::types::{ColorTemperature, Dimmer, HsbColor, PowerState};
+use crate::types::{ColorTemperature, Dimmer, HsbColor, PowerState, Scheme};
 
 /// Trait for types that support event subscriptions.
 ///
@@ -78,6 +78,13 @@ pub trait Subscribable {
     fn on_color_temp_changed<F>(&self, callback: F) -> SubscriptionId
     where
         F: Fn(ColorTemperature) + Send + Sync + 'static;
+
+    /// Subscribes to scheme changes.
+    ///
+    /// The callback is called whenever the light scheme/effect changes.
+    fn on_scheme_changed<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(Scheme) + Send + Sync + 'static;
 
     /// Subscribes to energy monitoring updates.
     ///

@@ -15,6 +15,8 @@
 //! - [`StateChange::Dimmer`] - Brightness level changes
 //! - [`StateChange::HsbColor`] - RGB color changes in HSB format
 //! - [`StateChange::ColorTemperature`] - White color temperature changes
+//! - [`StateChange::Scheme`] - Light scheme/effect changes
+//! - [`StateChange::WakeupDuration`] - Wakeup effect duration changes
 //! - [`StateChange::Energy`] - Energy monitoring updates
 //! - [`StateChange::Batch`] - Multiple changes grouped together
 //!
@@ -52,7 +54,9 @@
 //! assert!(!changed);
 //! ```
 
-use crate::types::{ColorTemperature, Dimmer, HsbColor, PowerState, TasmotaDateTime};
+use crate::types::{
+    ColorTemperature, Dimmer, HsbColor, PowerState, Scheme, TasmotaDateTime, WakeupDuration,
+};
 
 /// Represents a change in device state.
 ///
@@ -86,6 +90,12 @@ pub enum StateChange {
 
     /// Color temperature changed.
     ColorTemperature(ColorTemperature),
+
+    /// Light scheme/effect changed.
+    Scheme(Scheme),
+
+    /// Wakeup duration changed.
+    WakeupDuration(WakeupDuration),
 
     /// Energy monitoring data updated.
     ///
@@ -165,6 +175,18 @@ impl StateChange {
         Self::ColorTemperature(ct)
     }
 
+    /// Creates a scheme change.
+    #[must_use]
+    pub fn scheme(scheme: Scheme) -> Self {
+        Self::Scheme(scheme)
+    }
+
+    /// Creates a wakeup duration change.
+    #[must_use]
+    pub fn wakeup_duration(duration: WakeupDuration) -> Self {
+        Self::WakeupDuration(duration)
+    }
+
     /// Creates an energy reading change with basic power data.
     #[must_use]
     pub fn energy(power: f32, voltage: f32, current: f32) -> Self {
@@ -223,13 +245,23 @@ impl StateChange {
         matches!(self, Self::Power { .. })
     }
 
-    /// Returns `true` if this is a light-related change (dimmer, color, CT).
+    /// Returns `true` if this is a light-related change (dimmer, color, CT, scheme).
     #[must_use]
     pub fn is_light(&self) -> bool {
         matches!(
             self,
-            Self::Dimmer(_) | Self::HsbColor(_) | Self::ColorTemperature(_)
+            Self::Dimmer(_)
+                | Self::HsbColor(_)
+                | Self::ColorTemperature(_)
+                | Self::Scheme(_)
+                | Self::WakeupDuration(_)
         )
+    }
+
+    /// Returns `true` if this is a scheme change.
+    #[must_use]
+    pub fn is_scheme(&self) -> bool {
+        matches!(self, Self::Scheme(_))
     }
 
     /// Returns `true` if this is an energy-related change.

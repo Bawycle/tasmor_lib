@@ -75,7 +75,8 @@ use std::sync::Arc;
 use crate::capabilities::Capabilities;
 use crate::command::{
     ColorTemperatureCommand, Command, DimmerCommand, EnergyCommand, FadeCommand, FadeSpeedCommand,
-    HsbColorCommand, PowerCommand, StartupFadeCommand, StatusCommand,
+    HsbColorCommand, PowerCommand, SchemeCommand, StartupFadeCommand, StatusCommand,
+    WakeupDurationCommand,
 };
 use crate::error::{DeviceError, Error};
 #[cfg(feature = "http")]
@@ -83,11 +84,15 @@ use crate::protocol::HttpClient;
 use crate::protocol::{CommandResponse, Protocol};
 use crate::response::{
     ColorTemperatureResponse, DimmerResponse, EnergyResponse, FadeResponse, FadeSpeedResponse,
-    HsbColorResponse, PowerResponse, StartupFadeResponse, StatusResponse,
+    HsbColorResponse, PowerResponse, RgbColorResponse, SchemeResponse, StartupFadeResponse,
+    StatusResponse, WakeupDurationResponse,
 };
 use crate::state::DeviceState;
 use crate::subscription::CallbackRegistry;
-use crate::types::{ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState};
+use crate::types::{
+    ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState, RgbColor, Scheme,
+    WakeupDuration,
+};
 
 /// A Tasmota device that can be controlled via HTTP or MQTT.
 ///
@@ -490,6 +495,166 @@ impl<P: Protocol> Device<P> {
         }
     }
 
+    // ========== RGB Color ==========
+
+    /// Sets the RGB color.
+    ///
+    /// This is a convenience method that converts the RGB color to HSB internally
+    /// and sends an `HSBColor` command to the device. The response contains both
+    /// the RGB and HSB representations.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the device doesn't support RGB or the command fails.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use tasmor_lib::types::RgbColor;
+    ///
+    /// # async fn example(device: &tasmor_lib::Device<impl tasmor_lib::protocol::Protocol>) -> tasmor_lib::Result<()> {
+    /// // Set color using hex string
+    /// let color = RgbColor::from_hex("#FF5733")?;
+    /// let response = device.set_rgb_color(color).await?;
+    /// println!("Color set to: {}", response.to_hex_with_hash());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn set_rgb_color(&self, color: RgbColor) -> Result<RgbColorResponse, Error> {
+        self.check_capability("RGB color", self.capabilities.supports_rgb_control())?;
+
+        // Convert RGB to HSB and send the command
+        let hsb = color.to_hsb();
+        let cmd = HsbColorCommand::Set(hsb);
+        let response = self.send_command(&cmd).await?;
+        let hsb_response: HsbColorResponse = response.parse().map_err(Error::Parse)?;
+
+        // Dispatch callbacks for state changes
+        self.apply_hsb_color_response(&hsb_response);
+
+        // Create RGB response preserving the original RGB value
+        let returned_hsb = hsb_response.hsb_color().unwrap_or(hsb);
+        Ok(RgbColorResponse::new(color, returned_hsb))
+    }
+
+    // ========== Scheme ==========
+
+    /// Sets the light scheme/effect.
+    ///
+    /// Tasmota supports several built-in light schemes:
+    /// - 0: Single (fixed color, default)
+    /// - 1: Wakeup (gradual brightness increase, uses [`WakeupDuration`])
+    /// - 2: Cycle Up (color cycling with increasing brightness)
+    /// - 3: Cycle Down (color cycling with decreasing brightness)
+    /// - 4: Random (random color changes)
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the command fails.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use tasmor_lib::types::Scheme;
+    ///
+    /// # async fn example(device: &tasmor_lib::Device<impl tasmor_lib::protocol::Protocol>) -> tasmor_lib::Result<()> {
+    /// // Set wakeup scheme
+    /// device.set_scheme(Scheme::WAKEUP).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn set_scheme(&self, scheme: Scheme) -> Result<SchemeResponse, Error> {
+        let cmd = SchemeCommand::Set(scheme);
+        let response = self.send_command(&cmd).await?;
+        let parsed: SchemeResponse = response.parse().map_err(Error::Parse)?;
+
+        // Dispatch callbacks for state changes
+        if let Ok(s) = parsed.scheme() {
+            let change = crate::state::StateChange::scheme(s);
+            self.callbacks.dispatch(&change);
+        }
+
+        Ok(parsed)
+    }
+
+    /// Gets the current light scheme.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the command fails.
+    pub async fn get_scheme(&self) -> Result<SchemeResponse, Error> {
+        let cmd = SchemeCommand::Get;
+        let response = self.send_command(&cmd).await?;
+        let parsed: SchemeResponse = response.parse().map_err(Error::Parse)?;
+
+        // Dispatch callbacks for state changes
+        if let Ok(s) = parsed.scheme() {
+            let change = crate::state::StateChange::scheme(s);
+            self.callbacks.dispatch(&change);
+        }
+
+        Ok(parsed)
+    }
+
+    // ========== Wakeup Duration ==========
+
+    /// Sets the wakeup duration.
+    ///
+    /// The wakeup duration controls how long Scheme 1 (Wakeup) takes to
+    /// gradually increase brightness from 0 to the current dimmer level.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the command fails.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use tasmor_lib::types::WakeupDuration;
+    ///
+    /// # async fn example(device: &tasmor_lib::Device<impl tasmor_lib::protocol::Protocol>) -> tasmor_lib::Result<()> {
+    /// // Set wakeup duration to 5 minutes
+    /// let duration = WakeupDuration::from_minutes(5)?;
+    /// device.set_wakeup_duration(duration).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn set_wakeup_duration(
+        &self,
+        duration: WakeupDuration,
+    ) -> Result<WakeupDurationResponse, Error> {
+        let cmd = WakeupDurationCommand::Set(duration);
+        let response = self.send_command(&cmd).await?;
+        let parsed: WakeupDurationResponse = response.parse().map_err(Error::Parse)?;
+
+        // Dispatch callbacks for state changes
+        if let Ok(d) = parsed.duration() {
+            let change = crate::state::StateChange::wakeup_duration(d);
+            self.callbacks.dispatch(&change);
+        }
+
+        Ok(parsed)
+    }
+
+    /// Gets the current wakeup duration.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the command fails.
+    pub async fn get_wakeup_duration(&self) -> Result<WakeupDurationResponse, Error> {
+        let cmd = WakeupDurationCommand::Get;
+        let response = self.send_command(&cmd).await?;
+        let parsed: WakeupDurationResponse = response.parse().map_err(Error::Parse)?;
+
+        // Dispatch callbacks for state changes
+        if let Ok(d) = parsed.duration() {
+            let change = crate::state::StateChange::wakeup_duration(d);
+            self.callbacks.dispatch(&change);
+        }
+
+        Ok(parsed)
+    }
+
     // ========== Fade ==========
 
     /// Enables fade transitions.
@@ -870,6 +1035,13 @@ impl Subscribable for Device<MqttClient> {
         F: Fn(ColorTemperature) + Send + Sync + 'static,
     {
         self.callbacks.on_color_temp_changed(callback)
+    }
+
+    fn on_scheme_changed<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(Scheme) + Send + Sync + 'static,
+    {
+        self.callbacks.on_scheme_changed(callback)
     }
 
     fn on_energy_updated<F>(&self, callback: F) -> SubscriptionId

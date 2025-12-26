@@ -44,7 +44,9 @@
 //! assert_eq!(state.dimmer().map(|d| d.value()), Some(80));
 //! ```
 
-use crate::types::{ColorTemperature, Dimmer, HsbColor, PowerState, TasmotaDateTime};
+use crate::types::{
+    ColorTemperature, Dimmer, HsbColor, PowerState, Scheme, TasmotaDateTime, WakeupDuration,
+};
 
 use super::StateChange;
 
@@ -79,6 +81,10 @@ pub struct DeviceState {
     hsb_color: Option<HsbColor>,
     /// Color temperature in mireds (153-500).
     color_temperature: Option<ColorTemperature>,
+    /// Light scheme/effect (0-4).
+    scheme: Option<Scheme>,
+    /// Wakeup duration in seconds (1-3000).
+    wakeup_duration: Option<WakeupDuration>,
     /// Current power consumption in Watts.
     power_consumption: Option<f32>,
     /// Current voltage in Volts.
@@ -224,6 +230,42 @@ impl DeviceState {
     /// Clears the color temperature.
     pub fn clear_color_temperature(&mut self) {
         self.color_temperature = None;
+    }
+
+    // ========== Scheme ==========
+
+    /// Gets the light scheme/effect.
+    #[must_use]
+    pub fn scheme(&self) -> Option<Scheme> {
+        self.scheme
+    }
+
+    /// Sets the light scheme/effect.
+    pub fn set_scheme(&mut self, scheme: Scheme) {
+        self.scheme = Some(scheme);
+    }
+
+    /// Clears the scheme.
+    pub fn clear_scheme(&mut self) {
+        self.scheme = None;
+    }
+
+    // ========== Wakeup Duration ==========
+
+    /// Gets the wakeup duration.
+    #[must_use]
+    pub fn wakeup_duration(&self) -> Option<WakeupDuration> {
+        self.wakeup_duration
+    }
+
+    /// Sets the wakeup duration.
+    pub fn set_wakeup_duration(&mut self, duration: WakeupDuration) {
+        self.wakeup_duration = Some(duration);
+    }
+
+    /// Clears the wakeup duration.
+    pub fn clear_wakeup_duration(&mut self) {
+        self.wakeup_duration = None;
     }
 
     // ========== Energy Monitoring ==========
@@ -382,6 +424,22 @@ impl DeviceState {
                     false
                 } else {
                     self.color_temperature = Some(*ct);
+                    true
+                }
+            }
+            StateChange::Scheme(scheme) => {
+                if self.scheme == Some(*scheme) {
+                    false
+                } else {
+                    self.scheme = Some(*scheme);
+                    true
+                }
+            }
+            StateChange::WakeupDuration(duration) => {
+                if self.wakeup_duration == Some(*duration) {
+                    false
+                } else {
+                    self.wakeup_duration = Some(*duration);
                     true
                 }
             }
