@@ -57,10 +57,14 @@ use tasmor_lib::{Device, Capabilities, ColorTemperature, Dimmer};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Connect to a Tasmota light bulb
-    let device = Device::http("192.168.1.100")
+    // Connect to a Tasmota light bulb - returns device and initial state
+    let (device, initial_state) = Device::http("192.168.1.100")
         .with_capabilities(Capabilities::rgbcct_light())
-        .build_without_probe()?;
+        .build_without_probe()
+        .await?;
+
+    // Initial state contains current values
+    println!("Current power: {:?}", initial_state.power(1));
 
     // Turn on and set to warm white
     device.power_on().await?;
@@ -79,11 +83,14 @@ use tasmor_lib::{Device, Capabilities, HsbColor};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Connect to device via MQTT broker (with authentication)
-    let device = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_bulb")
+    let (device, initial_state) = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_bulb")
         .with_credentials("mqtt_user", "mqtt_password")
         .with_capabilities(Capabilities::rgbcct_light())
         .build_without_probe()
         .await?;
+
+    // Initial state is available immediately
+    println!("Current dimmer: {:?}", initial_state.dimmer());
 
     // Set RGB color
     device.set_hsb_color(HsbColor::blue()).await?;
@@ -99,17 +106,17 @@ use tasmor_lib::{Device, Capabilities};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let device = Device::http("192.168.1.101")
+    // Energy data is available in initial state
+    let (_device, state) = Device::http("192.168.1.101")
         .with_capabilities(Capabilities::neo_coolcam())
-        .build_without_probe()?;
+        .build_without_probe()
+        .await?;
 
-    // Query energy consumption
-    let energy = device.energy().await?;
-    if let Some(data) = energy.energy() {
-        println!("Power: {} W", data.power);
-        println!("Voltage: {} V", data.voltage);
-        println!("Today: {} kWh", data.today);
-    }
+    // Access energy data from initial state
+    println!("Power: {:?} W", state.power_consumption());
+    println!("Voltage: {:?} V", state.voltage());
+    println!("Today: {:?} kWh", state.energy_today());
+    println!("Total: {:?} kWh", state.energy_total());
 
     Ok(())
 }
@@ -125,18 +132,22 @@ use tasmor_lib::subscription::Subscribable;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create multiple devices - each maintains its own connection
-    let living_room = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_living")
+    // Create multiple devices - each returns (device, initial_state)
+    let (living_room, living_state) = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_living")
         .with_credentials("mqtt_user", "mqtt_pass")
         .with_capabilities(Capabilities::rgbcct_light())
         .build_without_probe()
         .await?;
 
-    let bedroom = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_bedroom")
+    let (bedroom, bedroom_state) = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_bedroom")
         .with_credentials("mqtt_user", "mqtt_pass")
         .with_capabilities(Capabilities::rgbcct_light())
         .build_without_probe()
         .await?;
+
+    // Initial states are immediately available
+    println!("Living room power: {:?}", living_state.power(1));
+    println!("Bedroom power: {:?}", bedroom_state.power(1));
 
     // Subscribe to power changes on each device
     living_room.on_power_changed(|relay, state| {

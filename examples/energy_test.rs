@@ -5,6 +5,9 @@
 //! Demonstrates how to query and display energy consumption data from
 //! Tasmota devices with power monitoring (smart plugs, energy meters).
 //!
+//! The device builder automatically queries initial state, so energy data
+//! is available immediately after connection.
+//!
 //! # Usage
 //!
 //! ```bash
@@ -19,8 +22,6 @@
 //! ```
 
 use std::env;
-use tasmor_lib::command::EnergyCommand;
-use tasmor_lib::response::EnergyResponse;
 use tasmor_lib::{CapabilitiesBuilder, Device};
 
 #[tokio::main]
@@ -55,38 +56,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         builder = builder.with_credentials(&args[3], &args[4]);
     }
 
-    let device = builder.build_without_probe().await?;
+    // Build returns (device, initial_state) - energy data is already available!
+    let (_device, state) = builder.build_without_probe().await?;
 
-    // Query energy data (Status 10)
-    println!("Querying energy data...");
-    let cmd = EnergyCommand::Get;
-    let response = device.send_command(&cmd).await?;
+    // Display energy data from initial state
+    println!();
+    println!("┌─────────────────────────────────────┐");
+    println!("│         Current Readings            │");
+    println!("├─────────────────────────────────────┤");
 
-    // Parse the response using serde
-    let energy_response: EnergyResponse = serde_json::from_str(response.body())?;
+    if let Some(voltage) = state.voltage() {
+        println!("│  Voltage:     {:>8.0} V            │", voltage);
+    }
+    if let Some(current) = state.current() {
+        println!("│  Current:     {:>8.3} A           │", current);
+    }
+    if let Some(power) = state.power_consumption() {
+        println!("│  Power:       {:>8.0} W            │", power);
+    }
+    if let Some(factor) = state.power_factor() {
+        if factor > 0.0 {
+            println!("│  Power Factor:{:>8.2}             │", factor);
+        }
+    }
 
-    if let Some(energy) = energy_response.energy() {
+    println!("├─────────────────────────────────────┤");
+    println!("│         Energy Consumption          │");
+    println!("├─────────────────────────────────────┤");
+
+    if let Some(today) = state.energy_today() {
+        println!("│  Today:       {:>8.3} kWh         │", today);
+    }
+    if let Some(yesterday) = state.energy_yesterday() {
+        println!("│  Yesterday:   {:>8.3} kWh         │", yesterday);
+    }
+    if let Some(total) = state.energy_total() {
+        println!("│  Total:       {:>8.3} kWh         │", total);
+    }
+    if let Some(start_time) = state.total_start_time() {
+        println!("│  Since:       {:<21} │", start_time);
+    }
+
+    println!("└─────────────────────────────────────┘");
+
+    if state.power_consumption().is_none() {
         println!();
-        println!("┌─────────────────────────────────────┐");
-        println!("│         Current Readings            │");
-        println!("├─────────────────────────────────────┤");
-        println!("│  Voltage:     {:>8} V            │", energy.voltage);
-        println!("│  Current:     {:>8.3} A           │", energy.current);
-        println!("│  Power:       {:>8} W            │", energy.power);
-        if energy.factor > 0.0 {
-            println!("│  Power Factor:{:>8.2}             │", energy.factor);
-        }
-        println!("├─────────────────────────────────────┤");
-        println!("│         Energy Consumption          │");
-        println!("├─────────────────────────────────────┤");
-        println!("│  Today:       {:>8.3} kWh         │", energy.today);
-        println!("│  Yesterday:   {:>8.3} kWh         │", energy.yesterday);
-        println!("│  Total:       {:>8.3} kWh         │", energy.total);
-        if let Some(start_time) = &energy.total_start_time {
-            println!("│  Since:       {:<21} │", start_time);
-        }
-        println!("└─────────────────────────────────────┘");
-    } else {
         println!("No energy data available.");
         println!("Make sure the device has energy monitoring capability.");
     }

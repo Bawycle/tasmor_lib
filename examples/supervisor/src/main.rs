@@ -335,7 +335,11 @@ impl TasmotaSupervisor {
         if response.energy_reset_clicked {
             let dm = &self.device_manager;
             match rt.block_on(dm.reset_energy_total(device_id)) {
-                Ok(()) => {
+                Ok(state) => {
+                    // Update local device state with the new energy values
+                    if let Some(device) = self.devices.get_mut(&device_id) {
+                        device.state = state;
+                    }
                     if is_http {
                         self.log_to_console(
                             device_id,

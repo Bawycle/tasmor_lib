@@ -246,6 +246,11 @@ async fn handle_mqtt_events(
                 // - stat/<topic>/RESULT (JSON) for most commands
                 // - stat/<topic>/STATUS<n> (JSON) for Status commands
                 // - stat/<topic>/POWER[n] (plain text) for power commands
+                //
+                // NOTE: We intentionally do NOT send POWER responses to the response channel.
+                // POWER responses arrive asynchronously and can interfere with other commands
+                // (e.g., when waiting for STATUS10, a POWER response might arrive first).
+                // POWER state changes are handled via the topic router callbacks instead.
                 let stat_prefix = format!("stat/{topic}/");
                 if publish.topic.starts_with(&stat_prefix) {
                     let suffix = &publish.topic[stat_prefix.len()..];
@@ -260,17 +265,14 @@ async fn handle_mqtt_events(
                         );
                         let _ = response_tx.send(payload).await;
                     }
-                    // Check for POWER responses (plain text like "ON" or "OFF")
+                    // Log POWER responses but don't send to response channel
+                    // (they are already routed to callbacks via the topic router)
                     else if suffix == "POWER" || suffix.starts_with("POWER") {
-                        // Convert plain text to JSON format for PowerResponse parsing
-                        let json_payload = format!("{{\"{suffix}\": \"{payload}\"}}");
                         tracing::debug!(
                             topic = %publish.topic,
                             payload = %payload,
-                            json = %json_payload,
-                            "Received MQTT power response"
+                            "Received MQTT power response (handled via callbacks)"
                         );
-                        let _ = response_tx.send(json_payload).await;
                     }
                 }
             }

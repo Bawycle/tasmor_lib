@@ -19,7 +19,7 @@
 //! use tasmor_lib::Device;
 //!
 //! # async fn example() -> tasmor_lib::Result<()> {
-//! let device = Device::http("192.168.1.100")
+//! let (device, _initial_state) = Device::http("192.168.1.100")
 //!     .with_credentials("admin", "password")
 //!     .build()
 //!     .await?;
@@ -76,8 +76,8 @@ use crate::command::{
 use crate::error::{DeviceError, Error};
 use crate::protocol::{CommandResponse, HttpClient, Protocol};
 use crate::response::{
-    ColorTemperatureResponse, DimmerResponse, EnergyResponse, HsbColorResponse, PowerResponse,
-    StatusResponse,
+    ColorTemperatureResponse, DimmerResponse, EnergyResponse, FadeResponse, FadeSpeedResponse,
+    HsbColorResponse, PowerResponse, StartupFadeResponse, StatusResponse,
 };
 use crate::state::DeviceState;
 use crate::subscription::CallbackRegistry;
@@ -103,14 +103,15 @@ use crate::types::{ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerIndex, Po
 ///
 /// # async fn example() -> tasmor_lib::Result<()> {
 /// // HTTP device with auto-detection
-/// let device = Device::http("192.168.1.100")
+/// let (device, _initial_state) = Device::http("192.168.1.100")
 ///     .build()
 ///     .await?;
 ///
 /// // HTTP device with manual capabilities
-/// let device = Device::http("192.168.1.100")
+/// let (device, _initial_state) = Device::http("192.168.1.100")
 ///     .with_capabilities(Capabilities::rgbcct_light())
-///     .build_without_probe()?;
+///     .build_without_probe()
+///     .await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -473,52 +474,106 @@ impl<P: Protocol> Device<P> {
 
     /// Enables fade transitions.
     ///
+    /// Returns a typed response indicating whether fade is now enabled.
+    ///
     /// # Errors
     ///
     /// Returns error if the command fails.
-    pub async fn enable_fade(&self) -> Result<CommandResponse, Error> {
+    pub async fn enable_fade(&self) -> Result<FadeResponse, Error> {
         let cmd = FadeCommand::Enable;
-        self.send_command(&cmd).await
+        let response = self.send_command(&cmd).await?;
+        response.parse().map_err(Error::Parse)
     }
 
     /// Disables fade transitions.
     ///
+    /// Returns a typed response indicating whether fade is now disabled.
+    ///
     /// # Errors
     ///
     /// Returns error if the command fails.
-    pub async fn disable_fade(&self) -> Result<CommandResponse, Error> {
+    pub async fn disable_fade(&self) -> Result<FadeResponse, Error> {
         let cmd = FadeCommand::Disable;
-        self.send_command(&cmd).await
+        let response = self.send_command(&cmd).await?;
+        response.parse().map_err(Error::Parse)
+    }
+
+    /// Gets the current fade setting.
+    ///
+    /// Returns a typed response indicating whether fade is enabled.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the command fails.
+    pub async fn get_fade(&self) -> Result<FadeResponse, Error> {
+        let cmd = FadeCommand::Get;
+        let response = self.send_command(&cmd).await?;
+        response.parse().map_err(Error::Parse)
     }
 
     /// Sets the fade transition speed.
     ///
+    /// Returns a typed response with the new speed value.
+    ///
     /// # Errors
     ///
     /// Returns error if the command fails.
-    pub async fn set_fade_speed(&self, speed: FadeSpeed) -> Result<CommandResponse, Error> {
+    pub async fn set_fade_speed(&self, speed: FadeSpeed) -> Result<FadeSpeedResponse, Error> {
         let cmd = FadeSpeedCommand::Set(speed);
-        self.send_command(&cmd).await
+        let response = self.send_command(&cmd).await?;
+        response.parse().map_err(Error::Parse)
+    }
+
+    /// Gets the current fade speed setting.
+    ///
+    /// Returns a typed response with the current speed value.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the command fails.
+    pub async fn get_fade_speed(&self) -> Result<FadeSpeedResponse, Error> {
+        let cmd = FadeSpeedCommand::Get;
+        let response = self.send_command(&cmd).await?;
+        response.parse().map_err(Error::Parse)
     }
 
     /// Enables fade at startup.
     ///
+    /// Returns a typed response indicating whether startup fade is now enabled.
+    ///
     /// # Errors
     ///
     /// Returns error if the command fails.
-    pub async fn enable_fade_at_startup(&self) -> Result<CommandResponse, Error> {
+    pub async fn enable_fade_at_startup(&self) -> Result<StartupFadeResponse, Error> {
         let cmd = StartupFadeCommand::Enable;
-        self.send_command(&cmd).await
+        let response = self.send_command(&cmd).await?;
+        response.parse().map_err(Error::Parse)
     }
 
     /// Disables fade at startup.
     ///
+    /// Returns a typed response indicating whether startup fade is now disabled.
+    ///
     /// # Errors
     ///
     /// Returns error if the command fails.
-    pub async fn disable_fade_at_startup(&self) -> Result<CommandResponse, Error> {
+    pub async fn disable_fade_at_startup(&self) -> Result<StartupFadeResponse, Error> {
         let cmd = StartupFadeCommand::Disable;
-        self.send_command(&cmd).await
+        let response = self.send_command(&cmd).await?;
+        response.parse().map_err(Error::Parse)
+    }
+
+    /// Gets the current fade at startup setting.
+    ///
+    /// Returns a typed response indicating whether startup fade is enabled.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the command fails.
+    pub async fn get_fade_at_startup(&self) -> Result<StartupFadeResponse, Error> {
+        let cmd = StartupFadeCommand::Get;
+        let response = self.send_command(&cmd).await?;
+        response.parse().map_err(Error::Parse)
     }
 
     // ========== Energy Monitoring ==========
@@ -536,6 +591,139 @@ impl<P: Protocol> Device<P> {
         let cmd = EnergyCommand::Get;
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
+    }
+
+    /// Resets the total energy counter to zero and returns the updated energy data.
+    ///
+    /// This resets both the total energy value and the `TotalStartTime` to the current time,
+    /// then queries the device to return the updated energy data.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the device doesn't support energy monitoring or the command fails.
+    pub async fn reset_energy_total(&self) -> Result<EnergyResponse, Error> {
+        self.check_capability(
+            "energy monitoring",
+            self.capabilities.supports_energy_monitoring(),
+        )?;
+
+        // Send the reset command
+        let cmd = EnergyCommand::ResetTotal;
+        self.send_command(&cmd).await?;
+
+        // Query and return the updated energy data
+        let query_cmd = EnergyCommand::Get;
+        let response = self.send_command(&query_cmd).await?;
+        response.parse().map_err(Error::Parse)
+    }
+
+    // ========== Initial State Query ==========
+
+    /// Queries the device for its current state.
+    ///
+    /// This method queries all supported capabilities and returns a complete
+    /// `DeviceState` with the current values. It's called automatically by
+    /// the device builders to provide initial state.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if any of the queries fail.
+    #[allow(clippy::cast_precision_loss)]
+    pub async fn query_state(&self) -> Result<DeviceState, Error> {
+        tracing::debug!(
+            energy_monitoring = self.capabilities.supports_energy_monitoring(),
+            dimmer = self.capabilities.supports_dimmer_control(),
+            rgb = self.capabilities.supports_rgb_control(),
+            cct = self.capabilities.supports_color_temperature_control(),
+            "Querying device state"
+        );
+
+        let mut state = DeviceState::new();
+
+        // Query power state
+        match self.get_power().await {
+            Ok(power_response) => {
+                if let Ok(power_state) = power_response.first_power_state() {
+                    tracing::debug!(?power_state, "Got power state");
+                    state.set_power(1, power_state);
+                }
+            }
+            Err(e) => tracing::debug!(error = %e, "Failed to get power state"),
+        }
+
+        // Query dimmer if supported
+        if self.capabilities.supports_dimmer_control() {
+            match self.get_dimmer().await {
+                Ok(dimmer_response) => {
+                    if let Ok(dimmer) = Dimmer::new(dimmer_response.dimmer()) {
+                        tracing::debug!(dimmer = dimmer.value(), "Got dimmer");
+                        state.set_dimmer(dimmer);
+                    }
+                }
+                Err(e) => tracing::debug!(error = %e, "Failed to get dimmer"),
+            }
+        }
+
+        // Query color temperature if supported
+        if self.capabilities.supports_color_temperature_control() {
+            match self.get_color_temperature().await {
+                Ok(ct_response) => {
+                    if let Ok(ct) = ColorTemperature::new(ct_response.color_temperature()) {
+                        tracing::debug!(ct = ct.value(), "Got color temperature");
+                        state.set_color_temperature(ct);
+                    }
+                }
+                Err(e) => tracing::debug!(error = %e, "Failed to get color temperature"),
+            }
+        }
+
+        // Query HSB color if supported
+        if self.capabilities.supports_rgb_control() {
+            match self.get_hsb_color().await {
+                Ok(hsb_response) => {
+                    if let Ok(hsb) = hsb_response.hsb_color() {
+                        tracing::debug!(hue = hsb.hue(), sat = hsb.saturation(), "Got HSB color");
+                        state.set_hsb_color(hsb);
+                    }
+                }
+                Err(e) => tracing::debug!(error = %e, "Failed to get HSB color"),
+            }
+        }
+
+        // Query energy data if supported
+        if self.capabilities.supports_energy_monitoring() {
+            tracing::debug!("Querying energy data");
+            match self.energy().await {
+                Ok(energy_response) => {
+                    tracing::debug!(?energy_response, "Got energy response");
+                    if let Some(energy) = energy_response.energy() {
+                        tracing::debug!(
+                            power = energy.power,
+                            voltage = energy.voltage,
+                            current = energy.current,
+                            "Setting energy data"
+                        );
+                        state.set_power_consumption(energy.power as f32);
+                        state.set_voltage(f32::from(energy.voltage));
+                        state.set_current(energy.current);
+                        state.set_energy_today(energy.today);
+                        state.set_energy_yesterday(energy.yesterday);
+                        state.set_energy_total(energy.total);
+                        state.set_apparent_power(energy.apparent_power as f32);
+                        state.set_reactive_power(energy.reactive_power as f32);
+                        state.set_power_factor(energy.factor);
+                        if let Some(start_time) = &energy.total_start_time {
+                            state.set_total_start_time(start_time.clone());
+                        }
+                    } else {
+                        tracing::debug!("Energy response has no energy data");
+                    }
+                }
+                Err(e) => tracing::debug!(error = %e, "Failed to get energy data"),
+            }
+        }
+
+        Ok(state)
     }
 
     // ========== Helpers ==========

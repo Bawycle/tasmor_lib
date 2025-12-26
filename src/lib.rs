@@ -30,7 +30,8 @@
 //! #[tokio::main]
 //! async fn main() -> tasmor_lib::Result<()> {
 //!     // Create device with automatic capability detection
-//!     let device = Device::http("192.168.1.100")
+//!     // Returns (device, initial_state) tuple
+//!     let (device, _initial_state) = Device::http("192.168.1.100")
 //!         .build()
 //!         .await?;
 //!
@@ -54,9 +55,11 @@
 //! #[tokio::main]
 //! async fn main() -> tasmor_lib::Result<()> {
 //!     // Create device without probing (faster startup)
-//!     let device = Device::http("192.168.1.100")
+//!     // Returns (device, initial_state) tuple
+//!     let (device, _initial_state) = Device::http("192.168.1.100")
 //!         .with_capabilities(Capabilities::rgbcct_light())
-//!         .build_without_probe()?;
+//!         .build_without_probe()
+//!         .await?;
 //!
 //!     device.power_on().await?;
 //!     Ok(())
@@ -70,7 +73,8 @@
 //!
 //! #[tokio::main]
 //! async fn main() -> tasmor_lib::Result<()> {
-//!     let device = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_switch")
+//!     // Returns (device, initial_state) tuple
+//!     let (device, _initial_state) = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_switch")
 //!         .build()
 //!         .await?;
 //!
@@ -126,7 +130,10 @@ pub use command::{
 pub use device::{Device, HttpDeviceBuilder, MqttDeviceBuilder};
 pub use error::{DeviceError, Error, ParseError, ProtocolError, Result, ValueError};
 pub use protocol::{HttpConfig, MqttBroker, MqttBrokerBuilder, MqttBrokerConfig, TopicRouter};
-pub use response::{EnergyResponse, PowerResponse, StatusResponse};
+pub use response::{
+    ColorTemperatureResponse, DimmerResponse, EnergyResponse, FadeResponse, FadeSpeedResponse,
+    HsbColorResponse, PowerResponse, StartupFadeResponse, StatusResponse,
+};
 pub use subscription::{CallbackRegistry, Subscribable, SubscriptionId};
 pub use types::{
     ColorTemperature, DateTimeParseError, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState,

@@ -11,11 +11,15 @@ use crate::device::Device;
 use crate::error::Error;
 use crate::protocol::{MqttClient, MqttClientBuilder, Protocol};
 use crate::response::StatusResponse;
+use crate::state::DeviceState;
 
 /// Builder for creating MQTT-based devices.
 ///
 /// MQTT devices maintain a persistent connection through a broker and support
 /// real-time event subscriptions via the [`Subscribable`](crate::subscription::Subscribable) trait.
+///
+/// Both `build()` and `build_without_probe()` return the device along with its
+/// initial state, containing current values for power, energy, colors, etc.
 ///
 /// # Examples
 ///
@@ -23,11 +27,16 @@ use crate::response::StatusResponse;
 /// use tasmor_lib::Device;
 ///
 /// # async fn example() -> tasmor_lib::Result<()> {
-/// // Create an MQTT device
-/// let device = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_switch")
+/// // Create an MQTT device - returns device and initial state
+/// let (device, initial_state) = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_switch")
 ///     .with_credentials("mqtt_user", "mqtt_password")
 ///     .build()
 ///     .await?;
+///
+/// // Initial state contains current values
+/// if let Some(power) = initial_state.power(1) {
+///     println!("Power is {:?}", power);
+/// }
 ///
 /// device.power_toggle().await?;
 /// # Ok(())
@@ -86,14 +95,19 @@ impl MqttDeviceBuilder {
 
     /// Builds the device with auto-detection of capabilities.
     ///
-    /// This will query the device status to detect capabilities.
+    /// This will query the device status to detect capabilities, then query
+    /// the device for its current state (power, energy, colors, etc.).
+    ///
+    /// Returns a tuple of `(Device, DeviceState)` where `DeviceState` contains
+    /// the initial values for all supported capabilities.
     ///
     /// # Errors
     ///
     /// Returns error if:
     /// - Connection to broker fails
     /// - Capability detection fails
-    pub async fn build(self) -> Result<Device<MqttClient>, Error> {
+    /// - Initial state query fails
+    pub async fn build(self) -> Result<(Device<MqttClient>, DeviceState), Error> {
         let client = self.create_client().await?;
 
         // Query device status for capabilities
@@ -111,18 +125,24 @@ impl MqttDeviceBuilder {
         // Register callbacks with the MQTT client for message routing
         device.register_mqtt_callbacks();
 
-        Ok(device)
+        // Query initial state
+        let initial_state = device.query_state().await?;
+
+        Ok((device, initial_state))
     }
 
     /// Builds the device without probing for capabilities.
     ///
-    /// Use this when you've set capabilities manually via [`with_capabilities`](Self::with_capabilities)
-    /// or want faster startup.
+    /// Use this when you've set capabilities manually via [`with_capabilities`](Self::with_capabilities).
+    /// Still queries the device for its current state.
+    ///
+    /// Returns a tuple of `(Device, DeviceState)` where `DeviceState` contains
+    /// the initial values for all supported capabilities.
     ///
     /// # Errors
     ///
-    /// Returns error if the MQTT client cannot be created.
-    pub async fn build_without_probe(self) -> Result<Device<MqttClient>, Error> {
+    /// Returns error if the MQTT client cannot be created or state query fails.
+    pub async fn build_without_probe(self) -> Result<(Device<MqttClient>, DeviceState), Error> {
         let client = self.create_client().await?;
         let capabilities = self.capabilities.unwrap_or_default();
 
@@ -131,7 +151,10 @@ impl MqttDeviceBuilder {
         // Register callbacks with the MQTT client for message routing
         device.register_mqtt_callbacks();
 
-        Ok(device)
+        // Query initial state
+        let initial_state = device.query_state().await?;
+
+        Ok((device, initial_state))
     }
 
     /// Creates the MQTT client with the configured options.
@@ -163,10 +186,15 @@ impl Device<MqttClient> {
     /// use tasmor_lib::Device;
     ///
     /// # async fn example() -> tasmor_lib::Result<()> {
-    /// let device = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_switch")
+    /// // Build returns (device, initial_state)
+    /// let (device, initial_state) = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_switch")
     ///     .with_credentials("mqtt_user", "mqtt_password")
     ///     .build()
     ///     .await?;
+    ///
+    /// // Access initial state
+    /// println!("Power: {:?}", initial_state.power(1));
+    /// println!("Energy: {:?}", initial_state.energy_total());
     /// # Ok(())
     /// # }
     /// ```

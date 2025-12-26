@@ -94,14 +94,14 @@ mod device_mqtt {
         start_mock_broker(port).await;
 
         let broker_url = format!("mqtt://127.0.0.1:{port}");
-        let device = Device::mqtt(&broker_url, "tasmota_bulb")
+        let result = Device::mqtt(&broker_url, "tasmota_bulb")
             .with_capabilities(Capabilities::rgbcct_light())
             .build_without_probe()
             .await;
 
-        assert!(device.is_ok());
+        assert!(result.is_ok());
 
-        let device = device.unwrap();
+        let (device, _initial_state) = result.unwrap();
         assert!(device.capabilities().supports_dimmer_control());
         assert!(device.capabilities().supports_rgb_control());
         assert!(device.capabilities().supports_color_temperature_control());
@@ -113,14 +113,14 @@ mod device_mqtt {
         start_mock_broker(port).await;
 
         let broker_url = format!("mqtt://127.0.0.1:{port}");
-        let device = Device::mqtt(&broker_url, "tasmota_plug")
+        let result = Device::mqtt(&broker_url, "tasmota_plug")
             .with_capabilities(Capabilities::neo_coolcam())
             .build_without_probe()
             .await;
 
-        assert!(device.is_ok());
+        assert!(result.is_ok());
 
-        let device = device.unwrap();
+        let (device, _initial_state) = result.unwrap();
         assert!(device.capabilities().supports_energy_monitoring());
         assert!(!device.capabilities().supports_dimmer_control());
     }
@@ -131,14 +131,14 @@ mod device_mqtt {
         start_mock_broker(port).await;
 
         let broker_url = format!("mqtt://127.0.0.1:{port}");
-        let device = Device::mqtt(&broker_url, "tasmota_switch")
+        let result = Device::mqtt(&broker_url, "tasmota_switch")
             .with_capabilities(Capabilities::basic())
             .build_without_probe()
             .await;
 
-        assert!(device.is_ok());
+        assert!(result.is_ok());
 
-        let device = device.unwrap();
+        let (device, _initial_state) = result.unwrap();
         assert_eq!(device.capabilities().power_channels(), 1);
         assert!(!device.capabilities().supports_dimmer_control());
     }
@@ -240,7 +240,7 @@ mod capability_verification {
         start_mock_broker(port).await;
 
         let broker_url = format!("mqtt://127.0.0.1:{port}");
-        let device = Device::mqtt(&broker_url, "switch")
+        let (device, _) = Device::mqtt(&broker_url, "switch")
             .with_capabilities(Capabilities::basic()) // No dimmer
             .build_without_probe()
             .await
@@ -258,7 +258,7 @@ mod capability_verification {
         start_mock_broker(port).await;
 
         let broker_url = format!("mqtt://127.0.0.1:{port}");
-        let device = Device::mqtt(&broker_url, "switch")
+        let (device, _) = Device::mqtt(&broker_url, "switch")
             .with_capabilities(Capabilities::rgb_light()) // No CCT
             .build_without_probe()
             .await
@@ -276,7 +276,7 @@ mod capability_verification {
         start_mock_broker(port).await;
 
         let broker_url = format!("mqtt://127.0.0.1:{port}");
-        let device = Device::mqtt(&broker_url, "switch")
+        let (device, _) = Device::mqtt(&broker_url, "switch")
             .with_capabilities(Capabilities::cct_light()) // No RGB
             .build_without_probe()
             .await
@@ -292,7 +292,7 @@ mod capability_verification {
         start_mock_broker(port).await;
 
         let broker_url = format!("mqtt://127.0.0.1:{port}");
-        let device = Device::mqtt(&broker_url, "bulb")
+        let (device, _) = Device::mqtt(&broker_url, "bulb")
             .with_capabilities(Capabilities::rgbcct_light()) // No energy
             .build_without_probe()
             .await

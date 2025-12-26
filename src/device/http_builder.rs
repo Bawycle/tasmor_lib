@@ -11,6 +11,7 @@ use crate::device::Device;
 use crate::error::Error;
 use crate::protocol::{HttpClient, HttpConfig, Protocol};
 use crate::response::StatusResponse;
+use crate::state::DeviceState;
 
 /// Builder for creating HTTP-based devices.
 ///
@@ -18,27 +19,34 @@ use crate::response::StatusResponse;
 /// - `Device::http("host")` - Simple host string
 /// - `Device::http_config(HttpConfig::new("host").with_port(8080))` - Advanced configuration
 ///
+/// Both `build()` and `build_without_probe()` return the device along with its
+/// initial state, containing current values for power, energy, colors, etc.
+///
 /// # Examples
 ///
 /// ```no_run
 /// use tasmor_lib::Device;
 ///
 /// # async fn example() -> tasmor_lib::Result<()> {
-/// // Simple: with auto-detection
-/// let device = Device::http("192.168.1.100")
+/// // Simple: with auto-detection - returns (device, initial_state)
+/// let (device, initial_state) = Device::http("192.168.1.100")
 ///     .build()
 ///     .await?;
 ///
+/// // Access initial state
+/// println!("Power: {:?}", initial_state.power(1));
+///
 /// // With credentials
-/// let device = Device::http("192.168.1.100")
+/// let (device, state) = Device::http("192.168.1.100")
 ///     .with_credentials("admin", "password")
 ///     .build()
 ///     .await?;
 ///
-/// // With manual capabilities (no network probe)
-/// let device = Device::http("192.168.1.100")
+/// // With manual capabilities (skips capability probe, still queries state)
+/// let (device, state) = Device::http("192.168.1.100")
 ///     .with_capabilities(tasmor_lib::Capabilities::rgbcct_light())
-///     .build_without_probe()?;
+///     .build_without_probe()
+///     .await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -109,16 +117,22 @@ impl HttpDeviceBuilder {
 
     /// Builds the device with auto-detection of capabilities.
     ///
-    /// This will query the device status to detect capabilities.
+    /// This will query the device status to detect capabilities, then query
+    /// the device for its current state (power, energy, colors, etc.).
+    ///
+    /// Returns a tuple of `(Device, DeviceState)` where `DeviceState` contains
+    /// the initial values for all supported capabilities.
+    ///
     /// Use [`build_without_probe`](Self::build_without_probe) if you've set
-    /// capabilities manually and want to skip the network query.
+    /// capabilities manually and want to skip the capability detection query.
     ///
     /// # Errors
     ///
     /// Returns error if:
     /// - Connection fails
     /// - Capability detection fails
-    pub async fn build(self) -> Result<Device<HttpClient>, Error> {
+    /// - Initial state query fails
+    pub async fn build(self) -> Result<(Device<HttpClient>, DeviceState), Error> {
         let client = self.config.into_client().map_err(Error::Protocol)?;
 
         // Auto-detect capabilities if not set
@@ -131,23 +145,36 @@ impl HttpDeviceBuilder {
             Capabilities::from_status(&status)
         };
 
-        Ok(Device::new(client, capabilities))
+        let device = Device::new(client, capabilities);
+
+        // Query initial state
+        let initial_state = device.query_state().await?;
+
+        Ok((device, initial_state))
     }
 
     /// Builds the device without probing for capabilities.
     ///
-    /// Use this when you've set capabilities manually via [`with_capabilities`](Self::with_capabilities)
-    /// or want faster startup without network access.
+    /// Use this when you've set capabilities manually via [`with_capabilities`](Self::with_capabilities).
+    /// Still queries the device for its current state.
+    ///
+    /// Returns a tuple of `(Device, DeviceState)` where `DeviceState` contains
+    /// the initial values for all supported capabilities.
     ///
     /// If capabilities were not set, defaults to [`Capabilities::default()`].
     ///
     /// # Errors
     ///
-    /// Returns error if the HTTP client cannot be created.
-    pub fn build_without_probe(self) -> Result<Device<HttpClient>, Error> {
+    /// Returns error if the HTTP client cannot be created or state query fails.
+    pub async fn build_without_probe(self) -> Result<(Device<HttpClient>, DeviceState), Error> {
         let client = self.config.into_client().map_err(Error::Protocol)?;
         let capabilities = self.capabilities.unwrap_or_default();
-        Ok(Device::new(client, capabilities))
+        let device = Device::new(client, capabilities);
+
+        // Query initial state
+        let initial_state = device.query_state().await?;
+
+        Ok((device, initial_state))
     }
 }
 
@@ -180,27 +207,6 @@ mod tests {
         assert!(builder.capabilities().is_some());
     }
 
-    #[test]
-    fn builder_build_without_probe() {
-        let config = HttpConfig::new("192.168.1.100");
-        let result = HttpDeviceBuilder::new(config)
-            .with_capabilities(Capabilities::neo_coolcam())
-            .build_without_probe();
-
-        assert!(result.is_ok());
-        let device = result.unwrap();
-        assert!(device.capabilities().supports_energy_monitoring());
-    }
-
-    #[test]
-    fn builder_build_without_probe_default_capabilities() {
-        let config = HttpConfig::new("192.168.1.100");
-        let result = HttpDeviceBuilder::new(config).build_without_probe();
-
-        assert!(result.is_ok());
-        let device = result.unwrap();
-        // Default capabilities - verify we got a device
-        // (default capabilities are minimal)
-        assert!(!device.capabilities().is_multi_relay());
-    }
+    // Note: build() and build_without_probe() tests are in integration tests
+    // as they require network access to query initial state.
 }

@@ -89,10 +89,9 @@ impl DeviceManager {
     /// Returns an error if the device creation fails.
     pub async fn add_device(&self, config: DeviceConfig) -> Result<(), String> {
         let config_id = config.id;
-        let protocol = config.protocol;
         let capabilities = config.model.capabilities();
 
-        let handle = match protocol {
+        let (handle, initial_state) = match config.protocol {
             Protocol::Http => {
                 let mut builder = Device::http(&config.host).with_capabilities(capabilities);
 
@@ -100,8 +99,11 @@ impl DeviceManager {
                     builder = builder.with_credentials(user, pass);
                 }
 
-                let device = builder.build_without_probe().map_err(|e| e.to_string())?;
-                DeviceHandle::Http(device)
+                let (device, state) = builder
+                    .build_without_probe()
+                    .await
+                    .map_err(|e| e.to_string())?;
+                (DeviceHandle::Http(device), state)
             }
             Protocol::Mqtt => {
                 let topic = config.topic.as_deref().unwrap_or("tasmota");
@@ -111,7 +113,7 @@ impl DeviceManager {
                     builder = builder.with_credentials(user, pass);
                 }
 
-                let device = builder
+                let (device, state) = builder
                     .build_without_probe()
                     .await
                     .map_err(|e| e.to_string())?;
@@ -151,28 +153,17 @@ impl DeviceManager {
                     });
                 });
 
-                DeviceHandle::Mqtt(device)
+                (DeviceHandle::Mqtt(device), state)
             }
         };
 
-        // Create managed device entry
+        // Create managed device entry with initial state from the builder
         let mut managed = ManagedDevice::new(config);
         managed.status = ConnectionStatus::Connected;
+        managed.state = initial_state;
 
         let entry = DeviceEntry { handle, managed };
         self.devices.write().await.insert(config_id, entry);
-
-        // Query initial status for MQTT devices
-        // This will trigger a response that updates the state via callbacks
-        if protocol == Protocol::Mqtt {
-            if let Err(e) = self.query_status(config_id).await {
-                tracing::warn!(
-                    device_id = %config_id,
-                    error = %e,
-                    "Failed to query initial status for MQTT device"
-                );
-            }
-        }
 
         Ok(())
     }
@@ -393,25 +384,43 @@ impl DeviceManager {
         Ok(())
     }
 
-    /// Resets the total energy counter by querying energy data.
+    /// Resets the total energy counter and returns the updated energy data.
     ///
-    /// Note: The library doesn't have a direct reset method, so this
-    /// just refreshes the energy data.
-    pub async fn reset_energy_total(&self, config_id: Uuid) -> Result<(), String> {
-        // Query energy to refresh data (actual reset not implemented in library)
-        let devices = self.devices.read().await;
-        let entry = devices.get(&config_id).ok_or("Device not found")?;
+    /// Returns the updated `DeviceState` with the new energy values including `TotalStartTime`.
+    pub async fn reset_energy_total(
+        &self,
+        config_id: Uuid,
+    ) -> Result<tasmor_lib::state::DeviceState, String> {
+        // Call the library's reset_energy_total which resets and returns updated data
+        let energy_response = {
+            let devices = self.devices.read().await;
+            let entry = devices.get(&config_id).ok_or("Device not found")?;
 
-        match &entry.handle {
-            DeviceHandle::Http(device) => {
-                device.energy().await.map_err(|e| e.to_string())?;
+            match &entry.handle {
+                DeviceHandle::Http(device) => {
+                    device.reset_energy_total().await.map_err(|e| e.to_string())?
+                }
+                DeviceHandle::Mqtt(device) => {
+                    device.reset_energy_total().await.map_err(|e| e.to_string())?
+                }
             }
-            DeviceHandle::Mqtt(device) => {
-                device.energy().await.map_err(|e| e.to_string())?;
+        };
+
+        // Update local state with the new energy values
+        let mut devices = self.devices.write().await;
+        if let Some(entry) = devices.get_mut(&config_id) {
+            if let Some(energy) = energy_response.energy() {
+                entry.managed.state.set_energy_total(energy.total);
+                entry.managed.state.set_energy_today(energy.today);
+                entry.managed.state.set_energy_yesterday(energy.yesterday);
+                if let Some(start_time) = &energy.total_start_time {
+                    entry.managed.state.set_total_start_time(start_time.clone());
+                }
             }
+            Ok(entry.managed.state.clone())
+        } else {
+            Err("Device not found".to_string())
         }
-
-        Ok(())
     }
 
     /// Queries the device status by fetching individual state values.
@@ -465,6 +474,29 @@ impl DeviceManager {
         if let Ok(hsb_response) = hsb_result {
             if let Ok(hsb) = hsb_response.hsb_color() {
                 state.set_hsb_color(hsb);
+            }
+        }
+
+        // Query energy data if supported
+        let energy_result = match &entry.handle {
+            DeviceHandle::Http(device) => device.energy().await,
+            DeviceHandle::Mqtt(device) => device.energy().await,
+        };
+        #[allow(clippy::cast_precision_loss)]
+        if let Ok(energy_response) = energy_result {
+            if let Some(energy) = energy_response.energy() {
+                state.set_power_consumption(energy.power as f32);
+                state.set_voltage(f32::from(energy.voltage));
+                state.set_current(energy.current);
+                state.set_energy_today(energy.today);
+                state.set_energy_yesterday(energy.yesterday);
+                state.set_energy_total(energy.total);
+                state.set_apparent_power(energy.apparent_power as f32);
+                state.set_reactive_power(energy.reactive_power as f32);
+                state.set_power_factor(energy.factor);
+                if let Some(start_time) = &energy.total_start_time {
+                    state.set_total_start_time(start_time.clone());
+                }
             }
         }
 

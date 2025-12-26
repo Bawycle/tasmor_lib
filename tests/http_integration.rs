@@ -344,6 +344,10 @@ mod device_auto_detection {
         })
     }
 
+    fn mock_power_response() -> serde_json::Value {
+        serde_json::json!({"POWER1": "OFF"})
+    }
+
     #[tokio::test]
     async fn build_device_with_auto_detection() {
         let mock_server = MockServer::start().await;
@@ -355,8 +359,15 @@ mod device_auto_detection {
             .mount(&mock_server)
             .await;
 
+        // Mock Power1 for initial state query
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Power1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(mock_power_response()))
+            .mount(&mock_server)
+            .await;
+
         let host = mock_server.uri().replace("http://", "");
-        let device = Device::http(&host).build().await.unwrap();
+        let (device, _state) = Device::http(&host).build().await.unwrap();
 
         assert_eq!(device.capabilities().power_channels(), 1);
     }
@@ -384,8 +395,36 @@ mod device_auto_detection {
             .mount(&mock_server)
             .await;
 
+        // Mock Power1 for initial state query
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Power1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(mock_power_response()))
+            .mount(&mock_server)
+            .await;
+
+        // Mock Status 10 for energy query
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Status 10"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "StatusSNS": {
+                    "ENERGY": {
+                        "Power": 45,
+                        "Voltage": 230,
+                        "Current": 0.2,
+                        "Today": 1.0,
+                        "Yesterday": 2.0,
+                        "Total": 100.0,
+                        "ApparentPower": 46,
+                        "ReactivePower": 10,
+                        "Factor": 0.98
+                    }
+                }
+            })))
+            .mount(&mock_server)
+            .await;
+
         let host = mock_server.uri().replace("http://", "");
-        let device = Device::http(&host).build().await.unwrap();
+        let (device, _state) = Device::http(&host).build().await.unwrap();
 
         assert!(device.capabilities().supports_energy_monitoring());
     }
@@ -394,11 +433,44 @@ mod device_auto_detection {
     async fn build_device_without_probe() {
         let mock_server = MockServer::start().await;
 
-        // No Status mock needed - using manual capabilities
+        // Mock Power1 for initial state query
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Power1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(mock_power_response()))
+            .mount(&mock_server)
+            .await;
+
+        // Mock Dimmer for initial state query
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Dimmer"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"Dimmer": 50})),
+            )
+            .mount(&mock_server)
+            .await;
+
+        // Mock CT for initial state query
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "CT"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"CT": 300})))
+            .mount(&mock_server)
+            .await;
+
+        // Mock HSBColor for initial state query
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "HSBColor"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"HSBColor": "0,100,100"})),
+            )
+            .mount(&mock_server)
+            .await;
+
         let host = mock_server.uri().replace("http://", "");
-        let device = Device::http(&host)
+        let (device, _state) = Device::http(&host)
             .with_capabilities(Capabilities::rgbcct_light())
             .build_without_probe()
+            .await
             .unwrap();
 
         assert!(device.capabilities().supports_dimmer_control());
@@ -415,11 +487,22 @@ mod device_power_commands {
     use super::*;
 
     async fn create_device_with_mock(mock_server: &MockServer) -> Device<HttpClient> {
+        // Mock Power1 for initial state query
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Power1"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"POWER1": "OFF"})),
+            )
+            .mount(mock_server)
+            .await;
+
         let host = mock_server.uri().replace("http://", "");
-        Device::http(&host)
+        let (device, _) = Device::http(&host)
             .with_capabilities(Capabilities::basic())
             .build_without_probe()
-            .unwrap()
+            .await
+            .unwrap();
+        device
     }
 
     #[tokio::test]
@@ -506,14 +589,24 @@ mod device_power_commands {
             .mount(&mock_server)
             .await;
 
+        // Mock Power1 for initial state query
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Power1"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"POWER1": "OFF"})),
+            )
+            .mount(&mock_server)
+            .await;
+
         let host = mock_server.uri().replace("http://", "");
         let caps = tasmor_lib::CapabilitiesBuilder::new()
             .power_channels(4)
             .build();
 
-        let device = Device::http(&host)
+        let (device, _) = Device::http(&host)
             .with_capabilities(caps)
             .build_without_probe()
+            .await
             .unwrap();
 
         let response = device
@@ -533,11 +626,42 @@ mod device_light_commands {
     use super::*;
 
     async fn create_light_device(mock_server: &MockServer) -> Device<HttpClient> {
+        // Mock queries for initial state
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Power1"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"POWER1": "OFF"})),
+            )
+            .mount(mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Dimmer"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"Dimmer": 50})),
+            )
+            .mount(mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "CT"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"CT": 300})))
+            .mount(mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "HSBColor"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"HSBColor": "0,100,100"})),
+            )
+            .mount(mock_server)
+            .await;
+
         let host = mock_server.uri().replace("http://", "");
-        Device::http(&host)
+        let (device, _) = Device::http(&host)
             .with_capabilities(Capabilities::rgbcct_light())
             .build_without_probe()
-            .unwrap()
+            .await
+            .unwrap();
+        device
     }
 
     #[tokio::test]
@@ -649,10 +773,20 @@ mod device_light_commands {
     async fn dimmer_fails_without_capability() {
         let mock_server = MockServer::start().await;
 
+        // Mock Power1 for initial state query
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Power1"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"POWER1": "OFF"})),
+            )
+            .mount(&mock_server)
+            .await;
+
         let host = mock_server.uri().replace("http://", "");
-        let device = Device::http(&host)
+        let (device, _) = Device::http(&host)
             .with_capabilities(Capabilities::basic()) // No dimmer
             .build_without_probe()
+            .await
             .unwrap();
 
         let result = device.set_dimmer(Dimmer::new(50).unwrap()).await;
@@ -663,10 +797,35 @@ mod device_light_commands {
     async fn color_temperature_fails_without_capability() {
         let mock_server = MockServer::start().await;
 
+        // Mock queries for initial state (rgb_light has dimmer and rgb, no cct)
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Power1"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"POWER1": "OFF"})),
+            )
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Dimmer"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"Dimmer": 50})),
+            )
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "HSBColor"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"HSBColor": "0,100,100"})),
+            )
+            .mount(&mock_server)
+            .await;
+
         let host = mock_server.uri().replace("http://", "");
-        let device = Device::http(&host)
+        let (device, _) = Device::http(&host)
             .with_capabilities(Capabilities::rgb_light()) // No CCT
             .build_without_probe()
+            .await
             .unwrap();
 
         let result = device
@@ -679,10 +838,32 @@ mod device_light_commands {
     async fn hsb_color_fails_without_capability() {
         let mock_server = MockServer::start().await;
 
+        // Mock queries for initial state (cct_light has dimmer and cct, no rgb)
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Power1"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"POWER1": "OFF"})),
+            )
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Dimmer"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"Dimmer": 50})),
+            )
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "CT"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"CT": 300})))
+            .mount(&mock_server)
+            .await;
+
         let host = mock_server.uri().replace("http://", "");
-        let device = Device::http(&host)
+        let (device, _) = Device::http(&host)
             .with_capabilities(Capabilities::cct_light()) // No RGB
             .build_without_probe()
+            .await
             .unwrap();
 
         let result = device.set_hsb_color(HsbColor::red()).await;
@@ -698,11 +879,41 @@ mod device_energy_commands {
     use super::*;
 
     async fn create_energy_device(mock_server: &MockServer) -> Device<HttpClient> {
+        // Mock queries for initial state
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Power1"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"POWER1": "OFF"})),
+            )
+            .mount(mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Status 10"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "StatusSNS": {
+                    "ENERGY": {
+                        "Power": 45,
+                        "Voltage": 230,
+                        "Current": 0.2,
+                        "Today": 1.0,
+                        "Yesterday": 2.0,
+                        "Total": 100.0,
+                        "ApparentPower": 46,
+                        "ReactivePower": 10,
+                        "Factor": 0.98
+                    }
+                }
+            })))
+            .mount(mock_server)
+            .await;
+
         let host = mock_server.uri().replace("http://", "");
-        Device::http(&host)
+        let (device, _) = Device::http(&host)
             .with_capabilities(Capabilities::neo_coolcam())
             .build_without_probe()
-            .unwrap()
+            .await
+            .unwrap();
+        device
     }
 
     #[tokio::test]
@@ -740,10 +951,20 @@ mod device_energy_commands {
     async fn energy_fails_without_capability() {
         let mock_server = MockServer::start().await;
 
+        // Mock Power1 for initial state query
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Power1"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"POWER1": "OFF"})),
+            )
+            .mount(&mock_server)
+            .await;
+
         let host = mock_server.uri().replace("http://", "");
-        let device = Device::http(&host)
+        let (device, _) = Device::http(&host)
             .with_capabilities(Capabilities::basic()) // No energy
             .build_without_probe()
+            .await
             .unwrap();
 
         let result = device.energy().await;
@@ -761,6 +982,15 @@ mod device_status_commands {
     #[tokio::test]
     async fn get_status() {
         let mock_server = MockServer::start().await;
+
+        // Mock Power1 for initial state query
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Power1"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"POWER1": "OFF"})),
+            )
+            .mount(&mock_server)
+            .await;
 
         Mock::given(method("GET"))
             .and(query_param("cmnd", "Status 0"))
@@ -783,9 +1013,10 @@ mod device_status_commands {
             .await;
 
         let host = mock_server.uri().replace("http://", "");
-        let device = Device::http(&host)
+        let (device, _) = Device::http(&host)
             .with_capabilities(Capabilities::basic())
             .build_without_probe()
+            .await
             .unwrap();
 
         let status = device.status().await.unwrap();
@@ -804,19 +1035,87 @@ mod device_status_commands {
 mod error_handling {
     use super::*;
 
+    // Note: build_without_probe() is designed to be resilient - it ignores errors
+    // during initial state query and returns an empty state. This is intentional
+    // because the device might not respond to all capability queries.
+    //
+    // The build() method (with probe) WILL fail if the device is unreachable,
+    // because capability detection requires a response.
+
     #[tokio::test]
-    async fn handles_server_error() {
+    async fn build_with_probe_fails_on_server_error() {
         let mock_server = MockServer::start().await;
 
+        // Server returns 500 for all requests - build with probe should fail
         Mock::given(method("GET"))
             .respond_with(ResponseTemplate::new(500))
             .mount(&mock_server)
             .await;
 
         let host = mock_server.uri().replace("http://", "");
-        let device = Device::http(&host)
+        let result = Device::http(&host).build().await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn build_with_probe_fails_on_connection_refused() {
+        // Use a port that's definitely not listening - build with probe should fail
+        let result = Device::http("127.0.0.1:59999").build().await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn build_without_probe_succeeds_with_empty_state_on_error() {
+        let mock_server = MockServer::start().await;
+
+        // Server returns 500 for all requests
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&mock_server)
+            .await;
+
+        let host = mock_server.uri().replace("http://", "");
+        let result = Device::http(&host)
             .with_capabilities(Capabilities::basic())
             .build_without_probe()
+            .await;
+
+        // build_without_probe is designed to succeed even if state query fails
+        assert!(result.is_ok());
+
+        // But state should be empty/default
+        let (_device, state) = result.unwrap();
+        assert!(state.power(1).is_none());
+    }
+
+    #[tokio::test]
+    async fn handles_server_error_during_command() {
+        let mock_server = MockServer::start().await;
+
+        // Mock successful initial state query
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Power1"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"POWER1": "OFF"})),
+            )
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        // Mock server error for subsequent requests
+        Mock::given(method("GET"))
+            .and(query_param_contains("cmnd", "Power1 ON"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&mock_server)
+            .await;
+
+        let host = mock_server.uri().replace("http://", "");
+        let (device, _) = Device::http(&host)
+            .with_capabilities(Capabilities::basic())
+            .build_without_probe()
+            .await
             .unwrap();
 
         let result = device.power_on().await;
@@ -824,18 +1123,31 @@ mod error_handling {
     }
 
     #[tokio::test]
-    async fn handles_invalid_json_response() {
+    async fn handles_invalid_json_response_during_command() {
         let mock_server = MockServer::start().await;
 
+        // Mock successful initial state query
         Mock::given(method("GET"))
+            .and(query_param("cmnd", "Power1"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"POWER1": "OFF"})),
+            )
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        // Mock invalid JSON for subsequent requests
+        Mock::given(method("GET"))
+            .and(query_param_contains("cmnd", "Power1 ON"))
             .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
             .mount(&mock_server)
             .await;
 
         let host = mock_server.uri().replace("http://", "");
-        let device = Device::http(&host)
+        let (device, _) = Device::http(&host)
             .with_capabilities(Capabilities::basic())
             .build_without_probe()
+            .await
             .unwrap();
 
         let result = device.power_on().await;
@@ -843,14 +1155,18 @@ mod error_handling {
     }
 
     #[tokio::test]
-    async fn handles_connection_refused() {
-        // Use a port that's definitely not listening
-        let device = Device::http("127.0.0.1:59999")
+    async fn handles_connection_refused_during_command() {
+        // build_without_probe with connection refused still succeeds (resilient)
+        let result = Device::http("127.0.0.1:59999")
             .with_capabilities(Capabilities::basic())
             .build_without_probe()
-            .unwrap();
+            .await;
 
-        let result = device.power_on().await;
-        assert!(result.is_err());
+        assert!(result.is_ok());
+
+        // But commands should fail
+        let (device, _) = result.unwrap();
+        let cmd_result = device.power_on().await;
+        assert!(cmd_result.is_err());
     }
 }
