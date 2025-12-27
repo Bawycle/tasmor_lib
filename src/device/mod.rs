@@ -34,19 +34,12 @@
 //! MQTT devices maintain a persistent connection through a broker and support
 //! real-time event subscriptions via the [`Subscribable`](crate::subscription::Subscribable) trait.
 //!
-//! ```ignore
-//! use tasmor_lib::protocol::MqttBroker;
+//! ```no_run
 //! use tasmor_lib::Device;
 //! use tasmor_lib::subscription::Subscribable;
 //!
 //! # async fn example() -> tasmor_lib::Result<()> {
-//! let broker = MqttBroker::builder()
-//!     .host("192.168.1.50")
-//!     .port(1883)
-//!     .build()
-//!     .await?;
-//!
-//! let device = Device::mqtt(&broker, "tasmota_bedroom")
+//! let (device, _initial_state) = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_bedroom")
 //!     .build()
 //!     .await?;
 //!
@@ -509,8 +502,8 @@ impl<P: Protocol> Device<P> {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use tasmor_lib::types::RgbColor;
+    /// ```no_run
+    /// use tasmor_lib::RgbColor;
     ///
     /// # async fn example(device: &tasmor_lib::Device<impl tasmor_lib::protocol::Protocol>) -> tasmor_lib::Result<()> {
     /// // Set color using hex string
@@ -554,8 +547,8 @@ impl<P: Protocol> Device<P> {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use tasmor_lib::types::Scheme;
+    /// ```no_run
+    /// use tasmor_lib::Scheme;
     ///
     /// # async fn example(device: &tasmor_lib::Device<impl tasmor_lib::protocol::Protocol>) -> tasmor_lib::Result<()> {
     /// // Set wakeup scheme
@@ -609,8 +602,8 @@ impl<P: Protocol> Device<P> {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use tasmor_lib::types::WakeupDuration;
+    /// ```no_run
+    /// use tasmor_lib::WakeupDuration;
     ///
     /// # async fn example(device: &tasmor_lib::Device<impl tasmor_lib::protocol::Protocol>) -> tasmor_lib::Result<()> {
     /// // Set wakeup duration to 5 minutes

@@ -104,12 +104,12 @@
 //!
 //! MQTT devices support real-time event subscriptions via callbacks:
 //!
-//! ```ignore
+//! ```no_run
 //! use tasmor_lib::{Device, subscription::Subscribable};
 //!
 //! #[tokio::main]
 //! async fn main() -> tasmor_lib::Result<()> {
-//!     let device = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_switch")
+//!     let (device, _initial_state) = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_switch")
 //!         .build()
 //!         .await?;
 //!
@@ -170,12 +170,12 @@
 //! - **Multi-device setups**: Efficiently manage many devices via one broker
 //! - **State synchronization**: Keep local state in sync with device state
 //!
-//! ```ignore
+//! ```no_run
 //! use tasmor_lib::{Device, subscription::Subscribable};
 //!
 //! # async fn example() -> tasmor_lib::Result<()> {
 //! // MQTT: Real-time events and state tracking
-//! let (device, initial_state) = Device::mqtt("mqtt://broker:1883", "tasmota_plug")
+//! let (device, _initial_state) = Device::mqtt("mqtt://broker:1883", "tasmota_plug")
 //!     .build()
 //!     .await?;
 //!

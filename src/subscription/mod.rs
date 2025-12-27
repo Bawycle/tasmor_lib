@@ -21,7 +21,15 @@
 //!
 //! Subscriptions are typically created through methods on MQTT devices:
 //!
-//! ```ignore
+//! ```no_run
+//! use tasmor_lib::Device;
+//! use tasmor_lib::subscription::Subscribable;
+//!
+//! # async fn example() -> tasmor_lib::Result<()> {
+//! let (device, _) = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_device")
+//!     .build()
+//!     .await?;
+//!
 //! // Subscribe to power state changes
 //! let sub_id = device.on_power_changed(|index, state| {
 //!     println!("Power {index} changed to {state:?}");
@@ -29,6 +37,8 @@
 //!
 //! // Later, unsubscribe
 //! device.unsubscribe(sub_id);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # HTTP vs MQTT

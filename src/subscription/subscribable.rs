@@ -33,8 +33,14 @@ use crate::types::{ColorTemperature, Dimmer, HsbColor, PowerState, Scheme};
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
+/// use tasmor_lib::Device;
 /// use tasmor_lib::subscription::Subscribable;
+///
+/// # async fn example() -> tasmor_lib::Result<()> {
+/// let (device, _) = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_device")
+///     .build()
+///     .await?;
 ///
 /// // Subscribe to power state changes
 /// let sub_id = device.on_power_changed(|index, state| {
@@ -48,6 +54,8 @@ use crate::types::{ColorTemperature, Dimmer, HsbColor, PowerState, Scheme};
 ///
 /// // Unsubscribe when no longer needed
 /// device.unsubscribe(sub_id);
+/// # Ok(())
+/// # }
 /// ```
 pub trait Subscribable {
     /// Subscribes to power state changes.

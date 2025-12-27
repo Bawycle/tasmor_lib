@@ -26,11 +26,23 @@ use crate::types::{ColorTemperature, Dimmer, HsbColor, PowerState, Scheme};
 ///
 /// # Examples
 ///
-/// ```ignore
-/// let sub_id = device.on_power_changed(|idx, state| { /* ... */ });
+/// ```no_run
+/// use tasmor_lib::Device;
+/// use tasmor_lib::subscription::Subscribable;
+///
+/// # async fn example() -> tasmor_lib::Result<()> {
+/// let (device, _) = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_device")
+///     .build()
+///     .await?;
+///
+/// let sub_id = device.on_power_changed(|idx, state| {
+///     println!("Relay {idx} changed to {state:?}");
+/// });
 ///
 /// // Later, unsubscribe
 /// device.unsubscribe(sub_id);
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SubscriptionId(u64);
