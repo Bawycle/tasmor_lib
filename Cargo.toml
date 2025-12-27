@@ -11,6 +11,7 @@ documentation = "https://docs.rs/tasmor_lib"
 readme = "README.md"
 keywords = ["tasmota", "mqtt", "home-automation", "iot", "smart-home"]
 categories = ["network-programming", "asynchronous"]
+exclude = ["CLAUDE.md", "GEMINI.md", "AGENTS.md", "TODO.md"]
 
 [package.metadata.docs.rs]
 all-features = true
