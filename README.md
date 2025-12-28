@@ -18,7 +18,7 @@ A modern, type-safe Rust library for controlling [Tasmota](https://tasmota.githu
 - **Async/await** - Built on [Tokio](https://tokio.rs) for efficient async I/O
 - **Full device support** - Lights (RGB/CCT), switches, relays, energy monitors
 - **Event-driven architecture** - Subscribe to device state changes in real-time (MQTT)
-- **Well-tested** - Comprehensive unit and integration tests (370+ tests)
+- **Well-tested** - Comprehensive unit and integration tests (580+ tests)
 
 ### Supported Capabilities
 
@@ -31,6 +31,7 @@ A modern, type-safe Rust library for controlling [Tasmota](https://tasmota.githu
 | Transitions | Fade effects and speed control |
 | Light schemes | Effects (wakeup, color cycling, random) |
 | RGB colors | Hex color input (#RRGGBB) with HSB conversion |
+| Routines | Execute multiple commands atomically via Backlog0 |
 
 ## Installation
 
@@ -364,6 +365,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+### Command Routines
+
+Execute multiple commands atomically using the Routine builder:
+
+```rust
+use std::time::Duration;
+use tasmor_lib::{Device, Capabilities, Routine, Dimmer, HsbColor};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let (device, _) = Device::http("192.168.1.100")
+        .with_capabilities(Capabilities::rgbcct_light())
+        .build_without_probe()
+        .await?;
+
+    // Build a routine with multiple commands
+    let wakeup_routine = Routine::builder()
+        .set_dimmer(Dimmer::new(10)?)
+        .power_on()
+        .delay(Duration::from_secs(5))
+        .set_dimmer(Dimmer::new(50)?)
+        .delay(Duration::from_secs(5))
+        .set_dimmer(Dimmer::new(100)?)
+        .build()?;
+
+    // Execute all commands atomically
+    device.run(&wakeup_routine).await?;
+
+    // RGB color transition routine
+    let color_routine = Routine::builder()
+        .set_hsb_color(HsbColor::red())
+        .delay(Duration::from_secs(2))
+        .set_hsb_color(HsbColor::green())
+        .delay(Duration::from_secs(2))
+        .set_hsb_color(HsbColor::blue())
+        .build()?;
+
+    device.run(&color_routine).await?;
+
+    Ok(())
+}
+```
+
 ### Parsing External Telemetry
 
 If you're using your own MQTT client and want to parse Tasmota messages:
@@ -414,7 +458,6 @@ cargo run --example energy_test -- mqtt://192.168.1.50:1883 tasmota_plug user pa
 ## Roadmap
 
 - [ ] Auto-discovery via mDNS
-- [ ] Sequence command builder
 - [ ] Stabilize API for 1.0 release
 
 ## Development

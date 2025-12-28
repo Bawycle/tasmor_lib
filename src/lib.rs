@@ -222,8 +222,8 @@ pub mod types;
 pub use capabilities::{Capabilities, CapabilitiesBuilder};
 pub use command::{
     ColorTemperatureCommand, Command, DimmerCommand, EnergyCommand, FadeCommand, FadeSpeedCommand,
-    HsbColorCommand, PowerCommand, SchemeCommand, StartupFadeCommand, StateCommand, StatusCommand,
-    WakeupDurationCommand,
+    HsbColorCommand, MAX_ROUTINE_STEPS, PowerCommand, Routine, RoutineBuilder, SchemeCommand,
+    StartupFadeCommand, StateCommand, StatusCommand, WakeupDurationCommand,
 };
 pub use device::Device;
 #[cfg(feature = "http")]
@@ -237,8 +237,8 @@ pub use protocol::HttpConfig;
 pub use protocol::{MqttBroker, MqttBrokerBuilder, MqttBrokerConfig, TopicRouter};
 pub use response::{
     ColorTemperatureResponse, DimmerResponse, EnergyResponse, FadeResponse, FadeSpeedResponse,
-    HsbColorResponse, PowerResponse, RgbColorResponse, SchemeResponse, StartupFadeResponse,
-    StatusResponse, WakeupDurationResponse,
+    HsbColorResponse, PowerResponse, RgbColorResponse, RoutineResponse, SchemeResponse,
+    StartupFadeResponse, StatusResponse, WakeupDurationResponse,
 };
 pub use subscription::CallbackRegistry;
 #[cfg(feature = "mqtt")]
