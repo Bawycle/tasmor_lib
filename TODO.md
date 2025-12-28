@@ -8,4 +8,3 @@
 
 - [ ] Auto-discovery via mDNS
 - [ ] Auto-discovery via MQTT broker
-- [ ] Sequence command builder (via Tasmota Backlog command)
