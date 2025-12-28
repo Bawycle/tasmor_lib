@@ -118,6 +118,33 @@ impl PooledMqttClient {
             .map_err(ProtocolError::Mqtt)
     }
 
+    /// Drains stale messages from the response channel.
+    ///
+    /// This is necessary because Tasmota may send multiple RESULT messages
+    /// during command execution (especially for Backlog commands with delays).
+    /// Without draining, subsequent commands might receive stale responses.
+    ///
+    /// Returns `Err` if the message receiver has been taken.
+    async fn drain_stale_responses(&self) -> Result<(), ProtocolError> {
+        let mut guard = self.response_rx.lock().await;
+
+        let rx = guard.as_mut().ok_or_else(|| {
+            ProtocolError::ChannelClosed(
+                "Message receiver taken - responses handled asynchronously".to_string(),
+            )
+        })?;
+
+        let mut count = 0;
+        while rx.try_recv().is_ok() {
+            count += 1;
+        }
+        if count > 0 {
+            tracing::debug!(count, "Drained stale MQTT responses");
+        }
+
+        Ok(())
+    }
+
     /// Waits for a response with timeout.
     ///
     /// If the message receiver has been taken via `take_message_receiver`,
@@ -165,6 +192,10 @@ impl Protocol for PooledMqttClient {
         let cmd_name = command.mqtt_topic_suffix();
         let payload = command.mqtt_payload();
 
+        // Drain any stale responses before sending new command
+        // Ignore ChannelClosed error - it just means async handling is active
+        let _ = self.drain_stale_responses().await;
+
         self.publish_command(&cmd_name, &payload).await?;
 
         // Try to wait for response, but if receiver is taken, return empty response
@@ -192,6 +223,9 @@ impl Protocol for PooledMqttClient {
                 ));
             }
         };
+
+        // Drain any stale responses before sending new command
+        let _ = self.drain_stale_responses().await;
 
         self.publish_command(cmd_name, payload).await?;
 

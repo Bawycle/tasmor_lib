@@ -145,6 +145,22 @@ impl MqttClient {
             .map_err(ProtocolError::Mqtt)
     }
 
+    /// Drains stale messages from the response channel.
+    ///
+    /// This is necessary because Tasmota may send multiple RESULT messages
+    /// during command execution (especially for Backlog commands with delays).
+    /// Without draining, subsequent commands might receive stale responses.
+    async fn drain_stale_responses(&self) {
+        let mut rx = self.response_rx.lock().await;
+        let mut count = 0;
+        while rx.try_recv().is_ok() {
+            count += 1;
+        }
+        if count > 0 {
+            tracing::debug!(count, "Drained stale MQTT responses");
+        }
+    }
+
     /// Waits for a response with timeout.
     async fn wait_response(&self, timeout: Duration) -> Result<String, ProtocolError> {
         let mut rx = self.response_rx.lock().await;
@@ -168,6 +184,9 @@ impl Protocol for MqttClient {
         let cmd_name = command.mqtt_topic_suffix();
         let payload = command.mqtt_payload();
 
+        // Drain any stale responses before sending new command
+        self.drain_stale_responses().await;
+
         self.publish_command(&cmd_name, &payload).await?;
 
         // Wait for response
@@ -188,6 +207,9 @@ impl Protocol for MqttClient {
                 ));
             }
         };
+
+        // Drain any stale responses before sending new command
+        self.drain_stale_responses().await;
 
         self.publish_command(cmd_name, payload).await?;
 
