@@ -49,6 +49,7 @@ mod energy;
 mod fade;
 mod power;
 mod rgb_color;
+mod routine;
 mod scheme;
 mod status;
 
@@ -58,6 +59,7 @@ pub use energy::EnergyResponse;
 pub use fade::{FadeResponse, FadeSpeedResponse, StartupFadeResponse};
 pub use power::PowerResponse;
 pub use rgb_color::RgbColorResponse;
+pub use routine::RoutineResponse;
 pub use scheme::{SchemeResponse, WakeupDurationResponse};
 pub use status::{
     StatusDeviceParameters, StatusFirmware, StatusMemory, StatusMqtt, StatusNetwork, StatusResponse,

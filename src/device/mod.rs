@@ -795,6 +795,159 @@ impl<P: Protocol> Device<P> {
         response.parse().map_err(Error::Parse)
     }
 
+    // ========== Routines ==========
+
+    /// Runs a routine of actions atomically.
+    ///
+    /// Uses Tasmota's `Backlog0` functionality to execute multiple actions
+    /// sequentially without inter-action delays (unless explicit delays are
+    /// added to the routine).
+    ///
+    /// # Capability Checking
+    ///
+    /// This method does **not** automatically validate that all actions in the
+    /// routine are supported by the device's capabilities. When building
+    /// routines with actions that require specific capabilities (like dimmer
+    /// or color control), ensure the device supports them by checking
+    /// [`capabilities()`](Self::capabilities) beforehand.
+    ///
+    /// # Callback Dispatch
+    ///
+    /// After successful execution, state change callbacks are dispatched based
+    /// on the response fields. The following field types trigger callbacks:
+    /// - `POWER`, `POWER1`-`POWER8` → power callbacks
+    /// - `Dimmer` → dimmer callbacks
+    /// - `HSBColor` → color callbacks
+    /// - `CT` → color temperature callbacks
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the routine fails to execute or the response cannot
+    /// be parsed.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tasmor_lib::{Device, command::Routine};
+    /// use tasmor_lib::types::{PowerIndex, Dimmer};
+    /// use std::time::Duration;
+    ///
+    /// # async fn example(device: &Device<impl tasmor_lib::protocol::Protocol>) -> tasmor_lib::Result<()> {
+    /// // Build a wake-up routine
+    /// let routine = Routine::builder()
+    ///     .power_on(PowerIndex::one())
+    ///     .set_dimmer(Dimmer::new(10)?)
+    ///     .delay(Duration::from_secs(2))
+    ///     .set_dimmer(Dimmer::new(50)?)
+    ///     .delay(Duration::from_secs(2))
+    ///     .set_dimmer(Dimmer::new(100)?)
+    ///     .build()?;
+    ///
+    /// // Run the routine
+    /// let response = device.run(&routine).await?;
+    ///
+    /// // Check specific fields from the combined response
+    /// if let Ok(dimmer) = response.get_as::<u8>("Dimmer") {
+    ///     println!("Final dimmer level: {}", dimmer);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn run(
+        &self,
+        routine: &crate::command::Routine,
+    ) -> Result<crate::response::RoutineResponse, Error> {
+        let backlog_cmd = routine.to_backlog_command();
+        tracing::debug!(
+            steps = routine.len(),
+            raw = %backlog_cmd,
+            "Running routine"
+        );
+
+        let response = self
+            .protocol
+            .send_raw(&backlog_cmd)
+            .await
+            .map_err(Error::Protocol)?;
+
+        let parsed: crate::response::RoutineResponse = response.parse().map_err(Error::Parse)?;
+
+        // Dispatch callbacks for state changes detected in the response
+        self.apply_routine_response(&parsed);
+
+        Ok(parsed)
+    }
+
+    /// Dispatches state change callbacks based on routine response fields.
+    fn apply_routine_response(&self, response: &crate::response::RoutineResponse) {
+        // Parse power states: POWER, POWER1-POWER8
+        for idx in 1..=8u8 {
+            let keys = if idx == 1 {
+                vec!["POWER".to_string(), "POWER1".to_string()]
+            } else {
+                vec![format!("POWER{idx}")]
+            };
+
+            for key in keys {
+                if let Some(state_str) = response.try_get_as::<String>(&key)
+                    && let Ok(state) = state_str.parse::<PowerState>()
+                {
+                    let change = crate::state::StateChange::power(idx, state);
+                    self.callbacks.dispatch(&change);
+                    break; // Found state for this index, no need to check other keys
+                }
+            }
+        }
+
+        // Parse dimmer if present
+        if let Some(dimmer_value) = response.try_get_as::<u8>("Dimmer")
+            && let Ok(dimmer) = Dimmer::new(dimmer_value)
+        {
+            let change = crate::state::StateChange::dimmer(dimmer);
+            self.callbacks.dispatch(&change);
+        }
+
+        // Parse HSBColor if present (format: "hue,sat,bri")
+        if let Some(hsb_str) = response.try_get_as::<String>("HSBColor") {
+            // Parse HSB string in format "hue,sat,bri"
+            let parts: Vec<&str> = hsb_str.split(',').map(str::trim).collect();
+            if parts.len() == 3 {
+                if let (Ok(h), Ok(s), Ok(b)) = (
+                    parts[0].parse::<u16>(),
+                    parts[1].parse::<u8>(),
+                    parts[2].parse::<u8>(),
+                ) {
+                    if let Ok(color) = HsbColor::new(h, s, b) {
+                        let change = crate::state::StateChange::hsb_color(color);
+                        self.callbacks.dispatch(&change);
+                    } else {
+                        tracing::warn!(value = %hsb_str, "HSBColor values out of range in sequence response");
+                    }
+                } else {
+                    tracing::warn!(value = %hsb_str, "Failed to parse HSBColor components in sequence response");
+                }
+            } else {
+                tracing::warn!(value = %hsb_str, "Invalid HSBColor format in sequence response (expected 3 parts)");
+            }
+        }
+
+        // Parse CT (color temperature) if present
+        if let Some(ct_value) = response.try_get_as::<u16>("CT")
+            && let Ok(ct) = ColorTemperature::new(ct_value)
+        {
+            let change = crate::state::StateChange::color_temperature(ct);
+            self.callbacks.dispatch(&change);
+        }
+
+        // Parse Scheme if present
+        if let Some(scheme_value) = response.try_get_as::<u8>("Scheme")
+            && let Ok(scheme) = Scheme::new(scheme_value)
+        {
+            let change = crate::state::StateChange::scheme(scheme);
+            self.callbacks.dispatch(&change);
+        }
+    }
+
     // ========== Initial State Query ==========
 
     /// Queries the device for its current state.

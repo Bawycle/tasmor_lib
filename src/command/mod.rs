@@ -65,6 +65,7 @@
 mod energy;
 mod light;
 mod power;
+mod routine;
 mod scheme;
 mod status;
 
@@ -73,6 +74,7 @@ pub use light::{
     ColorTemperatureCommand, DimmerCommand, FadeSpeedCommand, HsbColorCommand, StateCommand,
 };
 pub use power::{FadeCommand, PowerCommand, StartupFadeCommand};
+pub use routine::{MAX_ROUTINE_STEPS, Routine, RoutineBuilder};
 pub use scheme::{SchemeCommand, WakeupDurationCommand};
 pub use status::{StatusCommand, StatusType};
 
