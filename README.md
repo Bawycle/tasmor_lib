@@ -444,10 +444,12 @@ The `examples/` directory contains complete runnable examples:
 |---------|-------------|
 | `bulb_test.rs` | Basic light bulb control |
 | `energy_test.rs` | Energy monitoring with formatted output |
+| `routine_test.rs` | Wakeup routine with gradual brightness increase |
 
 ```bash
 cargo run --example bulb_test -- mqtt://192.168.1.50:1883 tasmota_topic user pass
 cargo run --example energy_test -- mqtt://192.168.1.50:1883 tasmota_plug user pass
+cargo run --example routine_test -- mqtt://192.168.1.50:1883 tasmota_bulb user pass
 ```
 
 ## Documentation
