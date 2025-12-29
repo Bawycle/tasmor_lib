@@ -11,53 +11,58 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example energy_test -- <broker> <topic> [username] [password]
+//! cargo run --example energy_test -- <host> <topic> [username] [password]
 //! ```
 //!
 //! # Example
 //!
 //! ```bash
-//! cargo run --example energy_test -- mqtt://192.168.1.50:1883 tasmota_plug
-//! cargo run --example energy_test -- mqtt://192.168.1.50:1883 tasmota_plug user pass
+//! cargo run --example energy_test -- 192.168.1.50 tasmota_plug
+//! cargo run --example energy_test -- 192.168.1.50 tasmota_plug user pass
 //! ```
 
 use std::env;
-use tasmor_lib::{CapabilitiesBuilder, Device};
+use tasmor_lib::{CapabilitiesBuilder, MqttBroker};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 3 {
-        eprintln!("Usage: {} <broker> <topic> [username] [password]", args[0]);
+        eprintln!("Usage: {} <host> <topic> [username] [password]", args[0]);
         eprintln!();
         eprintln!("Examples:");
-        eprintln!("  cargo run --example energy_test -- mqtt://192.168.1.50:1883 tasmota_plug");
-        eprintln!(
-            "  cargo run --example energy_test -- mqtt://192.168.1.50:1883 tasmota_plug user pass"
-        );
+        eprintln!("  cargo run --example energy_test -- 192.168.1.50 tasmota_plug");
+        eprintln!("  cargo run --example energy_test -- 192.168.1.50 tasmota_plug user pass");
         std::process::exit(1);
     }
 
-    let broker = &args[1];
+    let host = &args[1];
     let topic = &args[2];
 
     println!("=== Tasmota Energy Monitor ===");
-    println!("Broker: {broker}");
+    println!("Broker: {host}");
     println!("Device: {topic}");
     println!();
+
+    // Build broker connection
+    let mut broker_builder = MqttBroker::builder().host(host);
+
+    if args.len() >= 5 {
+        broker_builder = broker_builder.credentials(&args[3], &args[4]);
+    }
+
+    let broker = broker_builder.build().await?;
 
     // Build device with energy monitoring capability
     let capabilities = CapabilitiesBuilder::new().with_energy_monitoring().build();
 
-    let mut builder = Device::mqtt(broker, topic).with_capabilities(capabilities);
-
-    if args.len() >= 5 {
-        builder = builder.with_credentials(&args[3], &args[4]);
-    }
-
     // Build returns (device, initial_state) - energy data is already available!
-    let (_device, state) = builder.build_without_probe().await?;
+    let (device, state) = broker
+        .device(topic)
+        .with_capabilities(capabilities)
+        .build_without_probe()
+        .await?;
 
     // Display energy data from initial state
     println!();
@@ -104,6 +109,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("No energy data available.");
         println!("Make sure the device has energy monitoring capability.");
     }
+
+    // Clean disconnect
+    device.disconnect().await;
+    broker.disconnect().await?;
 
     Ok(())
 }

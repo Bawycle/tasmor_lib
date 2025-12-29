@@ -5,7 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2025-12-29
+
+### Added
+
+- **Command routines** - Execute multiple commands as a single atomic operation with optional delays between steps (max 30 steps). Supports power, lighting, fade, and scheme commands
+- **MQTT device discovery** - Automatically discover all Tasmota devices connected to an MQTT broker
+- **Device disconnect** - Properly close device connections to release resources
+- **Fade state tracking** - Initial device state now includes fade enabled/disabled status and fade speed for light devices
+
+### Changed
+
+- **BREAKING: Simplified MQTT API** - Use `MqttBroker` to connect to a broker, then create devices with `broker.device()`. The previous `Device::mqtt()` method has been removed:
+  ```rust
+  // Before (removed):
+  // let (device, _) = Device::mqtt("mqtt://broker:1883", "topic").build().await?;
+
+  // After:
+  let broker = MqttBroker::builder().host("192.168.1.50").build().await?;
+  let (device, _) = broker.device("topic").build().await?;
+
+  // Clean disconnect when done
+  device.disconnect().await;
+  broker.disconnect().await?;
+  ```
+- **Streamlined exports** - Reduced public API surface; internal types moved to submodules (e.g., `command::PowerCommand` instead of root export)
+
+### Fixed
+
+- **MQTT command responses** - Commands now reliably receive their correct response, even after executing routines with delays
+- **MQTT capability detection** - Device capabilities (dimmer, color, energy monitoring) are now correctly detected for MQTT devices
+- **Status parsing** - Fixed parsing of timezone and wakeup duration fields for compatibility with various Tasmota firmware versions
 
 ## [0.1.0] - 2025-12-27
 
@@ -66,5 +96,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - README with usage examples
   - CONTRIBUTING.md with development guidelines
 
-[Unreleased]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.1.0...HEAD
+[0.2.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.1.0...v0.2.0
 [0.1.0]: https://codeberg.org/Bawycle/tasmor_lib/releases/tag/v0.1.0

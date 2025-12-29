@@ -11,42 +11,59 @@
 //! # Protocols
 //!
 //! - [`HttpClient`] (requires `http` feature): HTTP-based communication using REST API
-//! - [`MqttClient`] (requires `mqtt` feature): MQTT-based communication for real-time updates
-//! - [`PooledMqttClient`] (requires `mqtt` feature): MQTT with connection pooling
+//! - [`SharedMqttClient`] (requires `mqtt` feature): MQTT-based communication for real-time updates
 //!
 //! # Feature Flags
 //!
 //! - `http` - Enables HTTP protocol support (enabled by default)
 //! - `mqtt` - Enables MQTT protocol support (enabled by default)
 //!
-//! # Connection Pooling
+//! # Creating MQTT Devices
 //!
-//! When managing multiple Tasmota devices on the same MQTT broker, use
-//! [`PooledMqttClient`] or [`BrokerPool`] to share connections efficiently.
+//! Use [`MqttBroker`] to manage connections and create devices:
+//!
+//! ```no_run
+//! use tasmor_lib::MqttBroker;
+//!
+//! # async fn example() -> tasmor_lib::Result<()> {
+//! let broker = MqttBroker::builder()
+//!     .host("192.168.1.50")
+//!     .credentials("user", "pass")
+//!     .build()
+//!     .await?;
+//!
+//! // Create devices - credentials are inherited from broker
+//! let (bulb, _) = broker.device("tasmota_bulb").build().await?;
+//! let (plug, _) = broker.device("tasmota_plug").build().await?;
+//! # Ok(())
+//! # }
+//! ```
 
-#[cfg(feature = "mqtt")]
-mod broker_pool;
 #[cfg(feature = "http")]
 mod http;
 #[cfg(feature = "mqtt")]
-mod mqtt;
-#[cfg(feature = "mqtt")]
 mod mqtt_broker;
 #[cfg(feature = "mqtt")]
-mod mqtt_pooled;
+mod shared_mqtt_client;
 #[cfg(feature = "mqtt")]
 mod topic_router;
 
-#[cfg(feature = "mqtt")]
-pub use broker_pool::BrokerPool;
+// Public configuration types (user-facing)
 #[cfg(feature = "http")]
-pub use http::{HttpClient, HttpClientBuilder, HttpConfig};
+pub use http::HttpConfig;
 #[cfg(feature = "mqtt")]
-pub use mqtt::{MqttClient, MqttClientBuilder};
+pub use mqtt_broker::{MqttBroker, MqttBrokerBuilder};
+
+// Protocol clients - public because they're type parameters in Device<P>
+// Users typically don't import these directly; they use Device::http() or MqttBroker::device()
+#[cfg(feature = "http")]
+pub use http::{HttpClient, HttpClientBuilder};
 #[cfg(feature = "mqtt")]
-pub use mqtt_broker::{MqttBroker, MqttBrokerBuilder, MqttBrokerConfig};
+pub use shared_mqtt_client::SharedMqttClient;
+
+// Internal types - exposed for advanced usage but not re-exported at crate root
 #[cfg(feature = "mqtt")]
-pub use mqtt_pooled::PooledMqttClient;
+pub use mqtt_broker::MqttBrokerConfig;
 #[cfg(feature = "mqtt")]
 pub use topic_router::TopicRouter;
 
