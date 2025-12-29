@@ -137,17 +137,6 @@ impl MqttBroker {
         self.inner.config.credentials.is_some()
     }
 
-    /// Returns the credentials if configured.
-    #[must_use]
-    #[allow(dead_code)] // May be useful for future discovery/configuration features
-    pub(crate) fn credentials(&self) -> Option<(&str, &str)> {
-        self.inner
-            .config
-            .credentials
-            .as_ref()
-            .map(|(u, p)| (u.as_str(), p.as_str()))
-    }
-
     /// Returns the MQTT client for internal use.
     pub(crate) fn client(&self) -> &AsyncClient {
         &self.inner.client

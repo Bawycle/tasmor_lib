@@ -409,22 +409,6 @@ pub async fn discover_devices(
     Ok((broker, devices))
 }
 
-/// Extracts the device topic from an MQTT topic string.
-///
-/// # Examples
-///
-/// - `tele/tasmota_bulb/LWT` → `Some("tasmota_bulb")`
-/// - `tele/my_device/STATE` → `Some("my_device")`
-#[allow(dead_code)]
-fn extract_device_topic(mqtt_topic: &str) -> Option<&str> {
-    let parts: Vec<&str> = mqtt_topic.split('/').collect();
-    if parts.len() >= 3 && parts[0] == "tele" {
-        Some(parts[1])
-    } else {
-        None
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -471,28 +455,5 @@ mod tests {
         assert_eq!(options.timeout(), Duration::from_secs(15));
         assert_eq!(options.credentials(), Some(("mqtt_user", "mqtt_pass")));
         assert_eq!(options.port(), 1884);
-    }
-
-    #[test]
-    fn extract_device_topic_lwt() {
-        assert_eq!(
-            extract_device_topic("tele/tasmota_bulb/LWT"),
-            Some("tasmota_bulb")
-        );
-    }
-
-    #[test]
-    fn extract_device_topic_state() {
-        assert_eq!(
-            extract_device_topic("tele/my_device/STATE"),
-            Some("my_device")
-        );
-    }
-
-    #[test]
-    fn extract_device_topic_invalid() {
-        assert_eq!(extract_device_topic("stat/device/RESULT"), None);
-        assert_eq!(extract_device_topic("invalid"), None);
-        assert_eq!(extract_device_topic("only/two"), None);
     }
 }
