@@ -966,7 +966,7 @@ impl<P: Protocol> Device<P> {
     /// # Errors
     ///
     /// Returns error if any of the queries fail.
-    #[allow(clippy::cast_precision_loss)]
+    #[allow(clippy::cast_precision_loss, clippy::too_many_lines)]
     pub async fn query_state(&self) -> Result<DeviceState, Error> {
         tracing::debug!(
             energy_monitoring = self.capabilities.supports_energy_monitoring(),
@@ -1058,6 +1058,29 @@ impl<P: Protocol> Device<P> {
                     }
                 }
                 Err(e) => tracing::debug!(error = %e, "Failed to get energy data"),
+            }
+        }
+
+        // Query fade state if dimmer is supported (fade is a light feature)
+        if self.capabilities.supports_dimmer_control() {
+            match self.get_fade().await {
+                Ok(fade_response) => {
+                    if let Ok(enabled) = fade_response.is_enabled() {
+                        tracing::debug!(fade_enabled = enabled, "Got fade state");
+                        state.set_fade_enabled(enabled);
+                    }
+                }
+                Err(e) => tracing::debug!(error = %e, "Failed to get fade state"),
+            }
+
+            match self.get_fade_speed().await {
+                Ok(speed_response) => {
+                    if let Ok(speed) = speed_response.speed() {
+                        tracing::debug!(fade_speed = speed.value(), "Got fade speed");
+                        state.set_fade_speed(speed);
+                    }
+                }
+                Err(e) => tracing::debug!(error = %e, "Failed to get fade speed"),
             }
         }
 
