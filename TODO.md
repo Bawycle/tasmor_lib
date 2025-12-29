@@ -6,5 +6,3 @@
 
 ## Features
 
-- [ ] Auto-discovery via mDNS
-- [x] Auto-discovery via MQTT broker
