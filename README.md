@@ -50,10 +50,10 @@ Both HTTP and MQTT protocols are enabled by default. To reduce compile time and 
 
 ```toml
 # HTTP only (no MQTT dependencies)
-tasmor_lib = { version = "0.1", default-features = false, features = ["http"] }
+tasmor_lib = { version = "0.2", default-features = false, features = ["http"] }
 
 # MQTT only (no HTTP dependencies)
-tasmor_lib = { version = "0.1", default-features = false, features = ["mqtt"] }
+tasmor_lib = { version = "0.2", default-features = false, features = ["mqtt"] }
 ```
 
 ## Quick Start
