@@ -8,47 +8,51 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example routine_test -- <broker> <topic> <username> <password>
+//! cargo run --example routine_test -- <host> <topic> <username> <password>
 //! ```
 //!
 //! # Example
 //!
 //! ```bash
-//! cargo run --example routine_test -- mqtt://192.168.1.50:1883 tasmota_ABCDEF mqtt_user mqtt_pass
+//! cargo run --example routine_test -- 192.168.1.50 tasmota_ABCDEF mqtt_user mqtt_pass
 //! ```
 
 use std::env;
 use std::time::Duration;
-use tasmor_lib::{CapabilitiesBuilder, Device, Dimmer, PowerIndex, Routine};
+use tasmor_lib::{CapabilitiesBuilder, Dimmer, MqttBroker, PowerIndex, Routine};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() != 5 {
-        eprintln!("Usage: {} <broker> <topic> <username> <password>", args[0]);
+        eprintln!("Usage: {} <host> <topic> <username> <password>", args[0]);
         eprintln!();
         eprintln!("Example:");
-        eprintln!(
-            "  cargo run --example routine_test -- mqtt://192.168.1.50:1883 tasmota_ABCDEF user pass"
-        );
+        eprintln!("  cargo run --example routine_test -- 192.168.1.50 tasmota_ABCDEF user pass");
         std::process::exit(1);
     }
 
-    let broker = &args[1];
+    let host = &args[1];
     let topic = &args[2];
     let username = &args[3];
     let password = &args[4];
 
-    println!("Connecting to MQTT broker {broker}...");
+    println!("Connecting to MQTT broker {host}...");
+
+    let broker = MqttBroker::builder()
+        .host(host)
+        .credentials(username, password)
+        .build()
+        .await?;
 
     let capabilities = CapabilitiesBuilder::new()
         .with_dimmer_control()
         .with_color_temperature_control()
         .build();
 
-    let (device, initial_state) = Device::mqtt(broker, topic)
-        .with_credentials(username, password)
+    let (device, initial_state) = broker
+        .device(topic)
         .with_capabilities(capabilities)
         .build_without_probe()
         .await?;
@@ -99,6 +103,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(resp) => println!("Power OFF: {resp:?}"),
         Err(e) => println!("Power OFF error: {e}"),
     }
+
+    // Clean disconnect
+    println!("Disconnecting...");
+    device.disconnect().await;
+    broker.disconnect().await?;
 
     println!("Done!");
     Ok(())

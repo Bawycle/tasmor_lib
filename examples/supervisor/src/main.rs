@@ -50,6 +50,10 @@ struct TasmotaSupervisor {
     edit_dialog_state: Option<EditDeviceDialogState>,
     /// Error message to display
     error_message: Option<String>,
+    /// Number of active MQTT brokers
+    broker_count: usize,
+    /// Total MQTT subscription count
+    subscription_count: usize,
 }
 
 impl TasmotaSupervisor {
@@ -78,6 +82,10 @@ impl TasmotaSupervisor {
             .map(|d| (d.config.id, d))
             .collect();
 
+        // Get initial broker stats
+        let broker_count = rt.block_on(device_manager.broker_count());
+        let subscription_count = rt.block_on(device_manager.total_subscription_count());
+
         Self {
             device_manager,
             app_config,
@@ -88,7 +96,16 @@ impl TasmotaSupervisor {
             add_dialog_state: AddDeviceDialogState::new(),
             edit_dialog_state: None,
             error_message: None,
+            broker_count,
+            subscription_count,
         }
+    }
+
+    /// Refreshes broker statistics from the device manager.
+    fn refresh_broker_stats(&mut self) {
+        let rt = tokio::runtime::Handle::current();
+        self.broker_count = rt.block_on(self.device_manager.broker_count());
+        self.subscription_count = rt.block_on(self.device_manager.total_subscription_count());
     }
 
     /// Processes pending state updates from the channel (non-blocking).
@@ -758,6 +775,9 @@ impl eframe::App for TasmotaSupervisor {
         // Process any pending state updates from async callbacks (non-blocking)
         self.process_state_updates();
 
+        // Refresh broker statistics
+        self.refresh_broker_stats();
+
         // Top panel with actions
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -769,6 +789,17 @@ impl eframe::App for TasmotaSupervisor {
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    // MQTT stats (right side)
+                    if self.broker_count > 0 {
+                        ui.label(format!(
+                            "MQTT: {} broker{}, {} sub{}",
+                            self.broker_count,
+                            if self.broker_count == 1 { "" } else { "s" },
+                            self.subscription_count,
+                            if self.subscription_count == 1 { "" } else { "s" }
+                        ));
+                        ui.separator();
+                    }
                     ui.label(format!("Devices: {}", self.devices.len()));
                 });
             });

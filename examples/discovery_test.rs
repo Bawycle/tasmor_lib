@@ -104,6 +104,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 for (i, (device, state)) in devices.iter().enumerate() {
                     println!("Device #{}", i + 1);
+                    println!("  Topic: {}", device.topic());
                     println!("  Capabilities:");
                     let caps = device.capabilities();
                     println!("    - Power channels: {}", caps.power_channels());

@@ -35,11 +35,16 @@
 //! real-time event subscriptions via the [`Subscribable`](crate::subscription::Subscribable) trait.
 //!
 //! ```no_run
-//! use tasmor_lib::Device;
+//! use tasmor_lib::MqttBroker;
 //! use tasmor_lib::subscription::Subscribable;
 //!
 //! # async fn example() -> tasmor_lib::Result<()> {
-//! let (device, _initial_state) = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_bedroom")
+//! let broker = MqttBroker::builder()
+//!     .host("192.168.1.50")
+//!     .build()
+//!     .await?;
+//!
+//! let (device, _initial_state) = broker.device("tasmota_bedroom")
 //!     .build()
 //!     .await?;
 //!
@@ -57,10 +62,8 @@
 mod broker_device_builder;
 #[cfg(feature = "http")]
 mod http_builder;
-#[cfg(feature = "mqtt")]
-mod mqtt_builder;
 
-// Builders are used internally (Device::http, Device::mqtt, broker.device) and returned to users.
+// Builders are used internally (Device::http, broker.device) and returned to users.
 // They're pub(crate) because users access them via return types, not direct imports.
 #[cfg(feature = "mqtt")]
 pub(crate) use broker_device_builder::BrokerDeviceBuilder;
@@ -100,12 +103,12 @@ use crate::types::{
 ///
 /// The type parameter `P` determines the underlying protocol:
 /// - `HttpClient` for HTTP devices (no subscriptions)
-/// - `MqttClient` for MQTT devices (supports subscriptions)
+/// - `SharedMqttClient` for MQTT devices (supports subscriptions)
 ///
 /// # Thread Safety
 ///
 /// `Device<P>` is `Send + Sync` when the protocol `P` is `Send + Sync`.
-/// Both `HttpClient` and `MqttClient` are `Send + Sync`, so devices can be
+/// Both `HttpClient` and `SharedMqttClient` are `Send + Sync`, so devices can be
 /// safely shared across threads and used in async contexts with Tokio.
 ///
 /// ```
@@ -118,7 +121,7 @@ use crate::types::{
 ///
 /// # Creating a Device
 ///
-/// Use [`Device::http`] or [`Device::mqtt`] to create a device builder:
+/// Use [`Device::http`] for HTTP devices or [`MqttBroker::device`] for MQTT devices:
 ///
 /// ```no_run
 /// use tasmor_lib::{Device, Capabilities};
@@ -963,7 +966,7 @@ impl<P: Protocol> Device<P> {
     /// # Errors
     ///
     /// Returns error if any of the queries fail.
-    #[allow(clippy::cast_precision_loss)]
+    #[allow(clippy::cast_precision_loss, clippy::too_many_lines)]
     pub async fn query_state(&self) -> Result<DeviceState, Error> {
         tracing::debug!(
             energy_monitoring = self.capabilities.supports_energy_monitoring(),
@@ -1058,6 +1061,29 @@ impl<P: Protocol> Device<P> {
             }
         }
 
+        // Query fade state if dimmer is supported (fade is a light feature)
+        if self.capabilities.supports_dimmer_control() {
+            match self.get_fade().await {
+                Ok(fade_response) => {
+                    if let Ok(enabled) = fade_response.is_enabled() {
+                        tracing::debug!(fade_enabled = enabled, "Got fade state");
+                        state.set_fade_enabled(enabled);
+                    }
+                }
+                Err(e) => tracing::debug!(error = %e, "Failed to get fade state"),
+            }
+
+            match self.get_fade_speed().await {
+                Ok(speed_response) => {
+                    if let Ok(speed) = speed_response.speed() {
+                        tracing::debug!(fade_speed = speed.value(), "Got fade speed");
+                        state.set_fade_speed(speed);
+                    }
+                }
+                Err(e) => tracing::debug!(error = %e, "Failed to get fade speed"),
+            }
+        }
+
         Ok(state)
     }
 
@@ -1141,8 +1167,6 @@ impl Device<HttpClient> {
 // ========== MQTT Device Subscriptions ==========
 
 #[cfg(feature = "mqtt")]
-use crate::protocol::MqttClient;
-#[cfg(feature = "mqtt")]
 use crate::protocol::SharedMqttClient;
 #[cfg(feature = "mqtt")]
 use crate::state::StateChange;
@@ -1150,92 +1174,75 @@ use crate::state::StateChange;
 use crate::subscription::{EnergyData, Subscribable, SubscriptionId};
 
 #[cfg(feature = "mqtt")]
-impl Device<MqttClient> {
-    /// Registers the device's callbacks with the MQTT client for message routing.
-    ///
-    /// This is called automatically by the builder after device creation.
-    pub(crate) fn register_mqtt_callbacks(&self) {
-        self.protocol.register_callbacks(&self.callbacks);
-    }
-}
-
-#[cfg(feature = "mqtt")]
 impl Device<SharedMqttClient> {
     /// Registers the device's callbacks with the shared MQTT client for message routing.
     ///
     /// This is called automatically by the builder after device creation.
-    pub(crate) fn register_shared_mqtt_callbacks(&self) {
+    pub(crate) fn register_callbacks(&self) {
         self.protocol.register_callbacks(&self.callbacks);
     }
-}
 
-#[cfg(feature = "mqtt")]
-impl Subscribable for Device<MqttClient> {
-    fn on_power_changed<F>(&self, callback: F) -> SubscriptionId
-    where
-        F: Fn(u8, PowerState) + Send + Sync + 'static,
-    {
-        self.callbacks.on_power_changed(callback)
+    /// Disconnects and cleans up MQTT subscriptions.
+    ///
+    /// This unsubscribes from device topics on the broker. The shared
+    /// broker connection remains open for other devices.
+    ///
+    /// This method is idempotent - calling it multiple times is safe.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tasmor_lib::MqttBroker;
+    ///
+    /// # async fn example() -> tasmor_lib::Result<()> {
+    /// let broker = MqttBroker::builder()
+    ///     .host("192.168.1.50")
+    ///     .build()
+    ///     .await?;
+    ///
+    /// let (device, _) = broker.device("tasmota").build().await?;
+    ///
+    /// device.power_on().await?;
+    ///
+    /// // Clean disconnect when done
+    /// device.disconnect().await;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn disconnect(&self) {
+        self.protocol.disconnect().await;
     }
 
-    fn on_dimmer_changed<F>(&self, callback: F) -> SubscriptionId
-    where
-        F: Fn(Dimmer) + Send + Sync + 'static,
-    {
-        self.callbacks.on_dimmer_changed(callback)
+    /// Returns whether this device has been disconnected.
+    #[must_use]
+    pub fn is_disconnected(&self) -> bool {
+        self.protocol.is_disconnected()
     }
 
-    fn on_color_changed<F>(&self, callback: F) -> SubscriptionId
-    where
-        F: Fn(HsbColor) + Send + Sync + 'static,
-    {
-        self.callbacks.on_hsb_color_changed(callback)
-    }
-
-    fn on_color_temp_changed<F>(&self, callback: F) -> SubscriptionId
-    where
-        F: Fn(ColorTemperature) + Send + Sync + 'static,
-    {
-        self.callbacks.on_color_temp_changed(callback)
-    }
-
-    fn on_scheme_changed<F>(&self, callback: F) -> SubscriptionId
-    where
-        F: Fn(Scheme) + Send + Sync + 'static,
-    {
-        self.callbacks.on_scheme_changed(callback)
-    }
-
-    fn on_energy_updated<F>(&self, callback: F) -> SubscriptionId
-    where
-        F: Fn(EnergyData) + Send + Sync + 'static,
-    {
-        self.callbacks.on_energy_updated(callback)
-    }
-
-    fn on_connected<F>(&self, callback: F) -> SubscriptionId
-    where
-        F: Fn(&DeviceState) + Send + Sync + 'static,
-    {
-        self.callbacks.on_connected(callback)
-    }
-
-    fn on_disconnected<F>(&self, callback: F) -> SubscriptionId
-    where
-        F: Fn() + Send + Sync + 'static,
-    {
-        self.callbacks.on_disconnected(callback)
-    }
-
-    fn on_state_changed<F>(&self, callback: F) -> SubscriptionId
-    where
-        F: Fn(&StateChange) + Send + Sync + 'static,
-    {
-        self.callbacks.on_state_changed(callback)
-    }
-
-    fn unsubscribe(&self, id: SubscriptionId) -> bool {
-        self.callbacks.unsubscribe(id)
+    /// Returns the MQTT topic for this device.
+    ///
+    /// This is the base topic used for all MQTT communication with the device.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tasmor_lib::MqttBroker;
+    ///
+    /// # async fn example() -> tasmor_lib::Result<()> {
+    /// let broker = MqttBroker::builder()
+    ///     .host("192.168.1.50")
+    ///     .build()
+    ///     .await?;
+    ///
+    /// let (device, _) = broker.device("tasmota_bulb").build().await?;
+    ///
+    /// assert_eq!(device.topic(), "tasmota_bulb");
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn topic(&self) -> &str {
+        self.protocol.topic()
     }
 }
 

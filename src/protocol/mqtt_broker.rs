@@ -227,7 +227,6 @@ impl MqttBroker {
     }
 
     /// Removes a subscription for a device topic.
-    #[allow(dead_code)] // Will be used when devices disconnect from the broker
     pub(crate) async fn remove_device_subscription(&self, device_topic: &str) {
         // Remove from tracking
         self.inner.subscriptions.write().await.remove(device_topic);

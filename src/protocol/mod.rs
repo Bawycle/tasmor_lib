@@ -11,7 +11,7 @@
 //! # Protocols
 //!
 //! - [`HttpClient`] (requires `http` feature): HTTP-based communication using REST API
-//! - [`MqttClient`] (requires `mqtt` feature): MQTT-based communication for real-time updates
+//! - [`SharedMqttClient`] (requires `mqtt` feature): MQTT-based communication for real-time updates
 //!
 //! # Feature Flags
 //!
@@ -42,8 +42,6 @@
 #[cfg(feature = "http")]
 mod http;
 #[cfg(feature = "mqtt")]
-mod mqtt;
-#[cfg(feature = "mqtt")]
 mod mqtt_broker;
 #[cfg(feature = "mqtt")]
 mod shared_mqtt_client;
@@ -60,8 +58,6 @@ pub use mqtt_broker::{MqttBroker, MqttBrokerBuilder};
 // Users typically don't import these directly; they use Device::http() or MqttBroker::device()
 #[cfg(feature = "http")]
 pub use http::{HttpClient, HttpClientBuilder};
-#[cfg(feature = "mqtt")]
-pub use mqtt::{MqttClient, MqttClientBuilder};
 #[cfg(feature = "mqtt")]
 pub use shared_mqtt_client::SharedMqttClient;
 

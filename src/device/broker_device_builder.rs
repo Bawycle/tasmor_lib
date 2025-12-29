@@ -113,7 +113,7 @@ impl<'a> BrokerDeviceBuilder<'a> {
         let device = Device::new(client, capabilities);
 
         // Register callbacks with the MQTT client for message routing
-        device.register_shared_mqtt_callbacks();
+        device.register_callbacks();
 
         // Query initial state
         let initial_state = device.query_state().await?;
@@ -141,7 +141,7 @@ impl<'a> BrokerDeviceBuilder<'a> {
         let device = Device::new(client, capabilities);
 
         // Register callbacks with the MQTT client for message routing
-        device.register_shared_mqtt_callbacks();
+        device.register_callbacks();
 
         // Query initial state
         let initial_state = device.query_state().await?;
@@ -166,6 +166,7 @@ impl<'a> BrokerDeviceBuilder<'a> {
             self.topic.clone(),
             response_rx,
             router,
+            self.broker.clone(),
         ))
     }
 }

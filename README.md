@@ -89,18 +89,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 For persistent connections with real-time updates:
 
 ```rust
-use tasmor_lib::{Device, Capabilities};
+use tasmor_lib::{MqttBroker, Capabilities};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let (device, initial_state) = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_switch")
-        .with_credentials("mqtt_user", "mqtt_password")
+    // Connect to MQTT broker
+    let broker = MqttBroker::builder()
+        .host("192.168.1.50")
+        .credentials("mqtt_user", "mqtt_password")
+        .build()
+        .await?;
+
+    // Create device from broker
+    let (device, initial_state) = broker.device("tasmota_switch")
         .with_capabilities(Capabilities::basic())
         .build_without_probe()
         .await?;
 
     println!("Power is {:?}", initial_state.power(1));
     device.power_on().await?;
+
+    // Clean disconnect when done
+    device.disconnect().await;
+    broker.disconnect().await?;
 
     Ok(())
 }
@@ -290,13 +301,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 Subscribe to device state changes pushed via MQTT:
 
 ```rust
-use tasmor_lib::{Device, Capabilities};
+use tasmor_lib::{MqttBroker, Capabilities};
 use tasmor_lib::subscription::Subscribable;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let (device, _) = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_bulb")
-        .with_credentials("mqtt_user", "mqtt_pass")
+    let broker = MqttBroker::builder()
+        .host("192.168.1.50")
+        .credentials("mqtt_user", "mqtt_pass")
+        .build()
+        .await?;
+
+    let (device, _) = broker.device("tasmota_bulb")
         .with_capabilities(Capabilities::rgbcct_light())
         .build_without_probe()
         .await?;
@@ -319,27 +335,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Keep the application running to receive callbacks
     tokio::signal::ctrl_c().await?;
 
+    device.disconnect().await;
+    broker.disconnect().await?;
     Ok(())
 }
 ```
 
 ### Multi-Device Management
 
+Multiple devices can share a single broker connection for efficiency:
+
 ```rust
-use tasmor_lib::{Device, Capabilities, Dimmer};
+use tasmor_lib::{MqttBroker, Capabilities, Dimmer};
 use tasmor_lib::subscription::Subscribable;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create multiple devices
-    let (living_room, living_state) = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_living")
-        .with_credentials("mqtt_user", "mqtt_pass")
+    // Connect to broker once
+    let broker = MqttBroker::builder()
+        .host("192.168.1.50")
+        .credentials("mqtt_user", "mqtt_pass")
+        .build()
+        .await?;
+
+    // Create multiple devices sharing the broker connection
+    let (living_room, living_state) = broker.device("tasmota_living")
         .with_capabilities(Capabilities::rgbcct_light())
         .build_without_probe()
         .await?;
 
-    let (bedroom, bedroom_state) = Device::mqtt("mqtt://192.168.1.50:1883", "tasmota_bedroom")
-        .with_credentials("mqtt_user", "mqtt_pass")
+    let (bedroom, bedroom_state) = broker.device("tasmota_bedroom")
         .with_capabilities(Capabilities::rgbcct_light())
         .build_without_probe()
         .await?;
@@ -361,6 +386,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     living_room.power_on().await?;
     living_room.set_dimmer(Dimmer::new(75)?).await?;
     bedroom.power_on().await?;
+
+    // Clean disconnect
+    living_room.disconnect().await;
+    bedroom.disconnect().await;
+    broker.disconnect().await?;
 
     Ok(())
 }
@@ -482,11 +512,13 @@ The `examples/` directory contains complete runnable examples:
 | `bulb_test.rs` | Basic light bulb control |
 | `energy_test.rs` | Energy monitoring with formatted output |
 | `routine_test.rs` | Wakeup routine with gradual brightness increase |
+| `discovery_test.rs` | MQTT device discovery |
 
 ```bash
-cargo run --example bulb_test -- mqtt://192.168.1.50:1883 tasmota_topic user pass
-cargo run --example energy_test -- mqtt://192.168.1.50:1883 tasmota_plug user pass
-cargo run --example routine_test -- mqtt://192.168.1.50:1883 tasmota_bulb user pass
+cargo run --example bulb_test -- 192.168.1.50 tasmota_topic user pass
+cargo run --example energy_test -- 192.168.1.50 tasmota_plug user pass
+cargo run --example routine_test -- 192.168.1.50 tasmota_bulb user pass
+cargo run --example discovery_test -- 192.168.1.50 user pass
 ```
 
 ## Documentation
@@ -540,4 +572,3 @@ Built for controlling [Tasmota](https://tasmota.github.io/) open-source firmware
 
 **Testing:**
 - [wiremock](https://github.com/LukeMathWalker/wiremock-rs) - HTTP mocking
-- [mockforge-mqtt](https://github.com/SaaSy-Solutions/mockforge) - MQTT broker simulation
