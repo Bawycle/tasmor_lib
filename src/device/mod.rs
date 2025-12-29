@@ -60,12 +60,12 @@ mod http_builder;
 #[cfg(feature = "mqtt")]
 mod mqtt_builder;
 
+// Builders are used internally (Device::http, Device::mqtt, broker.device) and returned to users.
+// They're pub(crate) because users access them via return types, not direct imports.
 #[cfg(feature = "mqtt")]
-pub use broker_device_builder::BrokerDeviceBuilder;
+pub(crate) use broker_device_builder::BrokerDeviceBuilder;
 #[cfg(feature = "http")]
-pub use http_builder::HttpDeviceBuilder;
-#[cfg(feature = "mqtt")]
-pub use mqtt_builder::MqttDeviceBuilder;
+pub(crate) use http_builder::HttpDeviceBuilder;
 
 use std::sync::Arc;
 

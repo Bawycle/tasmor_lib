@@ -50,14 +50,24 @@ mod shared_mqtt_client;
 #[cfg(feature = "mqtt")]
 mod topic_router;
 
+// Public configuration types (user-facing)
 #[cfg(feature = "http")]
-pub use http::{HttpClient, HttpClientBuilder, HttpConfig};
+pub use http::HttpConfig;
+#[cfg(feature = "mqtt")]
+pub use mqtt_broker::{MqttBroker, MqttBrokerBuilder};
+
+// Protocol clients - public because they're type parameters in Device<P>
+// Users typically don't import these directly; they use Device::http() or MqttBroker::device()
+#[cfg(feature = "http")]
+pub use http::{HttpClient, HttpClientBuilder};
 #[cfg(feature = "mqtt")]
 pub use mqtt::{MqttClient, MqttClientBuilder};
 #[cfg(feature = "mqtt")]
-pub use mqtt_broker::{MqttBroker, MqttBrokerBuilder, MqttBrokerConfig};
-#[cfg(feature = "mqtt")]
 pub use shared_mqtt_client::SharedMqttClient;
+
+// Internal types - exposed for advanced usage but not re-exported at crate root
+#[cfg(feature = "mqtt")]
+pub use mqtt_broker::MqttBrokerConfig;
 #[cfg(feature = "mqtt")]
 pub use topic_router::TopicRouter;
 

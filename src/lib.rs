@@ -221,30 +221,33 @@ pub mod subscription;
 pub mod telemetry;
 pub mod types;
 
+// Core types
 pub use capabilities::{Capabilities, CapabilitiesBuilder};
-pub use command::{
-    ColorTemperatureCommand, Command, DimmerCommand, EnergyCommand, FadeCommand, FadeSpeedCommand,
-    HsbColorCommand, MAX_ROUTINE_STEPS, PowerCommand, Routine, RoutineBuilder, SchemeCommand,
-    StartupFadeCommand, StateCommand, StatusCommand, WakeupDurationCommand,
-};
 pub use device::Device;
-#[cfg(feature = "http")]
-pub use device::HttpDeviceBuilder;
-#[cfg(feature = "mqtt")]
-pub use device::MqttDeviceBuilder;
 pub use error::{DeviceError, Error, ParseError, ProtocolError, Result, ValueError};
+pub use state::{DeviceState, StateChange};
+
+// Protocol configuration
 #[cfg(feature = "http")]
 pub use protocol::HttpConfig;
 #[cfg(feature = "mqtt")]
-pub use protocol::{MqttBroker, MqttBrokerBuilder, MqttBrokerConfig, TopicRouter};
+pub use protocol::{MqttBroker, MqttBrokerBuilder};
+
+// Command building (Routine only - other commands via Device methods)
+pub use command::{Routine, RoutineBuilder};
+
+// Response types (returned by Device methods)
 pub use response::{
     ColorTemperatureResponse, DimmerResponse, EnergyResponse, FadeResponse, FadeSpeedResponse,
     HsbColorResponse, PowerResponse, RgbColorResponse, RoutineResponse, SchemeResponse,
     StartupFadeResponse, StatusResponse, WakeupDurationResponse,
 };
-pub use subscription::CallbackRegistry;
+
+// Subscriptions (MQTT only)
 #[cfg(feature = "mqtt")]
 pub use subscription::{Subscribable, SubscriptionId};
+
+// Value types (parameters for commands and state)
 pub use types::{
     ColorTemperature, DateTimeParseError, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState,
     RgbColor, Scheme, TasmotaDateTime, WakeupDuration,
