@@ -13,9 +13,9 @@ use std::sync::mpsc;
 use std::sync::Arc;
 
 use eframe::egui;
-use tasmor_lib::protocol::{HttpClient, MqttClient};
+use tasmor_lib::protocol::{HttpClient, SharedMqttClient};
 use tasmor_lib::subscription::Subscribable;
-use tasmor_lib::Device;
+use tasmor_lib::{Device, MqttBroker};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -24,7 +24,12 @@ use crate::device_config::{ConnectionStatus, DeviceConfig, ManagedDevice, Protoc
 /// Wrapper for different device types.
 enum DeviceHandle {
     Http(Device<HttpClient>),
-    Mqtt(Device<MqttClient>),
+    /// MQTT device with its broker (broker must stay alive while device exists)
+    Mqtt {
+        device: Device<SharedMqttClient>,
+        #[allow(dead_code)] // Broker must be kept alive for the device to work
+        broker: MqttBroker,
+    },
 }
 
 /// Device entry tracking the device handle and managed device state.
@@ -107,13 +112,18 @@ impl DeviceManager {
             }
             Protocol::Mqtt => {
                 let topic = config.topic.as_deref().unwrap_or("tasmota");
-                let mut builder = Device::mqtt(&config.host, topic).with_capabilities(capabilities);
 
+                // Build the MQTT broker connection
+                let mut broker_builder = MqttBroker::builder().host(&config.host);
                 if let (Some(user), Some(pass)) = (&config.username, &config.password) {
-                    builder = builder.with_credentials(user, pass);
+                    broker_builder = broker_builder.credentials(user, pass);
                 }
+                let broker = broker_builder.build().await.map_err(|e| e.to_string())?;
 
-                let (device, state) = builder
+                // Create device from broker
+                let (device, state) = broker
+                    .device(topic)
+                    .with_capabilities(capabilities)
                     .build_without_probe()
                     .await
                     .map_err(|e| e.to_string())?;
@@ -153,7 +163,7 @@ impl DeviceManager {
                     });
                 });
 
-                (DeviceHandle::Mqtt(device), state)
+                (DeviceHandle::Mqtt { device, broker }, state)
             }
         };
 
@@ -219,7 +229,7 @@ impl DeviceManager {
                 DeviceHandle::Http(device) => {
                     device.power_toggle().await.map_err(|e| e.to_string())
                 }
-                DeviceHandle::Mqtt(device) => {
+                DeviceHandle::Mqtt { device, .. } => {
                     device.power_toggle().await.map_err(|e| e.to_string())
                 }
             }
@@ -244,7 +254,7 @@ impl DeviceManager {
 
             match &entry.handle {
                 DeviceHandle::Http(device) => device.power_on().await.map_err(|e| e.to_string()),
-                DeviceHandle::Mqtt(device) => device.power_on().await.map_err(|e| e.to_string()),
+                DeviceHandle::Mqtt { device, .. } => device.power_on().await.map_err(|e| e.to_string()),
             }
         }?;
 
@@ -267,7 +277,7 @@ impl DeviceManager {
 
             match &entry.handle {
                 DeviceHandle::Http(device) => device.power_off().await.map_err(|e| e.to_string()),
-                DeviceHandle::Mqtt(device) => device.power_off().await.map_err(|e| e.to_string()),
+                DeviceHandle::Mqtt { device, .. } => device.power_off().await.map_err(|e| e.to_string()),
             }
         }?;
 
@@ -293,7 +303,7 @@ impl DeviceManager {
             DeviceHandle::Http(device) => {
                 device.set_dimmer(dimmer).await.map_err(|e| e.to_string())?;
             }
-            DeviceHandle::Mqtt(device) => {
+            DeviceHandle::Mqtt { device, .. } => {
                 device.set_dimmer(dimmer).await.map_err(|e| e.to_string())?;
             }
         }
@@ -330,7 +340,7 @@ impl DeviceManager {
                     .await
                     .map_err(|e| e.to_string())?;
             }
-            DeviceHandle::Mqtt(device) => {
+            DeviceHandle::Mqtt { device, .. } => {
                 device
                     .set_hsb_color(color)
                     .await
@@ -364,7 +374,7 @@ impl DeviceManager {
                     .await
                     .map_err(|e| e.to_string())?;
             }
-            DeviceHandle::Mqtt(device) => {
+            DeviceHandle::Mqtt { device, .. } => {
                 device
                     .set_color_temperature(color_temp)
                     .await
@@ -396,7 +406,7 @@ impl DeviceManager {
                 .set_rgb_color(color)
                 .await
                 .map_err(|e| e.to_string())?,
-            DeviceHandle::Mqtt(device) => device
+            DeviceHandle::Mqtt { device, .. } => device
                 .set_rgb_color(color)
                 .await
                 .map_err(|e| e.to_string())?,
@@ -425,7 +435,7 @@ impl DeviceManager {
             DeviceHandle::Http(device) => {
                 device.set_scheme(scheme).await.map_err(|e| e.to_string())?
             }
-            DeviceHandle::Mqtt(device) => {
+            DeviceHandle::Mqtt { device, .. } => {
                 device.set_scheme(scheme).await.map_err(|e| e.to_string())?
             }
         };
@@ -456,7 +466,7 @@ impl DeviceManager {
                 .set_wakeup_duration(duration)
                 .await
                 .map_err(|e| e.to_string())?,
-            DeviceHandle::Mqtt(device) => device
+            DeviceHandle::Mqtt { device, .. } => device
                 .set_wakeup_duration(duration)
                 .await
                 .map_err(|e| e.to_string())?,
@@ -485,7 +495,7 @@ impl DeviceManager {
             DeviceHandle::Http(device) => {
                 device.enable_fade().await.map_err(|e| e.to_string())?;
             }
-            DeviceHandle::Mqtt(device) => {
+            DeviceHandle::Mqtt { device, .. } => {
                 device.enable_fade().await.map_err(|e| e.to_string())?;
             }
         }
@@ -502,7 +512,7 @@ impl DeviceManager {
             DeviceHandle::Http(device) => {
                 device.disable_fade().await.map_err(|e| e.to_string())?;
             }
-            DeviceHandle::Mqtt(device) => {
+            DeviceHandle::Mqtt { device, .. } => {
                 device.disable_fade().await.map_err(|e| e.to_string())?;
             }
         }
@@ -524,7 +534,7 @@ impl DeviceManager {
                     .await
                     .map_err(|e| e.to_string())?;
             }
-            DeviceHandle::Mqtt(device) => {
+            DeviceHandle::Mqtt { device, .. } => {
                 device
                     .set_fade_speed(fade_speed)
                     .await
@@ -552,7 +562,7 @@ impl DeviceManager {
                     .reset_energy_total()
                     .await
                     .map_err(|e| e.to_string())?,
-                DeviceHandle::Mqtt(device) => device
+                DeviceHandle::Mqtt { device, .. } => device
                     .reset_energy_total()
                     .await
                     .map_err(|e| e.to_string())?,
@@ -589,7 +599,7 @@ impl DeviceManager {
         // Query power state
         let power_result = match &entry.handle {
             DeviceHandle::Http(device) => device.get_power().await,
-            DeviceHandle::Mqtt(device) => device.get_power().await,
+            DeviceHandle::Mqtt { device, .. } => device.get_power().await,
         };
         if let Ok(power_response) = power_result {
             if let Ok(power_state) = power_response.first_power_state() {
@@ -600,7 +610,7 @@ impl DeviceManager {
         // Query dimmer if supported
         let dimmer_result = match &entry.handle {
             DeviceHandle::Http(device) => device.get_dimmer().await,
-            DeviceHandle::Mqtt(device) => device.get_dimmer().await,
+            DeviceHandle::Mqtt { device, .. } => device.get_dimmer().await,
         };
         if let Ok(dimmer_response) = dimmer_result {
             if let Ok(dimmer) = tasmor_lib::Dimmer::new(dimmer_response.dimmer()) {
@@ -611,7 +621,7 @@ impl DeviceManager {
         // Query color temperature if supported
         let ct_result = match &entry.handle {
             DeviceHandle::Http(device) => device.get_color_temperature().await,
-            DeviceHandle::Mqtt(device) => device.get_color_temperature().await,
+            DeviceHandle::Mqtt { device, .. } => device.get_color_temperature().await,
         };
         if let Ok(ct_response) = ct_result {
             if let Ok(ct) = tasmor_lib::ColorTemperature::new(ct_response.color_temperature()) {
@@ -622,7 +632,7 @@ impl DeviceManager {
         // Query HSB color if supported
         let hsb_result = match &entry.handle {
             DeviceHandle::Http(device) => device.get_hsb_color().await,
-            DeviceHandle::Mqtt(device) => device.get_hsb_color().await,
+            DeviceHandle::Mqtt { device, .. } => device.get_hsb_color().await,
         };
         if let Ok(hsb_response) = hsb_result {
             if let Ok(hsb) = hsb_response.hsb_color() {
@@ -633,7 +643,7 @@ impl DeviceManager {
         // Query energy data if supported
         let energy_result = match &entry.handle {
             DeviceHandle::Http(device) => device.energy().await,
-            DeviceHandle::Mqtt(device) => device.energy().await,
+            DeviceHandle::Mqtt { device, .. } => device.energy().await,
         };
         #[allow(clippy::cast_precision_loss)]
         if let Ok(energy_response) = energy_result {

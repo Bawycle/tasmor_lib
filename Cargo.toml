@@ -38,7 +38,6 @@ parking_lot = "0.12"
 [dev-dependencies]
 tokio = { version = "1.48", features = ["rt-multi-thread", "macros", "test-util"] }
 wiremock = "0.6"
-mockforge-mqtt = "0.3"
 
 [lints.rust]
 unsafe_code = "forbid"

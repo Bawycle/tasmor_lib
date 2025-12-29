@@ -11,10 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Routine builder** - Execute multiple commands atomically using `Routine::builder()` and `device.run(&routine)`. Supports power, lighting, fade, and scheme commands with configurable delays (max 30 steps)
 - **MQTT device discovery** - `MqttBroker::discover_devices()` and standalone `discover_devices()` function to auto-discover Tasmota devices on a broker
+- **Device disconnect** - `device.disconnect().await` for clean MQTT subscription cleanup. Drop implementation provides best-effort cleanup if `disconnect()` is not called explicitly
 
 ### Changed
 
-- **Simplified public API** - Reduced root exports to essential types only. Internal types like `CallbackRegistry`, `TopicRouter`, individual command types are now accessed via their modules (`command::PowerCommand`, `protocol::MqttClient`, etc.)
+- **BREAKING: Unified MQTT architecture** - Removed `MqttClient` and `Device::mqtt()`. Use `MqttBroker` + `broker.device()` pattern for all MQTT devices. This simplifies the API and improves maintainability:
+  ```rust
+  // Before (removed):
+  // let (device, _) = Device::mqtt("mqtt://broker:1883", "topic").build().await?;
+
+  // After:
+  let broker = MqttBroker::builder().host("192.168.1.50").build().await?;
+  let (device, _) = broker.device("topic").build().await?;
+
+  // Clean disconnect when done
+  device.disconnect().await;
+  broker.disconnect().await?;
+  ```
+- **Simplified public API** - Reduced root exports to essential types only. Internal types like `CallbackRegistry`, `TopicRouter`, individual command types are now accessed via their modules (`command::PowerCommand`, etc.)
 - **Added `DeviceState` and `StateChange` to root exports** - These are returned by builders and used in callbacks
 
 ### Fixed

@@ -10,6 +10,7 @@
 //! devices on the same broker.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use rumqttc::QoS;
@@ -20,16 +21,34 @@ use crate::error::ProtocolError;
 use crate::protocol::{CommandResponse, Protocol};
 use crate::subscription::CallbackRegistry;
 
+use super::mqtt_broker::MqttBroker;
 use super::topic_router::TopicRouter;
 
 /// MQTT client that shares a broker's connection.
 ///
-/// Unlike [`MqttClient`](super::MqttClient), this client does not create its own
-/// MQTT connection. Instead, it uses the connection from an [`MqttBroker`](super::MqttBroker),
-/// which is more efficient when managing multiple devices.
+/// This client uses the connection from an [`MqttBroker`](super::MqttBroker),
+/// which is efficient when managing multiple devices on the same broker.
 ///
 /// This client is created via [`MqttBroker::device()`](super::MqttBroker::device).
-#[derive(Debug)]
+///
+/// # Disconnection
+///
+/// When you're done with a device, call [`disconnect()`](Self::disconnect) to cleanly
+/// unsubscribe from MQTT topics. If `disconnect()` is not called, the `Drop`
+/// implementation will attempt a best-effort cleanup.
+///
+/// ```no_run
+/// # async fn example() -> tasmor_lib::Result<()> {
+/// use tasmor_lib::MqttBroker;
+///
+/// let broker = MqttBroker::builder().host("192.168.1.50").build().await?;
+/// let (device, _) = broker.device("tasmota").build().await?;
+///
+/// device.power_on().await?;
+/// device.disconnect().await;  // Clean shutdown
+/// # Ok(())
+/// # }
+/// ```
 pub struct SharedMqttClient {
     /// The shared MQTT async client for publishing.
     client: rumqttc::AsyncClient,
@@ -39,6 +58,10 @@ pub struct SharedMqttClient {
     response_rx: Arc<Mutex<mpsc::Receiver<String>>>,
     /// Router for dispatching messages to callbacks.
     router: Arc<TopicRouter>,
+    /// Reference to the broker for cleanup.
+    broker: MqttBroker,
+    /// Whether this client has been disconnected.
+    disconnected: AtomicBool,
 }
 
 impl SharedMqttClient {
@@ -50,12 +73,15 @@ impl SharedMqttClient {
         topic: String,
         response_rx: mpsc::Receiver<String>,
         router: Arc<TopicRouter>,
+        broker: MqttBroker,
     ) -> Self {
         Self {
             client,
             topic,
             response_rx: Arc::new(Mutex::new(response_rx)),
             router,
+            broker,
+            disconnected: AtomicBool::new(false),
         }
     }
 
@@ -63,6 +89,26 @@ impl SharedMqttClient {
     #[must_use]
     pub fn topic(&self) -> &str {
         &self.topic
+    }
+
+    /// Disconnects and cleans up MQTT subscriptions.
+    ///
+    /// This only unsubscribes this device from its topics; the shared broker
+    /// connection remains open for other devices.
+    ///
+    /// This method is idempotent - calling it multiple times is safe.
+    pub async fn disconnect(&self) {
+        if self.disconnected.swap(true, Ordering::SeqCst) {
+            return; // Already disconnected
+        }
+        self.broker.remove_device_subscription(&self.topic).await;
+        tracing::debug!(topic = %self.topic, "Device disconnected");
+    }
+
+    /// Returns whether this client has been disconnected.
+    #[must_use]
+    pub fn is_disconnected(&self) -> bool {
+        self.disconnected.load(Ordering::SeqCst)
     }
 
     /// Registers a callback registry for receiving state updates.
@@ -140,6 +186,30 @@ impl Protocol for SharedMqttClient {
 
         let body = self.wait_response(Duration::from_secs(5)).await?;
         Ok(CommandResponse::new(body))
+    }
+}
+
+impl Drop for SharedMqttClient {
+    fn drop(&mut self) {
+        if self.disconnected.load(Ordering::SeqCst) {
+            return; // Already disconnected via disconnect()
+        }
+
+        let topic = self.topic.clone();
+        let broker = self.broker.clone();
+
+        // Attempt async cleanup if we're in a tokio runtime
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn(async move {
+                broker.remove_device_subscription(&topic).await;
+                tracing::debug!(topic = %topic, "Device cleanup via Drop");
+            });
+        } else {
+            tracing::warn!(
+                topic = %self.topic,
+                "No tokio runtime available for async cleanup in Drop"
+            );
+        }
     }
 }
 
