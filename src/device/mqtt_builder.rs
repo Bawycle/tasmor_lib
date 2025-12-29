@@ -110,15 +110,37 @@ impl MqttDeviceBuilder {
     pub async fn build(self) -> Result<(Device<MqttClient>, DeviceState), Error> {
         let client = self.create_client().await?;
 
-        // Query device status for capabilities
-        let cmd = StatusCommand::all();
-        let response = client.send_command(&cmd).await.map_err(Error::Protocol)?;
-        let status: StatusResponse = response.parse().map_err(Error::Parse)?;
+        // Use provided capabilities or auto-detect
+        let capabilities = if let Some(caps) = self.capabilities {
+            caps
+        } else {
+            // Query device parameters (Status 1) for FriendlyName count
+            // Note: Status 0 via MQTT returns multiple separate messages, so we
+            // query specific status levels individually and merge them.
+            let cmd = StatusCommand::device_parameters();
+            let response = client.send_command(&cmd).await.map_err(Error::Protocol)?;
+            let mut status: StatusResponse = response.parse().map_err(Error::Parse)?;
 
-        // Use provided capabilities or auto-detect from status
-        let capabilities = self
-            .capabilities
-            .unwrap_or_else(|| Capabilities::from_status(&status));
+            // Query runtime state (Status 11) for light/energy capabilities
+            let cmd_state = StatusCommand::state();
+            if let Ok(state_response) = client.send_command(&cmd_state).await
+                && let Ok(state_status) = state_response.parse::<StatusResponse>()
+            {
+                // Merge sensor_status from Status 11 into our status
+                status.sensor_status = state_status.sensor_status;
+            }
+
+            // Query sensor info (Status 10) for ENERGY data
+            let cmd_sensors = StatusCommand::sensors();
+            if let Ok(sensors_response) = client.send_command(&cmd_sensors).await
+                && let Ok(sensors_status) = sensors_response.parse::<StatusResponse>()
+            {
+                // Merge sensors from Status 10 into our status
+                status.sensors = sensors_status.sensors;
+            }
+
+            Capabilities::from_status(&status)
+        };
 
         let device = Device::new(client, capabilities);
 

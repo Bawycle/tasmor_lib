@@ -46,6 +46,7 @@ use rumqttc::{AsyncClient, EventLoop, MqttOptions, QoS};
 use tokio::sync::{RwLock, mpsc, oneshot};
 
 use crate::error::ProtocolError;
+use crate::protocol::TopicRouter;
 
 /// Global counter for generating unique client IDs.
 static BROKER_CLIENT_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -74,18 +75,10 @@ impl Default for MqttBrokerConfig {
 
 /// A subscription to a device topic on the broker.
 pub(crate) struct DeviceSubscription {
-    /// Channel to send messages to this subscriber.
-    pub message_tx: mpsc::Sender<BrokerMessage>,
-}
-
-/// A message received from the broker.
-#[derive(Debug, Clone)]
-#[allow(dead_code)] // Will be used when devices connect through the broker
-pub struct BrokerMessage {
-    /// The full MQTT topic (e.g., `stat/tasmota_bedroom/POWER`).
-    pub topic: String,
-    /// The message payload.
-    pub payload: String,
+    /// Channel to send command responses (RESULT, STATUS*) to the device.
+    pub response_tx: mpsc::Sender<String>,
+    /// Router for dispatching messages to callbacks.
+    pub router: Arc<TopicRouter>,
 }
 
 /// An MQTT broker connection that can be shared across multiple devices.
@@ -109,6 +102,8 @@ struct MqttBrokerInner {
     config: MqttBrokerConfig,
     /// Connection status.
     connected: AtomicBool,
+    /// Channel for sending discovered device topics during discovery.
+    discovery_tx: RwLock<Option<mpsc::Sender<String>>>,
 }
 
 impl MqttBroker {
@@ -142,10 +137,49 @@ impl MqttBroker {
         self.inner.config.credentials.is_some()
     }
 
+    /// Returns the credentials if configured.
+    #[must_use]
+    #[allow(dead_code)] // May be useful for future discovery/configuration features
+    pub(crate) fn credentials(&self) -> Option<(&str, &str)> {
+        self.inner
+            .config
+            .credentials
+            .as_ref()
+            .map(|(u, p)| (u.as_str(), p.as_str()))
+    }
+
     /// Returns the MQTT client for internal use.
-    #[allow(dead_code)] // Will be used when devices connect through the broker
     pub(crate) fn client(&self) -> &AsyncClient {
         &self.inner.client
+    }
+
+    /// Creates a builder for a device that shares this broker's MQTT connection.
+    ///
+    /// This is the recommended way to create multiple devices on the same broker,
+    /// as they will all share a single MQTT connection instead of each creating
+    /// their own.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tasmor_lib::MqttBroker;
+    ///
+    /// # async fn example() -> tasmor_lib::Result<()> {
+    /// let broker = MqttBroker::builder()
+    ///     .host("192.168.1.50")
+    ///     .credentials("user", "pass")
+    ///     .build()
+    ///     .await?;
+    ///
+    /// // All devices share the same connection
+    /// let (bulb, _) = broker.device("tasmota_bulb").build().await?;
+    /// let (plug, _) = broker.device("tasmota_plug").build().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn device(&self, topic: impl Into<String>) -> crate::device::BrokerDeviceBuilder<'_> {
+        crate::device::BrokerDeviceBuilder::new(self, topic)
     }
 
     /// Adds a subscription for a device topic.
@@ -154,15 +188,15 @@ impl MqttBroker {
     /// - `stat/<topic>/+` for command responses
     /// - `tele/<topic>/+` for telemetry
     ///
+    /// Returns a receiver channel for command responses.
+    ///
     /// # Errors
     ///
     /// Returns error if the MQTT subscription fails.
-    #[allow(dead_code)] // Will be used when devices connect through the broker
     pub(crate) async fn add_device_subscription(
         &self,
         device_topic: String,
-        message_tx: mpsc::Sender<BrokerMessage>,
-    ) -> Result<(), ProtocolError> {
+    ) -> Result<(mpsc::Receiver<String>, Arc<TopicRouter>), ProtocolError> {
         // Subscribe to stat/<topic>/+ for command responses
         let stat_topic = format!("stat/{device_topic}/+");
         self.inner
@@ -185,15 +219,22 @@ impl MqttBroker {
             "Subscribed to device topics"
         );
 
+        // Create channels and router for this device
+        let (response_tx, response_rx) = mpsc::channel::<String>(10);
+        let router = Arc::new(TopicRouter::new());
+
         // Register the subscription
-        let subscription = DeviceSubscription { message_tx };
+        let subscription = DeviceSubscription {
+            response_tx,
+            router: Arc::clone(&router),
+        };
         self.inner
             .subscriptions
             .write()
             .await
             .insert(device_topic, subscription);
 
-        Ok(())
+        Ok((response_rx, router))
     }
 
     /// Removes a subscription for a device topic.
@@ -222,31 +263,61 @@ impl MqttBroker {
     }
 
     /// Routes an incoming message to the appropriate device subscriber.
-    async fn route_message(&self, topic: &str, payload: String) -> Result<(), ProtocolError> {
+    async fn route_message(&self, topic: &str, payload: String) {
         // Parse topic: stat/<device_topic>/<command> or tele/<device_topic>/<type>
         let parts: Vec<&str> = topic.split('/').collect();
-        if parts.len() >= 3 && (parts[0] == "stat" || parts[0] == "tele") {
-            let device_topic = parts[1];
+        if parts.len() < 3 {
+            return;
+        }
 
-            let subscriptions = self.inner.subscriptions.read().await;
-            if let Some(sub) = subscriptions.get(device_topic) {
-                let message = BrokerMessage {
-                    topic: topic.to_string(),
-                    payload,
-                };
+        let prefix = parts[0];
+        let device_topic = parts[1];
+        let suffix = parts[2];
+
+        if prefix != "stat" && prefix != "tele" {
+            return;
+        }
+
+        // Check for discovery mode - capture device topics from discovery messages
+        // tele/+/LWT, tele/+/STATE, or stat/+/STATUS
+        let is_discovery_topic = (prefix == "tele" && (suffix == "LWT" || suffix == "STATE"))
+            || (prefix == "stat" && suffix == "STATUS");
+
+        if is_discovery_topic
+            && let Some(discovery_tx) = self.inner.discovery_tx.read().await.as_ref()
+        {
+            tracing::debug!(
+                topic = %topic,
+                device = %device_topic,
+                "Discovered device topic"
+            );
+            // Ignore send errors - discovery may have stopped
+            let _ = discovery_tx.send(device_topic.to_string()).await;
+        }
+
+        // Route to registered device subscriptions
+        let subscriptions = self.inner.subscriptions.read().await;
+        let Some(sub) = subscriptions.get(device_topic) else {
+            return;
+        };
+
+        // Route to callbacks via the topic router
+        sub.router.route(topic, &payload);
+
+        // For stat/ messages, also send to response channel if it's a command response
+        if prefix == "stat" {
+            // RESULT and STATUS* are JSON responses that go to the response channel
+            let is_json_response = suffix == "RESULT" || suffix.starts_with("STATUS");
+            if is_json_response {
                 tracing::debug!(
                     topic = %topic,
                     device = %device_topic,
-                    "Routing message to device"
+                    "Routing response to device"
                 );
-                sub.message_tx.send(message).await.map_err(|e| {
-                    ProtocolError::ChannelClosed(format!(
-                        "Failed to send message to device {device_topic}: {e}"
-                    ))
-                })?;
+                // Ignore send errors - the device may have been dropped
+                let _ = sub.response_tx.send(payload).await;
             }
         }
-        Ok(())
     }
 
     /// Disconnects from the broker.
@@ -280,6 +351,21 @@ impl MqttBroker {
     /// Returns the number of active device subscriptions.
     pub async fn subscription_count(&self) -> usize {
         self.inner.subscriptions.read().await.len()
+    }
+
+    /// Starts discovery mode and returns a receiver for discovered device topics.
+    ///
+    /// While in discovery mode, any message received on `tele/+/LWT` or `tele/+/STATE`
+    /// topics will have its device topic sent to the returned receiver.
+    pub(crate) async fn start_discovery(&self) -> mpsc::Receiver<String> {
+        let (tx, rx) = mpsc::channel::<String>(100);
+        *self.inner.discovery_tx.write().await = Some(tx);
+        rx
+    }
+
+    /// Stops discovery mode.
+    pub(crate) async fn stop_discovery(&self) {
+        *self.inner.discovery_tx.write().await = None;
     }
 }
 
@@ -388,6 +474,7 @@ impl MqttBrokerBuilder {
             subscriptions: RwLock::new(HashMap::new()),
             config: self.config.clone(),
             connected: AtomicBool::new(false),
+            discovery_tx: RwLock::new(None),
         };
 
         let broker = MqttBroker {
@@ -462,13 +549,7 @@ async fn handle_broker_events(
                         payload = %payload,
                         "MQTT message received"
                     );
-                    if let Err(e) = broker.route_message(&publish.topic, payload).await {
-                        tracing::warn!(
-                            topic = %publish.topic,
-                            error = %e,
-                            "Failed to route MQTT message"
-                        );
-                    }
+                    broker.route_message(&publish.topic, payload).await;
                 }
             }
             Ok(Event::Incoming(Packet::Disconnect)) => {
@@ -562,17 +643,5 @@ mod tests {
         assert!(config.host.is_empty());
         assert_eq!(config.port, 1883);
         assert!(config.credentials.is_none());
-    }
-
-    #[test]
-    fn broker_message_debug() {
-        let msg = BrokerMessage {
-            topic: "stat/device/POWER".to_string(),
-            payload: "ON".to_string(),
-        };
-        let debug = format!("{msg:?}");
-        assert!(debug.contains("BrokerMessage"));
-        assert!(debug.contains("POWER"));
-        assert!(debug.contains("ON"));
     }
 }

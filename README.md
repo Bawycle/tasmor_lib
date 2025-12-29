@@ -32,6 +32,7 @@ A modern, type-safe Rust library for controlling [Tasmota](https://tasmota.githu
 | Light schemes | Effects (wakeup, color cycling, random) |
 | RGB colors | Hex color input (#RRGGBB) with HSB conversion |
 | Routines | Execute multiple commands atomically via Backlog0 |
+| Device discovery | Auto-discover Tasmota devices on MQTT broker |
 
 ## Installation
 
@@ -113,7 +114,7 @@ Both methods return `(Device, DeviceState)` - the device handle and its initial 
 
 | Method | When to use |
 |--------|-------------|
-| `build()` | Auto-detects device capabilities by querying `Status 0`. Use when you don't know the device type. |
+| `build()` | Auto-detects device capabilities by querying device status. Use when you don't know the device type. |
 | `build_without_probe()` | Uses capabilities you provide. Faster startup, recommended when you know the device type. |
 
 ```rust
@@ -361,6 +362,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     living_room.set_dimmer(Dimmer::new(75)?).await?;
     bedroom.power_on().await?;
 
+    Ok(())
+}
+```
+
+### MQTT Device Discovery
+
+Automatically discover all Tasmota devices on an MQTT broker:
+
+```rust
+use tasmor_lib::MqttBroker;
+use std::time::Duration;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Connect to broker
+    let broker = MqttBroker::builder()
+        .host("192.168.1.50")
+        .port(1883)
+        .credentials("mqtt_user", "mqtt_pass")
+        .build()
+        .await?;
+
+    // Discover devices (10 second timeout)
+    let devices = broker.discover_devices(Duration::from_secs(10)).await?;
+
+    println!("Found {} devices:", devices.len());
+    for (device, state) in &devices {
+        println!("  - Power: {:?}, Dimmer: {:?}", state.power(1), state.dimmer());
+    }
+
+    // Use discovered devices...
+    for (device, _) in devices {
+        device.power_toggle().await?;
+    }
+
+    broker.disconnect().await?;
     Ok(())
 }
 ```
