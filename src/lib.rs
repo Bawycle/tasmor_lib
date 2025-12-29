@@ -211,6 +211,8 @@
 mod capabilities;
 pub mod command;
 mod device;
+#[cfg(feature = "mqtt")]
+pub mod discovery;
 pub mod error;
 pub mod protocol;
 pub mod response;

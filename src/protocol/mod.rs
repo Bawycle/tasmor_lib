@@ -12,20 +12,33 @@
 //!
 //! - [`HttpClient`] (requires `http` feature): HTTP-based communication using REST API
 //! - [`MqttClient`] (requires `mqtt` feature): MQTT-based communication for real-time updates
-//! - [`PooledMqttClient`] (requires `mqtt` feature): MQTT with connection pooling
 //!
 //! # Feature Flags
 //!
 //! - `http` - Enables HTTP protocol support (enabled by default)
 //! - `mqtt` - Enables MQTT protocol support (enabled by default)
 //!
-//! # Connection Pooling
+//! # Creating MQTT Devices
 //!
-//! When managing multiple Tasmota devices on the same MQTT broker, use
-//! [`PooledMqttClient`] or [`BrokerPool`] to share connections efficiently.
+//! Use [`MqttBroker`] to manage connections and create devices:
+//!
+//! ```no_run
+//! use tasmor_lib::MqttBroker;
+//!
+//! # async fn example() -> tasmor_lib::Result<()> {
+//! let broker = MqttBroker::builder()
+//!     .host("192.168.1.50")
+//!     .credentials("user", "pass")
+//!     .build()
+//!     .await?;
+//!
+//! // Create devices - credentials are inherited from broker
+//! let (bulb, _) = broker.device("tasmota_bulb").build().await?;
+//! let (plug, _) = broker.device("tasmota_plug").build().await?;
+//! # Ok(())
+//! # }
+//! ```
 
-#[cfg(feature = "mqtt")]
-mod broker_pool;
 #[cfg(feature = "http")]
 mod http;
 #[cfg(feature = "mqtt")]
@@ -33,12 +46,10 @@ mod mqtt;
 #[cfg(feature = "mqtt")]
 mod mqtt_broker;
 #[cfg(feature = "mqtt")]
-mod mqtt_pooled;
+mod shared_mqtt_client;
 #[cfg(feature = "mqtt")]
 mod topic_router;
 
-#[cfg(feature = "mqtt")]
-pub use broker_pool::BrokerPool;
 #[cfg(feature = "http")]
 pub use http::{HttpClient, HttpClientBuilder, HttpConfig};
 #[cfg(feature = "mqtt")]
@@ -46,7 +57,7 @@ pub use mqtt::{MqttClient, MqttClientBuilder};
 #[cfg(feature = "mqtt")]
 pub use mqtt_broker::{MqttBroker, MqttBrokerBuilder, MqttBrokerConfig};
 #[cfg(feature = "mqtt")]
-pub use mqtt_pooled::PooledMqttClient;
+pub use shared_mqtt_client::SharedMqttClient;
 #[cfg(feature = "mqtt")]
 pub use topic_router::TopicRouter;
 

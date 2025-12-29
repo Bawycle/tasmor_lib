@@ -218,9 +218,9 @@ impl Capabilities {
     ///
     /// This method analyzes the status response to determine:
     /// - Number of power channels from POWER fields
-    /// - Dimmer support from Dimmer field
-    /// - Color support from HSBColor/CT fields
-    /// - Energy support from Energy block
+    /// - Dimmer support from Dimmer field in `StatusSTS`
+    /// - Color support from `HSBColor`/CT fields in `StatusSTS`
+    /// - Energy support from ENERGY block in `StatusSNS` or `StatusSTS`
     ///
     /// # Arguments
     ///
@@ -230,7 +230,6 @@ impl Capabilities {
         let mut caps = Self::default();
 
         // Detect power channels from status
-        // In a real implementation, we'd parse the sensor status for POWER fields
         if let Some(ref device) = status.status {
             // Module ID can give hints
             if device.module == 49 {
@@ -247,22 +246,28 @@ impl Capabilities {
             }
         }
 
-        // Check for light capabilities in sensor status
-        if let Some(ref sensors) = status.sensors {
-            if sensors.get("Dimmer").is_some() {
+        // Check for light capabilities in StatusSTS (Status 11 - runtime state)
+        // This is where Tasmota reports Dimmer, CT, HSBColor, Color, etc.
+        if let Some(ref state) = status.sensor_status {
+            if state.get("Dimmer").is_some() {
                 caps.dimmer_control = true;
             }
-            if sensors.get("CT").is_some() {
+            if state.get("CT").is_some() {
                 caps.color_temperature_control = true;
             }
-            if sensors.get("HSBColor").is_some() {
+            if state.get("HSBColor").is_some() {
                 caps.rgb_control = true;
+            }
+            // Also check for ENERGY in StatusSTS
+            if state.get("ENERGY").is_some() {
+                caps.energy_monitoring = true;
             }
         }
 
-        // Check for energy monitoring
+        // Also check for ENERGY in StatusSNS (Status 10 - sensor data)
+        // Some devices report energy data here
         if status
-            .sensor_status
+            .sensors
             .as_ref()
             .is_some_and(|s| s.get("ENERGY").is_some())
         {
@@ -522,7 +527,7 @@ mod tests {
 
     #[test]
     fn from_status_detects_dimmer_capability() {
-        // Light devices report Dimmer in sensor status
+        // Light devices report Dimmer in StatusSTS (Status 11 - runtime state)
         // Reference: https://tasmota.github.io/docs/Lights/
         // Dimmer range: 0-100%
         let json = r#"{
@@ -531,8 +536,9 @@ mod tests {
                 "DeviceName": "Dimmable Light",
                 "FriendlyName": ["Light"]
             },
-            "StatusSNS": {
+            "StatusSTS": {
                 "Time": "2024-01-15T12:00:00",
+                "POWER": "ON",
                 "Dimmer": 75
             }
         }"#;
@@ -542,14 +548,14 @@ mod tests {
 
         assert!(
             caps.dimmer_control,
-            "Device with Dimmer in StatusSNS should have dimmer capability"
+            "Device with Dimmer in StatusSTS should have dimmer capability"
         );
         assert!(caps.is_light());
     }
 
     #[test]
     fn from_status_detects_color_temperature_capability() {
-        // CCT lights report CT (color temperature) in mireds (153-500)
+        // CCT lights report CT (color temperature) in mireds (153-500) in StatusSTS
         // Reference: https://tasmota.github.io/docs/Lights/
         // CT 153 = 6500K (cold white), CT 500 = 2000K (warm white)
         let json = r#"{
@@ -558,8 +564,9 @@ mod tests {
                 "DeviceName": "CCT Bulb",
                 "FriendlyName": ["Bulb"]
             },
-            "StatusSNS": {
+            "StatusSTS": {
                 "Time": "2024-01-15T12:00:00",
+                "POWER": "ON",
                 "CT": 250
             }
         }"#;
@@ -569,14 +576,14 @@ mod tests {
 
         assert!(
             caps.color_temperature_control,
-            "Device with CT in StatusSNS should have color temperature capability"
+            "Device with CT in StatusSTS should have color temperature capability"
         );
         assert!(caps.is_light());
     }
 
     #[test]
     fn from_status_detects_rgb_capability() {
-        // RGB lights report HSBColor as "Hue,Saturation,Brightness"
+        // RGB lights report HSBColor as "Hue,Saturation,Brightness" in StatusSTS
         // Reference: https://tasmota.github.io/docs/Lights/
         // Example: "HSBColor": "180,100,100" (Hue=180°, Sat=100%, Bright=100%)
         let json = r#"{
@@ -585,8 +592,9 @@ mod tests {
                 "DeviceName": "RGB Bulb",
                 "FriendlyName": ["Bulb"]
             },
-            "StatusSNS": {
+            "StatusSTS": {
                 "Time": "2024-01-15T12:00:00",
+                "POWER": "ON",
                 "HSBColor": "180,100,100"
             }
         }"#;
@@ -596,24 +604,25 @@ mod tests {
 
         assert!(
             caps.rgb_control,
-            "Device with HSBColor in StatusSNS should have RGB capability"
+            "Device with HSBColor in StatusSTS should have RGB capability"
         );
         assert!(caps.is_light());
     }
 
     #[test]
     fn from_status_detects_full_rgbcct_light() {
-        // RGBCCT lights (5-channel) have Dimmer, CT, and HSBColor
+        // RGBCCT lights (5-channel) have Dimmer, CT, and HSBColor in StatusSTS
         // Reference: https://tasmota.github.io/docs/Lights/
-        // Response format from tele/STATE or Status 11
+        // Response format from Status 11 (StatusSTS)
         let json = r#"{
             "Status": {
                 "Module": 18,
                 "DeviceName": "RGBCCT Bulb",
                 "FriendlyName": ["Smart Bulb"]
             },
-            "StatusSNS": {
+            "StatusSTS": {
                 "Time": "2024-01-15T12:00:00",
+                "POWER": "ON",
                 "Dimmer": 100,
                 "Color": "255,128,64,200,100",
                 "HSBColor": "20,75,100",

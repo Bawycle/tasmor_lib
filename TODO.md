@@ -7,4 +7,4 @@
 ## Features
 
 - [ ] Auto-discovery via mDNS
-- [ ] Auto-discovery via MQTT broker
+- [x] Auto-discovery via MQTT broker

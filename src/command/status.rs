@@ -34,10 +34,12 @@ pub enum StatusType {
     Mqtt = 6,
     /// Time and sunrise/sunset information.
     Time = 7,
-    /// Connected sensors information.
-    Sensors = 10,
     /// Power thresholds (energy monitoring).
     PowerThresholds = 9,
+    /// Connected sensors information.
+    Sensors = 10,
+    /// Runtime state (POWER, Dimmer, CT, `HSBColor`, ENERGY).
+    State = 11,
     /// Shutter configuration.
     Shutter = 13,
 }
@@ -58,6 +60,7 @@ impl StatusType {
             Self::Time,
             Self::PowerThresholds,
             Self::Sensors,
+            Self::State,
             Self::Shutter,
         ]
     }
@@ -159,6 +162,12 @@ impl StatusCommand {
     #[must_use]
     pub const fn sensors() -> Self {
         Self::new(StatusType::Sensors)
+    }
+
+    /// Query runtime state (POWER, Dimmer, CT, `HSBColor`, ENERGY).
+    #[must_use]
+    pub const fn state() -> Self {
+        Self::new(StatusType::State)
     }
 
     /// Returns the status type being queried.

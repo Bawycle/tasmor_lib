@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Routine builder** - Execute multiple commands atomically using `Routine::builder()` and `device.run(&routine)`. Supports power, lighting, fade, and scheme commands with configurable delays (max 30 steps)
+- **MQTT device discovery** - `MqttBroker::discover_devices()` and standalone `discover_devices()` function to auto-discover Tasmota devices on a broker
+
+### Fixed
+
+- **MQTT capability detection** - `build()` now correctly detects device capabilities (dimmer, RGB, color temperature, energy monitoring) for MQTT connections
+- **JSON parsing compatibility** - Improved parsing robustness for various Tasmota firmware responses
 
 ## [0.1.0] - 2025-12-27
 

@@ -53,11 +53,15 @@
 //! # }
 //! ```
 
+#[cfg(feature = "mqtt")]
+mod broker_device_builder;
 #[cfg(feature = "http")]
 mod http_builder;
 #[cfg(feature = "mqtt")]
 mod mqtt_builder;
 
+#[cfg(feature = "mqtt")]
+pub use broker_device_builder::BrokerDeviceBuilder;
 #[cfg(feature = "http")]
 pub use http_builder::HttpDeviceBuilder;
 #[cfg(feature = "mqtt")]
@@ -1139,6 +1143,8 @@ impl Device<HttpClient> {
 #[cfg(feature = "mqtt")]
 use crate::protocol::MqttClient;
 #[cfg(feature = "mqtt")]
+use crate::protocol::SharedMqttClient;
+#[cfg(feature = "mqtt")]
 use crate::state::StateChange;
 #[cfg(feature = "mqtt")]
 use crate::subscription::{EnergyData, Subscribable, SubscriptionId};
@@ -1154,7 +1160,87 @@ impl Device<MqttClient> {
 }
 
 #[cfg(feature = "mqtt")]
+impl Device<SharedMqttClient> {
+    /// Registers the device's callbacks with the shared MQTT client for message routing.
+    ///
+    /// This is called automatically by the builder after device creation.
+    pub(crate) fn register_shared_mqtt_callbacks(&self) {
+        self.protocol.register_callbacks(&self.callbacks);
+    }
+}
+
+#[cfg(feature = "mqtt")]
 impl Subscribable for Device<MqttClient> {
+    fn on_power_changed<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(u8, PowerState) + Send + Sync + 'static,
+    {
+        self.callbacks.on_power_changed(callback)
+    }
+
+    fn on_dimmer_changed<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(Dimmer) + Send + Sync + 'static,
+    {
+        self.callbacks.on_dimmer_changed(callback)
+    }
+
+    fn on_color_changed<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(HsbColor) + Send + Sync + 'static,
+    {
+        self.callbacks.on_hsb_color_changed(callback)
+    }
+
+    fn on_color_temp_changed<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(ColorTemperature) + Send + Sync + 'static,
+    {
+        self.callbacks.on_color_temp_changed(callback)
+    }
+
+    fn on_scheme_changed<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(Scheme) + Send + Sync + 'static,
+    {
+        self.callbacks.on_scheme_changed(callback)
+    }
+
+    fn on_energy_updated<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(EnergyData) + Send + Sync + 'static,
+    {
+        self.callbacks.on_energy_updated(callback)
+    }
+
+    fn on_connected<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(&DeviceState) + Send + Sync + 'static,
+    {
+        self.callbacks.on_connected(callback)
+    }
+
+    fn on_disconnected<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.callbacks.on_disconnected(callback)
+    }
+
+    fn on_state_changed<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn(&StateChange) + Send + Sync + 'static,
+    {
+        self.callbacks.on_state_changed(callback)
+    }
+
+    fn unsubscribe(&self, id: SubscriptionId) -> bool {
+        self.callbacks.unsubscribe(id)
+    }
+}
+
+#[cfg(feature = "mqtt")]
+impl Subscribable for Device<SharedMqttClient> {
     fn on_power_changed<F>(&self, callback: F) -> SubscriptionId
     where
         F: Fn(u8, PowerState) + Send + Sync + 'static,
