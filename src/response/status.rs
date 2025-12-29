@@ -98,6 +98,62 @@ where
     deserializer.deserialize_any(StringOrNumberI8)
 }
 
+/// Deserializes a value that can be either a number or a string, returning it as String.
+/// This is needed for fields like Timezone that can be numeric (99) or string ("Europe/Paris").
+fn deserialize_number_or_string_as_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+
+    struct NumberOrString;
+
+    impl Visitor<'_> for NumberOrString {
+        type Value = String;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("a number or a string")
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(value.to_string())
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(value.to_string())
+        }
+
+        fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(value.to_string())
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(value.to_string())
+        }
+
+        fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(value)
+        }
+    }
+
+    deserializer.deserialize_any(NumberOrString)
+}
+
 /// Optional version for i8 that handles missing or null values.
 fn deserialize_string_or_number_i8_opt<'de, D>(deserializer: D) -> Result<i8, D::Error>
 where
@@ -636,8 +692,8 @@ pub struct StatusTime {
     #[serde(default, rename = "EndDST")]
     pub end_dst: String,
 
-    /// Timezone.
-    #[serde(default)]
+    /// Timezone (can be numeric like 99 or string like "Europe/Paris").
+    #[serde(default, deserialize_with = "deserialize_number_or_string_as_string")]
     pub timezone: String,
 
     /// Sunrise time.

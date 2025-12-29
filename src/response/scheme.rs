@@ -55,21 +55,22 @@ impl SchemeResponse {
 /// Response from a `WakeupDuration` command.
 ///
 /// Tasmota returns wakeup duration in JSON format like:
-/// - `{"WakeupDuration": 60}` for 60 seconds
+/// - `{"WakeUpDuration": 60}` for 60 seconds
 ///
 /// # Examples
 ///
 /// ```
 /// use tasmor_lib::response::WakeupDurationResponse;
 ///
-/// let json = r#"{"WakeupDuration": 300}"#;
+/// let json = r#"{"WakeUpDuration": 300}"#;
 /// let response: WakeupDurationResponse = serde_json::from_str(json).unwrap();
 /// assert_eq!(response.duration().unwrap().seconds(), 300);
 /// ```
 #[derive(Debug, Clone, Deserialize)]
 pub struct WakeupDurationResponse {
     /// The wakeup duration in seconds (1-3000).
-    #[serde(rename = "WakeupDuration")]
+    // Note: Tasmota uses "WakeUpDuration" (capital U) in the response.
+    #[serde(rename = "WakeUpDuration")]
     wakeup_duration: u16,
 }
 
@@ -124,7 +125,7 @@ mod tests {
 
     #[test]
     fn parse_wakeup_duration_response() {
-        let json = r#"{"WakeupDuration": 300}"#;
+        let json = r#"{"WakeUpDuration": 300}"#;
         let response: WakeupDurationResponse = serde_json::from_str(json).unwrap();
         assert_eq!(response.duration().unwrap().seconds(), 300);
         assert_eq!(response.seconds(), 300);
@@ -133,12 +134,12 @@ mod tests {
     #[test]
     fn parse_wakeup_duration_response_edge_cases() {
         // Minimum
-        let json = r#"{"WakeupDuration": 1}"#;
+        let json = r#"{"WakeUpDuration": 1}"#;
         let response: WakeupDurationResponse = serde_json::from_str(json).unwrap();
         assert_eq!(response.duration().unwrap().seconds(), 1);
 
         // Maximum
-        let json = r#"{"WakeupDuration": 3000}"#;
+        let json = r#"{"WakeUpDuration": 3000}"#;
         let response: WakeupDurationResponse = serde_json::from_str(json).unwrap();
         assert_eq!(response.duration().unwrap().seconds(), 3000);
     }
@@ -146,12 +147,12 @@ mod tests {
     #[test]
     fn parse_wakeup_duration_response_invalid() {
         // Below minimum
-        let json = r#"{"WakeupDuration": 0}"#;
+        let json = r#"{"WakeUpDuration": 0}"#;
         let response: WakeupDurationResponse = serde_json::from_str(json).unwrap();
         assert!(response.duration().is_err());
 
         // Above maximum
-        let json = r#"{"WakeupDuration": 3001}"#;
+        let json = r#"{"WakeUpDuration": 3001}"#;
         let response: WakeupDurationResponse = serde_json::from_str(json).unwrap();
         assert!(response.duration().is_err());
     }
