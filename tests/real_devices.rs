@@ -252,10 +252,7 @@ mod http_protocol {
 
         // Get and restore initial state
         let initial = device.get_power().await.unwrap();
-        println!(
-            "PLUG_2 initial power: {:?}",
-            initial.first_power_state()
-        );
+        println!("PLUG_2 initial power: {:?}", initial.first_power_state());
 
         // Toggle twice to return to original state
         device.power_toggle().await.unwrap();
@@ -652,7 +649,6 @@ mod http_protocol {
             energy.voltage > 200 && energy.voltage < 250,
             "Voltage should be ~230V"
         );
-        assert!(energy.power >= 0, "Power should be non-negative");
     }
 
     #[tokio::test]

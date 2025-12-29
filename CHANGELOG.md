@@ -5,17 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2025-12-29
 
 ### Added
 
-- **Routine builder** - Execute multiple commands atomically using `Routine::builder()` and `device.run(&routine)`. Supports power, lighting, fade, and scheme commands with configurable delays (max 30 steps)
-- **MQTT device discovery** - `MqttBroker::discover_devices()` and standalone `discover_devices()` function to auto-discover Tasmota devices on a broker
-- **Device disconnect** - `device.disconnect().await` for clean MQTT subscription cleanup. Drop implementation provides best-effort cleanup if `disconnect()` is not called explicitly
+- **Command routines** - Execute multiple commands as a single atomic operation with optional delays between steps (max 30 steps). Supports power, lighting, fade, and scheme commands
+- **MQTT device discovery** - Automatically discover all Tasmota devices connected to an MQTT broker
+- **Device disconnect** - Properly close device connections to release resources
+- **Fade state tracking** - Initial device state now includes fade enabled/disabled status and fade speed for light devices
 
 ### Changed
 
-- **BREAKING: Unified MQTT architecture** - Removed `MqttClient` and `Device::mqtt()`. Use `MqttBroker` + `broker.device()` pattern for all MQTT devices. This simplifies the API and improves maintainability:
+- **BREAKING: Simplified MQTT API** - Use `MqttBroker` to connect to a broker, then create devices with `broker.device()`. The previous `Device::mqtt()` method has been removed:
   ```rust
   // Before (removed):
   // let (device, _) = Device::mqtt("mqtt://broker:1883", "topic").build().await?;
@@ -28,13 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   device.disconnect().await;
   broker.disconnect().await?;
   ```
-- **Simplified public API** - Reduced root exports to essential types only. Internal types like `CallbackRegistry`, `TopicRouter`, individual command types are now accessed via their modules (`command::PowerCommand`, etc.)
-- **Added `DeviceState` and `StateChange` to root exports** - These are returned by builders and used in callbacks
+- **Streamlined exports** - Reduced public API surface; internal types moved to submodules (e.g., `command::PowerCommand` instead of root export)
 
 ### Fixed
 
-- **MQTT capability detection** - `build()` now correctly detects device capabilities (dimmer, RGB, color temperature, energy monitoring) for MQTT connections
-- **JSON parsing compatibility** - Improved parsing robustness for various Tasmota firmware responses
+- **MQTT command responses** - Commands now reliably receive their correct response, even after executing routines with delays
+- **MQTT capability detection** - Device capabilities (dimmer, color, energy monitoring) are now correctly detected for MQTT devices
+- **Status parsing** - Fixed parsing of timezone and wakeup duration fields for compatibility with various Tasmota firmware versions
 
 ## [0.1.0] - 2025-12-27
 
@@ -95,5 +96,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - README with usage examples
   - CONTRIBUTING.md with development guidelines
 
-[Unreleased]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.1.0...HEAD
+[0.2.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.1.0...v0.2.0
 [0.1.0]: https://codeberg.org/Bawycle/tasmor_lib/releases/tag/v0.1.0

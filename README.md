@@ -40,7 +40,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-tasmor_lib = "0.1"
+tasmor_lib = "0.2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -528,7 +528,6 @@ cargo run --example discovery_test -- 192.168.1.50 user pass
 
 ## Roadmap
 
-- [ ] Auto-discovery via mDNS
 - [ ] Stabilize API for 1.0 release
 
 ## Development

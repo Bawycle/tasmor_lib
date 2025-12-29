@@ -121,7 +121,7 @@ use crate::types::{
 ///
 /// # Creating a Device
 ///
-/// Use [`Device::http`] for HTTP devices or [`MqttBroker::device`] for MQTT devices:
+/// Use [`Device::http`] for HTTP devices or [`crate::MqttBroker::device`] for MQTT devices:
 ///
 /// ```no_run
 /// use tasmor_lib::{Device, Capabilities};
