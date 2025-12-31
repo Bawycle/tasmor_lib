@@ -166,39 +166,106 @@ impl DeviceManager {
                     .map_err(|e| e.to_string())?;
 
                 // Set up callback to receive state changes from MQTT
-                let devices_clone = Arc::clone(&self.devices);
-                let update_tx = self.update_tx.clone();
-                let egui_ctx = self.egui_ctx.clone();
-                device.on_state_changed(move |change| {
-                    // Clone change for the async task
-                    let change = change.clone();
-                    let devices = Arc::clone(&devices_clone);
-                    let update_tx = update_tx.clone();
-                    let egui_ctx = egui_ctx.clone();
+                {
+                    let devices_clone = Arc::clone(&self.devices);
+                    let update_tx = self.update_tx.clone();
+                    let egui_ctx = self.egui_ctx.clone();
+                    device.on_state_changed(move |change| {
+                        // Clone change for the async task
+                        let change = change.clone();
+                        let devices = Arc::clone(&devices_clone);
+                        let update_tx = update_tx.clone();
+                        let egui_ctx = egui_ctx.clone();
 
-                    // Spawn async task to update state without blocking the callback
-                    tokio::spawn(async move {
-                        let mut devices = devices.write().await;
-                        if let Some(entry) = devices.get_mut(&config_id) {
-                            if entry.managed.apply_state_change(&change) {
-                                tracing::debug!(
+                        // Spawn async task to update state without blocking the callback
+                        tokio::spawn(async move {
+                            let mut devices = devices.write().await;
+                            if let Some(entry) = devices.get_mut(&config_id) {
+                                if entry.managed.apply_state_change(&change) {
+                                    tracing::debug!(
+                                        device_id = %config_id,
+                                        ?change,
+                                        "Applied state change from MQTT callback"
+                                    );
+
+                                    // Send update to UI thread via channel
+                                    let _ = update_tx.send(StateUpdate::StateChanged {
+                                        device_id: config_id,
+                                        change: change.clone(),
+                                    });
+
+                                    // Request UI repaint
+                                    egui_ctx.request_repaint();
+                                }
+                            }
+                        });
+                    });
+                }
+
+                // Set up callback for broker disconnection
+                {
+                    let devices_clone = Arc::clone(&self.devices);
+                    let update_tx = self.update_tx.clone();
+                    let egui_ctx = self.egui_ctx.clone();
+                    device.on_disconnected(move || {
+                        let devices = Arc::clone(&devices_clone);
+                        let update_tx = update_tx.clone();
+                        let egui_ctx = egui_ctx.clone();
+
+                        tokio::spawn(async move {
+                            let mut devices = devices.write().await;
+                            if let Some(entry) = devices.get_mut(&config_id) {
+                                entry.managed.status = ConnectionStatus::Disconnected;
+                                tracing::warn!(
                                     device_id = %config_id,
-                                    ?change,
-                                    "Applied state change from MQTT callback"
+                                    name = %entry.managed.config.name,
+                                    "MQTT connection lost"
                                 );
 
-                                // Send update to UI thread via channel
-                                let _ = update_tx.send(StateUpdate::StateChanged {
+                                let _ = update_tx.send(StateUpdate::ConnectionChanged {
                                     device_id: config_id,
-                                    change: change.clone(),
+                                    status: ConnectionStatus::Disconnected,
+                                    error: Some("MQTT connection lost".to_string()),
                                 });
 
-                                // Request UI repaint
                                 egui_ctx.request_repaint();
                             }
-                        }
+                        });
                     });
-                });
+                }
+
+                // Set up callback for broker reconnection
+                {
+                    let devices_clone = Arc::clone(&self.devices);
+                    let update_tx = self.update_tx.clone();
+                    let egui_ctx = self.egui_ctx.clone();
+                    device.on_reconnected(move || {
+                        let devices = Arc::clone(&devices_clone);
+                        let update_tx = update_tx.clone();
+                        let egui_ctx = egui_ctx.clone();
+
+                        tokio::spawn(async move {
+                            let mut devices = devices.write().await;
+                            if let Some(entry) = devices.get_mut(&config_id) {
+                                entry.managed.status = ConnectionStatus::Connected;
+                                entry.managed.error = None;
+                                tracing::info!(
+                                    device_id = %config_id,
+                                    name = %entry.managed.config.name,
+                                    "MQTT connection restored"
+                                );
+
+                                let _ = update_tx.send(StateUpdate::ConnectionChanged {
+                                    device_id: config_id,
+                                    status: ConnectionStatus::Connected,
+                                    error: None,
+                                });
+
+                                egui_ctx.request_repaint();
+                            }
+                        });
+                    });
+                }
 
                 (DeviceHandle::Mqtt { device, broker_key }, state)
             }
