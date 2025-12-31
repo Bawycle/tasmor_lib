@@ -5,6 +5,8 @@
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-blue.svg)](https://opensource.org/licenses/MPL-2.0)
 [![Rust](https://img.shields.io/badge/rust-1.92%2B-orange.svg)](https://www.rust-lang.org)
 
+> **Primary repository**: [Codeberg](https://codeberg.org/Bawycle/tasmor_lib) — Please submit issues and pull requests there.
+
 A modern, type-safe Rust library for controlling [Tasmota](https://tasmota.github.io) IoT devices via MQTT and HTTP protocols.
 
 > **Early Development**: This project is in active development (v0.x.x). The API may change between versions. Not recommended for production use yet.
@@ -40,7 +42,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-tasmor_lib = "0.2"
+tasmor_lib = "0.3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -50,10 +52,10 @@ Both HTTP and MQTT protocols are enabled by default. To reduce compile time and 
 
 ```toml
 # HTTP only (no MQTT dependencies)
-tasmor_lib = { version = "0.2", default-features = false, features = ["http"] }
+tasmor_lib = { version = "0.3", default-features = false, features = ["http"] }
 
 # MQTT only (no HTTP dependencies)
-tasmor_lib = { version = "0.2", default-features = false, features = ["mqtt"] }
+tasmor_lib = { version = "0.3", default-features = false, features = ["mqtt"] }
 ```
 
 ## Quick Start
@@ -330,6 +332,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Subscribe to all state changes
     device.on_state_changed(|change| {
         println!("State change: {:?}", change);
+    });
+
+    // Handle connection events
+    device.on_disconnected(|| {
+        println!("Connection lost!");
+    });
+
+    device.on_reconnected(|| {
+        println!("Reconnected! Consider calling query_state() to refresh");
     });
 
     // Keep the application running to receive callbacks

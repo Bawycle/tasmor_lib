@@ -1304,6 +1304,13 @@ impl Subscribable for Device<SharedMqttClient> {
         self.callbacks.on_disconnected(callback)
     }
 
+    fn on_reconnected<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.callbacks.on_reconnected(callback)
+    }
+
     fn on_state_changed<F>(&self, callback: F) -> SubscriptionId
     where
         F: Fn(&StateChange) + Send + Sync + 'static,

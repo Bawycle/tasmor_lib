@@ -137,6 +137,35 @@ impl TopicRouter {
             .filter(|weak| weak.strong_count() > 0)
             .count()
     }
+
+    /// Dispatches the reconnected event to all registered devices.
+    ///
+    /// This is called after the MQTT broker reconnects and topics have been
+    /// resubscribed. It notifies all devices that the connection has been
+    /// restored.
+    pub fn dispatch_reconnected_all(&self) {
+        let subscribers = self.subscribers.read();
+        for (topic, weak) in subscribers.iter() {
+            if let Some(callbacks) = weak.upgrade() {
+                tracing::debug!(device = %topic, "Dispatching reconnected event");
+                callbacks.dispatch_reconnected();
+            }
+        }
+    }
+
+    /// Dispatches the disconnected event to all registered devices.
+    ///
+    /// This is called when the MQTT broker connection is lost. It notifies
+    /// all devices that they are now disconnected.
+    pub fn dispatch_disconnected_all(&self) {
+        let subscribers = self.subscribers.read();
+        for (topic, weak) in subscribers.iter() {
+            if let Some(callbacks) = weak.upgrade() {
+                tracing::debug!(device = %topic, "Dispatching disconnected event");
+                callbacks.dispatch_disconnected();
+            }
+        }
+    }
 }
 
 /// Dispatches a parsed message to the device's callbacks.
