@@ -5,6 +5,8 @@
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-blue.svg)](https://opensource.org/licenses/MPL-2.0)
 [![Rust](https://img.shields.io/badge/rust-1.92%2B-orange.svg)](https://www.rust-lang.org)
 
+> **Primary repository**: [Codeberg](https://codeberg.org/Bawycle/tasmor_lib) — Please submit issues and pull requests there.
+
 A modern, type-safe Rust library for controlling [Tasmota](https://tasmota.github.io) IoT devices via MQTT and HTTP protocols.
 
 > **Early Development**: This project is in active development (v0.x.x). The API may change between versions. Not recommended for production use yet.
