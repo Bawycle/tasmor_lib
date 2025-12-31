@@ -334,6 +334,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("State change: {:?}", change);
     });
 
+    // Handle connection events
+    device.on_disconnected(|| {
+        println!("Connection lost!");
+    });
+
+    device.on_reconnected(|| {
+        println!("Reconnected! Consider calling query_state() to refresh");
+    });
+
     // Keep the application running to receive callbacks
     tokio::signal::ctrl_c().await?;
 

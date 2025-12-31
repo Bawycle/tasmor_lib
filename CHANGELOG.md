@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **MQTT reconnection handling** - Automatic topic resubscription when broker connection is restored. New `on_reconnected()` callback notifies applications when reconnection occurs
+
+### Fixed
+
+- **MQTT connection resilience** - Event loop no longer terminates on connection errors, allowing rumqttc to automatically reconnect
+
 ## [0.2.1] - 2025-12-29
 
 ### Fixed

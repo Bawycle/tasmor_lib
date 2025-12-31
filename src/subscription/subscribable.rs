@@ -121,6 +121,20 @@ pub trait Subscribable {
     where
         F: Fn() + Send + Sync + 'static;
 
+    /// Subscribes to reconnection events.
+    ///
+    /// The callback is called when the MQTT broker connection is restored
+    /// after a disconnection. Topics are automatically resubscribed before
+    /// this callback is triggered.
+    ///
+    /// Unlike `on_connected`, this callback does not receive a device state
+    /// since the library does not retain state. The application should call
+    /// `query_state()` after receiving this callback to refresh the device
+    /// state if needed.
+    fn on_reconnected<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn() + Send + Sync + 'static;
+
     /// Subscribes to all state changes.
     ///
     /// This is useful for logging or when you need to react to any change.

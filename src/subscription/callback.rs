@@ -96,6 +96,9 @@ type ConnectedCallback = Arc<dyn Fn(&DeviceState) + Send + Sync>;
 /// Type alias for disconnected callbacks.
 type DisconnectedCallback = Arc<dyn Fn() + Send + Sync>;
 
+/// Type alias for reconnected callbacks (called after broker reconnection).
+type ReconnectedCallback = Arc<dyn Fn() + Send + Sync>;
+
 /// Type alias for generic state change callbacks.
 type StateChangedCallback = Arc<dyn Fn(&StateChange) + Send + Sync>;
 
@@ -143,6 +146,8 @@ pub struct CallbackRegistry {
     connected_callbacks: RwLock<HashMap<SubscriptionId, ConnectedCallback>>,
     /// Disconnected callbacks (called when device becomes unavailable).
     disconnected_callbacks: RwLock<HashMap<SubscriptionId, DisconnectedCallback>>,
+    /// Reconnected callbacks (called when broker connection is restored).
+    reconnected_callbacks: RwLock<HashMap<SubscriptionId, ReconnectedCallback>>,
     /// Generic state change callbacks (receives all changes).
     state_changed_callbacks: RwLock<HashMap<SubscriptionId, StateChangedCallback>>,
 }
@@ -161,6 +166,7 @@ impl CallbackRegistry {
             energy_callbacks: RwLock::new(HashMap::new()),
             connected_callbacks: RwLock::new(HashMap::new()),
             disconnected_callbacks: RwLock::new(HashMap::new()),
+            reconnected_callbacks: RwLock::new(HashMap::new()),
             state_changed_callbacks: RwLock::new(HashMap::new()),
         }
     }
@@ -266,6 +272,49 @@ impl CallbackRegistry {
         id
     }
 
+    /// Registers a callback for when the broker connection is restored.
+    ///
+    /// This callback is triggered after the MQTT broker reconnects and topics
+    /// are automatically resubscribed. Unlike `on_connected`, this callback
+    /// does not receive a device state since the library does not retain state.
+    ///
+    /// After receiving this callback, the application should call `query_state()`
+    /// to refresh the device state if needed, as the state may have changed
+    /// during the disconnection period.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use tasmor_lib::MqttBroker;
+    /// use tasmor_lib::subscription::Subscribable;
+    ///
+    /// # async fn example() -> tasmor_lib::Result<()> {
+    /// let broker = MqttBroker::builder()
+    ///     .host("192.168.1.50")
+    ///     .build()
+    ///     .await?;
+    ///
+    /// let (device, _) = broker.device("tasmota_device")
+    ///     .build()
+    ///     .await?;
+    ///
+    /// device.on_reconnected(|| {
+    ///     println!("Broker reconnected! Consider calling query_state()");
+    /// });
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn on_reconnected<F>(&self, callback: F) -> SubscriptionId
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let id = self.next_id();
+        self.reconnected_callbacks
+            .write()
+            .insert(id, Arc::new(callback));
+        id
+    }
+
     /// Registers a callback for all state changes.
     ///
     /// This is useful for logging or debugging, as it receives every change.
@@ -313,6 +362,9 @@ impl CallbackRegistry {
         if self.disconnected_callbacks.write().remove(&id).is_some() {
             return true;
         }
+        if self.reconnected_callbacks.write().remove(&id).is_some() {
+            return true;
+        }
         if self.state_changed_callbacks.write().remove(&id).is_some() {
             return true;
         }
@@ -329,6 +381,7 @@ impl CallbackRegistry {
         self.energy_callbacks.write().clear();
         self.connected_callbacks.write().clear();
         self.disconnected_callbacks.write().clear();
+        self.reconnected_callbacks.write().clear();
         self.state_changed_callbacks.write().clear();
     }
 
@@ -432,6 +485,16 @@ impl CallbackRegistry {
         }
     }
 
+    /// Dispatches the reconnected event.
+    ///
+    /// Called when the MQTT broker connection is restored after a disconnection.
+    pub fn dispatch_reconnected(&self) {
+        let callbacks = self.reconnected_callbacks.read();
+        for callback in callbacks.values() {
+            callback();
+        }
+    }
+
     // =========================================================================
     // Statistics
     // =========================================================================
@@ -447,6 +510,7 @@ impl CallbackRegistry {
             + self.energy_callbacks.read().len()
             + self.connected_callbacks.read().len()
             + self.disconnected_callbacks.read().len()
+            + self.reconnected_callbacks.read().len()
             + self.state_changed_callbacks.read().len()
     }
 
@@ -661,6 +725,38 @@ mod tests {
 
         registry.dispatch_disconnected();
         assert_eq!(was_called.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn registry_reconnected_callback() {
+        let registry = CallbackRegistry::new();
+        let was_called = Arc::new(AtomicU32::new(0));
+        let was_called_clone = was_called.clone();
+
+        registry.on_reconnected(move || {
+            was_called_clone.fetch_add(1, Ordering::SeqCst);
+        });
+
+        registry.dispatch_reconnected();
+        assert_eq!(was_called.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn registry_reconnected_multiple_callbacks() {
+        let registry = CallbackRegistry::new();
+        let counter = Arc::new(AtomicU32::new(0));
+        let c1 = counter.clone();
+        let c2 = counter.clone();
+
+        registry.on_reconnected(move || {
+            c1.fetch_add(1, Ordering::SeqCst);
+        });
+        registry.on_reconnected(move || {
+            c2.fetch_add(1, Ordering::SeqCst);
+        });
+
+        registry.dispatch_reconnected();
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
     }
 
     #[test]
