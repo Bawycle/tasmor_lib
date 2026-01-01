@@ -119,6 +119,28 @@ use crate::types::{
 /// assert_send_sync::<Device<HttpClient>>();
 /// ```
 ///
+/// # Cloning
+///
+/// `Device` implements [`Clone`]. Cloning a device creates a new handle to the
+/// **same underlying connection and callbacks**. This is useful for sharing a
+/// device across multiple async tasks:
+///
+/// ```
+/// use tasmor_lib::Device;
+/// use tasmor_lib::protocol::HttpClient;
+///
+/// fn assert_clone<T: Clone>() {}
+/// assert_clone::<Device<HttpClient>>();
+/// ```
+///
+/// All clones share:
+/// - The same protocol connection (via `Arc`)
+/// - The same callback registry (via `Arc`)
+/// - The same device capabilities
+///
+/// This follows the pattern used by other Rust networking libraries like
+/// `reqwest::Client` and `rumqttc::AsyncClient`.
+///
 /// # Creating a Device
 ///
 /// Use [`Device::http`] for HTTP devices or [`crate::MqttBroker::device`] for MQTT devices:
@@ -140,7 +162,7 @@ use crate::types::{
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Device<P: Protocol> {
     protocol: Arc<P>,
     capabilities: Capabilities,
@@ -1352,5 +1374,35 @@ mod tests {
         // This test verifies the Device struct can hold state
         let state = DeviceState::new();
         assert!(state.power(1).is_none());
+    }
+
+    #[test]
+    fn device_is_clone() {
+        fn assert_clone<T: Clone>() {}
+        assert_clone::<Device<HttpClient>>();
+    }
+
+    #[test]
+    fn device_clone_shares_callbacks() {
+        let client = HttpClient::new("192.168.1.100").unwrap();
+        let device = Device::new(client, Capabilities::basic());
+
+        // Clone the device
+        let device_clone = device.clone();
+
+        // Both devices should share the same callbacks (Arc)
+        assert!(Arc::ptr_eq(&device.callbacks, &device_clone.callbacks));
+    }
+
+    #[test]
+    fn device_clone_shares_protocol() {
+        let client = HttpClient::new("192.168.1.100").unwrap();
+        let device = Device::new(client, Capabilities::basic());
+
+        // Clone the device
+        let device_clone = device.clone();
+
+        // Both devices should share the same protocol (Arc)
+        assert!(Arc::ptr_eq(&device.protocol, &device_clone.protocol));
     }
 }

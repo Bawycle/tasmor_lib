@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Device is now Clone** - `Device<P>` implements `Clone`, enabling easy sharing across async tasks. Clones share the same connection and callbacks (via `Arc`), following the pattern of `reqwest::Client` and `rumqttc::AsyncClient`
+
 ## [0.3.0] - 2025-12-31
 
 ### Added
