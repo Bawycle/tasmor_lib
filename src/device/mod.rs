@@ -121,16 +121,17 @@ use crate::types::{
 ///
 /// # Cloning
 ///
-/// `Device` implements [`Clone`]. Cloning a device creates a new handle to the
-/// **same underlying connection and callbacks**. This is useful for sharing a
-/// device across multiple async tasks:
+/// `Device<P>` implements [`Clone`] for any protocol `P`. Cloning a device
+/// creates a new handle to the **same underlying connection and callbacks**.
+/// This is useful for sharing a device across multiple async tasks:
 ///
 /// ```
 /// use tasmor_lib::Device;
-/// use tasmor_lib::protocol::HttpClient;
+/// use tasmor_lib::protocol::{HttpClient, SharedMqttClient};
 ///
 /// fn assert_clone<T: Clone>() {}
 /// assert_clone::<Device<HttpClient>>();
+/// assert_clone::<Device<SharedMqttClient>>();
 /// ```
 ///
 /// All clones share:
@@ -162,11 +163,31 @@ use crate::types::{
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone)]
+// Note: Clone and Debug are implemented manually below to avoid requiring
+// P: Clone and P: Debug bounds. Since all fields use Arc<P>, we only need
+// P: Protocol. This follows the pattern used by reqwest::Client, rumqttc::AsyncClient.
 pub struct Device<P: Protocol> {
     protocol: Arc<P>,
     capabilities: Capabilities,
     callbacks: Arc<CallbackRegistry>,
+}
+
+impl<P: Protocol> Clone for Device<P> {
+    fn clone(&self) -> Self {
+        Self {
+            protocol: Arc::clone(&self.protocol),
+            capabilities: self.capabilities.clone(),
+            callbacks: Arc::clone(&self.callbacks),
+        }
+    }
+}
+
+impl<P: Protocol> std::fmt::Debug for Device<P> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Device")
+            .field("capabilities", &self.capabilities)
+            .finish_non_exhaustive()
+    }
 }
 
 impl<P: Protocol> Device<P> {
@@ -1541,8 +1562,33 @@ mod tests {
 
     #[test]
     fn device_is_clone() {
+        // Device<P> implements Clone without requiring P: Clone
+        // This is because protocol is wrapped in Arc<P>
         fn assert_clone<T: Clone>() {}
         assert_clone::<Device<HttpClient>>();
+    }
+
+    #[test]
+    fn device_is_debug() {
+        // Device<P> implements Debug without requiring P: Debug
+        fn assert_debug<T: std::fmt::Debug>() {}
+        assert_debug::<Device<HttpClient>>();
+    }
+
+    #[cfg(feature = "mqtt")]
+    #[test]
+    fn device_shared_mqtt_client_is_clone_and_debug() {
+        // This test verifies that Device<SharedMqttClient> implements Clone and Debug
+        // even though SharedMqttClient does NOT implement Clone or Debug.
+        // This works because we manually implement Clone and Debug for Device<P>
+        // without requiring P: Clone or P: Debug bounds.
+        use crate::protocol::SharedMqttClient;
+
+        fn assert_clone<T: Clone>() {}
+        fn assert_debug<T: std::fmt::Debug>() {}
+
+        assert_clone::<Device<SharedMqttClient>>();
+        assert_debug::<Device<SharedMqttClient>>();
     }
 
     #[test]
