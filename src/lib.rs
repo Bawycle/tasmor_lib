@@ -258,7 +258,7 @@ pub mod types;
 pub use capabilities::{Capabilities, CapabilitiesBuilder};
 pub use device::Device;
 pub use error::{DeviceError, Error, ParseError, ProtocolError, Result, ValueError};
-pub use state::{DeviceState, StateChange};
+pub use state::{DeviceState, StateChange, SystemInfo};
 
 // Protocol configuration
 #[cfg(feature = "http")]

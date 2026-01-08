@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Device is now Clone** - `Device<P>` implements `Clone`, enabling easy sharing across async tasks. Clones share the same connection and callbacks (via `Arc`), following the pattern of `reqwest::Client` and `rumqttc::AsyncClient`
+- **System info in DeviceState** - New `SystemInfo` struct provides access to device diagnostics (uptime, Wi-Fi RSSI, heap memory). Available via `DeviceState::system_info()` and convenience method `DeviceState::uptime_seconds()`. System info is populated from `Status 0` during `query_state()` (heap, rssi) and from MQTT telemetry via `TelemetryState::to_system_info()` (uptime, rssi)
 
 ## [0.3.0] - 2025-12-31
 

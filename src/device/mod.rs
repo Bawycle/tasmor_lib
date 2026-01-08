@@ -985,6 +985,15 @@ impl<P: Protocol> Device<P> {
     /// `DeviceState` with the current values. It's called automatically by
     /// the device builders to provide initial state.
     ///
+    /// # System Info
+    ///
+    /// The returned state includes system info (`wifi_rssi`, `heap`) from the
+    /// Status response. However, `uptime_sec` is **not available** via HTTP
+    /// Status commands - it's only available in MQTT telemetry messages.
+    /// For MQTT devices, use [`TelemetryState::to_system_info()`] or
+    /// [`TelemetryMessage::to_system_info()`] to get complete system info
+    /// including uptime from periodic telemetry.
+    ///
     /// # Errors
     ///
     /// Returns error if any of the queries fail.
@@ -1104,6 +1113,33 @@ impl<P: Protocol> Device<P> {
                 }
                 Err(e) => tracing::debug!(error = %e, "Failed to get fade speed"),
             }
+        }
+
+        // Query system information via Status 0
+        match self.status().await {
+            Ok(status_response) => {
+                let mut sys_info = crate::state::SystemInfo::new();
+
+                // Get heap from StatusMEM
+                if let Some(mem) = &status_response.memory {
+                    sys_info = sys_info.with_heap(mem.heap);
+                    tracing::debug!(heap = mem.heap, "Got heap memory");
+                }
+
+                // Get WiFi RSSI from StatusNET
+                if let Some(net) = &status_response.network {
+                    sys_info = sys_info.with_wifi_rssi(net.rssi);
+                    tracing::debug!(rssi = net.rssi, "Got WiFi RSSI");
+                }
+
+                // Note: UptimeSec is not available in Status 0, only uptime string
+                // in StatusPRM. For accurate uptime, rely on telemetry.
+
+                if !sys_info.is_empty() {
+                    state.set_system_info(sys_info);
+                }
+            }
+            Err(e) => tracing::debug!(error = %e, "Failed to get status for system info"),
         }
 
         Ok(state)

@@ -11,6 +11,7 @@
 //! - **Power state** for up to 8 relays (POWER1-POWER8)
 //! - **Light settings**: dimmer level, HSB color, color temperature
 //! - **Energy readings**: voltage, current, power consumption, energy totals
+//! - **System info**: uptime, Wi-Fi signal strength, free memory (read-only)
 //!
 //! # Design Philosophy
 //!
@@ -50,6 +51,118 @@ use crate::types::{
 };
 
 use super::StateChange;
+
+/// System information from device telemetry.
+///
+/// Contains read-only diagnostic data like uptime and network status.
+/// These values change frequently and do **not** trigger callbacks when updated.
+///
+/// # Data Sources
+///
+/// - **MQTT telemetry**: `uptime_sec` and `wifi_rssi` from `tele/<topic>/STATE`
+/// - **HTTP status**: All fields from `Status 0` command
+///
+/// # Examples
+///
+/// ```
+/// use tasmor_lib::state::SystemInfo;
+///
+/// let info = SystemInfo::new()
+///     .with_uptime_sec(172800)
+///     .with_wifi_rssi(-60)
+///     .with_heap(25000);
+///
+/// assert_eq!(info.uptime_sec(), Some(172800));
+/// assert_eq!(info.uptime_seconds(), Some(172800)); // Alias
+/// ```
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SystemInfo {
+    /// Device uptime in seconds.
+    uptime_sec: Option<u64>,
+    /// Wi-Fi signal strength in dBm (typically -100 to 0, where 0 is best).
+    wifi_rssi: Option<i8>,
+    /// Free heap memory in kilobytes.
+    heap: Option<u32>,
+}
+
+impl SystemInfo {
+    /// Creates a new empty system info.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sets the uptime in seconds.
+    #[must_use]
+    pub fn with_uptime_sec(mut self, seconds: u64) -> Self {
+        self.uptime_sec = Some(seconds);
+        self
+    }
+
+    /// Sets the Wi-Fi RSSI in dBm.
+    #[must_use]
+    pub fn with_wifi_rssi(mut self, rssi: i8) -> Self {
+        self.wifi_rssi = Some(rssi);
+        self
+    }
+
+    /// Sets the free heap memory in kilobytes.
+    #[must_use]
+    pub fn with_heap(mut self, heap_kb: u32) -> Self {
+        self.heap = Some(heap_kb);
+        self
+    }
+
+    /// Returns the device uptime in seconds.
+    #[must_use]
+    pub fn uptime_sec(&self) -> Option<u64> {
+        self.uptime_sec
+    }
+
+    /// Returns the device uptime in seconds.
+    ///
+    /// This is an alias for [`uptime_sec()`](Self::uptime_sec) for API consistency
+    /// with [`TelemetryState::uptime_seconds()`](crate::telemetry::TelemetryState::uptime_seconds).
+    #[must_use]
+    pub fn uptime_seconds(&self) -> Option<u64> {
+        self.uptime_sec
+    }
+
+    /// Returns the Wi-Fi signal strength in dBm.
+    ///
+    /// Typical values range from -100 (weak) to 0 (strongest).
+    /// A signal of -50 dBm or better is considered excellent.
+    #[must_use]
+    pub fn wifi_rssi(&self) -> Option<i8> {
+        self.wifi_rssi
+    }
+
+    /// Returns the free heap memory in kilobytes.
+    #[must_use]
+    pub fn heap(&self) -> Option<u32> {
+        self.heap
+    }
+
+    /// Updates fields from another `SystemInfo`, preserving existing values
+    /// when the new value is `None`.
+    pub fn merge(&mut self, other: &SystemInfo) {
+        if other.uptime_sec.is_some() {
+            self.uptime_sec = other.uptime_sec;
+        }
+        if other.wifi_rssi.is_some() {
+            self.wifi_rssi = other.wifi_rssi;
+        }
+        if other.heap.is_some() {
+            self.heap = other.heap;
+        }
+    }
+
+    /// Returns `true` if all fields are `None`.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.uptime_sec.is_none() && self.wifi_rssi.is_none() && self.heap.is_none()
+    }
+}
 
 /// Tracked state of a Tasmota device.
 ///
@@ -110,6 +223,10 @@ pub struct DeviceState {
     energy_total: Option<f32>,
     /// Timestamp when total energy counting started.
     total_start_time: Option<TasmotaDateTime>,
+    /// System diagnostic information (uptime, Wi-Fi, memory).
+    ///
+    /// This is read-only data that does **not** trigger callbacks.
+    system_info: Option<SystemInfo>,
 }
 
 impl DeviceState {
@@ -421,6 +538,57 @@ impl DeviceState {
     /// Sets the timestamp when total energy counting started.
     pub fn set_total_start_time(&mut self, time: TasmotaDateTime) {
         self.total_start_time = Some(time);
+    }
+
+    // ========== System Info ==========
+
+    /// Gets the system diagnostic information.
+    ///
+    /// System info includes uptime, Wi-Fi signal strength, and free memory.
+    /// This data does **not** trigger callbacks when updated.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tasmor_lib::state::{DeviceState, SystemInfo};
+    ///
+    /// let mut state = DeviceState::new();
+    /// state.set_system_info(SystemInfo::new().with_uptime_sec(172800));
+    ///
+    /// if let Some(info) = state.system_info() {
+    ///     println!("Uptime: {} seconds", info.uptime_seconds().unwrap_or(0));
+    /// }
+    /// ```
+    #[must_use]
+    pub fn system_info(&self) -> Option<&SystemInfo> {
+        self.system_info.as_ref()
+    }
+
+    /// Sets the system diagnostic information.
+    pub fn set_system_info(&mut self, info: SystemInfo) {
+        self.system_info = Some(info);
+    }
+
+    /// Updates system information, merging with existing data.
+    ///
+    /// This preserves existing values when the new `SystemInfo` has `None` fields.
+    pub fn update_system_info(&mut self, info: &SystemInfo) {
+        if let Some(existing) = &mut self.system_info {
+            existing.merge(info);
+        } else {
+            self.system_info = Some(info.clone());
+        }
+    }
+
+    /// Returns the device uptime in seconds.
+    ///
+    /// This is a convenience method equivalent to
+    /// `state.system_info().and_then(|i| i.uptime_seconds())`.
+    #[must_use]
+    pub fn uptime_seconds(&self) -> Option<u64> {
+        self.system_info
+            .as_ref()
+            .and_then(SystemInfo::uptime_seconds)
     }
 
     // ========== State Changes ==========
@@ -823,5 +991,133 @@ mod tests {
         let change = StateChange::FadeSpeed(speed);
         assert!(state.apply(&change));
         assert_eq!(state.fade_speed(), Some(speed));
+    }
+
+    // ========== SystemInfo Tests ==========
+
+    #[test]
+    fn system_info_new_is_empty() {
+        let info = SystemInfo::new();
+        assert!(info.is_empty());
+        assert!(info.uptime_sec().is_none());
+        assert!(info.uptime_seconds().is_none());
+        assert!(info.wifi_rssi().is_none());
+        assert!(info.heap().is_none());
+    }
+
+    #[test]
+    fn system_info_builder_pattern() {
+        let info = SystemInfo::new()
+            .with_uptime_sec(172800)
+            .with_wifi_rssi(-55)
+            .with_heap(25000);
+
+        assert!(!info.is_empty());
+        assert_eq!(info.uptime_sec(), Some(172800));
+        assert_eq!(info.uptime_seconds(), Some(172800));
+        assert_eq!(info.wifi_rssi(), Some(-55));
+        assert_eq!(info.heap(), Some(25000));
+    }
+
+    #[test]
+    fn system_info_merge_preserves_existing() {
+        let mut info = SystemInfo::new().with_uptime_sec(100).with_wifi_rssi(-50);
+
+        // Merge with partial update (only heap)
+        let update = SystemInfo::new().with_heap(30000);
+        info.merge(&update);
+
+        // Original values preserved, new value added
+        assert_eq!(info.uptime_sec(), Some(100));
+        assert_eq!(info.wifi_rssi(), Some(-50));
+        assert_eq!(info.heap(), Some(30000));
+    }
+
+    #[test]
+    fn system_info_merge_updates_values() {
+        let mut info = SystemInfo::new().with_uptime_sec(100).with_wifi_rssi(-50);
+
+        // Merge with overlapping update
+        let update = SystemInfo::new().with_uptime_sec(200).with_heap(30000);
+        info.merge(&update);
+
+        // Updated values
+        assert_eq!(info.uptime_sec(), Some(200));
+        assert_eq!(info.wifi_rssi(), Some(-50)); // Preserved
+        assert_eq!(info.heap(), Some(30000));
+    }
+
+    #[test]
+    fn device_state_system_info_getters_setters() {
+        let mut state = DeviceState::new();
+
+        // Initially None
+        assert!(state.system_info().is_none());
+        assert!(state.uptime_seconds().is_none());
+
+        // Set system info
+        let info = SystemInfo::new().with_uptime_sec(172800);
+        state.set_system_info(info);
+
+        assert!(state.system_info().is_some());
+        assert_eq!(state.uptime_seconds(), Some(172800));
+    }
+
+    #[test]
+    fn device_state_update_system_info() {
+        let mut state = DeviceState::new();
+
+        // Update on empty state
+        let info1 = SystemInfo::new().with_uptime_sec(100);
+        state.update_system_info(&info1);
+        assert_eq!(state.uptime_seconds(), Some(100));
+
+        // Update with merge
+        let info2 = SystemInfo::new().with_wifi_rssi(-55);
+        state.update_system_info(&info2);
+
+        let sys_info = state.system_info().unwrap();
+        assert_eq!(sys_info.uptime_sec(), Some(100)); // Preserved
+        assert_eq!(sys_info.wifi_rssi(), Some(-55)); // Added
+    }
+
+    #[test]
+    fn device_state_clear_clears_system_info() {
+        let mut state = DeviceState::new();
+        state.set_system_info(SystemInfo::new().with_uptime_sec(172800));
+
+        state.clear();
+
+        assert!(state.system_info().is_none());
+    }
+
+    #[test]
+    fn system_info_serialization() {
+        let info = SystemInfo::new()
+            .with_uptime_sec(172800)
+            .with_wifi_rssi(-55)
+            .with_heap(25000);
+
+        let json = serde_json::to_string(&info).unwrap();
+        let deserialized: SystemInfo = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(info, deserialized);
+    }
+
+    #[test]
+    fn device_state_with_system_info_serialization() {
+        let mut state = DeviceState::new();
+        state.set_power(1, PowerState::On);
+        state.set_system_info(
+            SystemInfo::new()
+                .with_uptime_sec(172800)
+                .with_wifi_rssi(-55),
+        );
+
+        let json = serde_json::to_string(&state).unwrap();
+        let deserialized: DeviceState = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(state, deserialized);
+        assert_eq!(deserialized.uptime_seconds(), Some(172800));
     }
 }
