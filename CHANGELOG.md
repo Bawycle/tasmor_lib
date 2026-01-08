@@ -5,7 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] - 2026-01-08
+
+### Added
+
+- **Device is now Clone** - `Device<P>` implements `Clone`, enabling easy sharing across async tasks. Clones share the same connection and callbacks (via `Arc`), following the pattern of `reqwest::Client` and `rumqttc::AsyncClient`
+- **System info in DeviceState** - New `SystemInfo` struct provides access to device diagnostics (uptime, Wi-Fi RSSI, heap memory). Available via `DeviceState::system_info()` and convenience method `DeviceState::uptime_seconds()`. System info is populated from `Status 0` during `query_state()` (heap, rssi) and from MQTT telemetry via `TelemetryState::to_system_info()` (uptime, rssi)
+- **MQTT command timeout** - New `MqttBrokerBuilder::command_timeout()` configures the timeout for waiting on command responses (default: 5 seconds). Useful for slow-responding devices or routines with delays. Consistent with HTTP's `HttpConfig::with_timeout()`
+
+### Changed
+
+- **BREAKING: Renamed callback** - `on_energy_updated()` renamed to `on_energy_changed()` for API consistency with other callbacks (`on_power_changed`, `on_dimmer_changed`, etc.)
+- **BREAKING: Removed `uptime_sec()`** - Use `uptime_seconds()` instead for consistency with `TelemetryState`
+
+### Improved
+
+- **Enhanced documentation** - Added `# Examples` sections to main Device methods (`power_on`, `power_off`, `power_toggle`, `set_dimmer`, `energy`)
+- **Better error documentation** - Enriched `# Errors` sections with specific error conditions and types
+- **Type cross-references** - Type modules now link to relevant Device methods (e.g., `Dimmer` → `set_dimmer()`)
+- **API pattern documentation** - Documented `query_state()` vs `get_*` methods usage pattern
 
 ## [0.3.0] - 2025-12-31
 
@@ -114,7 +132,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - README with usage examples
   - CONTRIBUTING.md with development guidelines
 
-[Unreleased]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.3.0...HEAD
+[Unreleased]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.4.0...HEAD
+[0.4.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.3.0...v0.4.0
 [0.3.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.2.1...v0.3.0
 [0.2.1]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.2.0...v0.2.1
 [0.2.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.1.0...v0.2.0

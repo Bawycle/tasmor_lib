@@ -7,6 +7,12 @@
 //!
 //! This module provides a type-safe representation of dimmer values,
 //! ensuring values are always within the valid range of 0-100%.
+//!
+//! # Device Methods
+//!
+//! Use [`Dimmer`] with these [`Device`](crate::Device) methods:
+//! - [`set_dimmer()`](crate::Device::set_dimmer) - Set the brightness level
+//! - [`get_dimmer()`](crate::Device::get_dimmer) - Query current brightness
 
 use std::fmt;
 

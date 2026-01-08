@@ -7,6 +7,11 @@
 //!
 //! This module provides an RGB color representation that can be converted
 //! to/from HSB format for use with Tasmota devices.
+//!
+//! # Device Methods
+//!
+//! Use [`RgbColor`] with this [`Device`](crate::Device) method:
+//! - [`set_rgb_color()`](crate::Device::set_rgb_color) - Set color using RGB values
 
 use std::fmt;
 use std::str::FromStr;

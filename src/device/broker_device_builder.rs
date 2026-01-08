@@ -167,6 +167,7 @@ impl<'a> BrokerDeviceBuilder<'a> {
             response_rx,
             router,
             self.broker.clone(),
+            self.broker.command_timeout(),
         ))
     }
 }

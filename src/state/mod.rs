@@ -27,5 +27,5 @@
 mod device_state;
 mod state_change;
 
-pub use device_state::DeviceState;
+pub use device_state::{DeviceState, SystemInfo};
 pub use state_change::StateChange;

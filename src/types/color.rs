@@ -7,6 +7,16 @@
 //!
 //! This module provides types for color temperature (CCT) and HSB color
 //! control on Tasmota light devices.
+//!
+//! # Device Methods
+//!
+//! Use [`ColorTemperature`] with these [`Device`](crate::Device) methods:
+//! - [`set_color_temperature()`](crate::Device::set_color_temperature) - Set white color temperature
+//! - [`get_color_temperature()`](crate::Device::get_color_temperature) - Query current color temperature
+//!
+//! Use [`HsbColor`] with these [`Device`](crate::Device) methods:
+//! - [`set_hsb_color()`](crate::Device::set_hsb_color) - Set color using HSB values
+//! - [`get_hsb_color()`](crate::Device::get_hsb_color) - Query current HSB color
 
 use std::fmt;
 

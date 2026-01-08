@@ -366,6 +366,45 @@ impl TelemetryState {
             changes
         }
     }
+
+    /// Extracts system information from telemetry.
+    ///
+    /// This creates a [`SystemInfo`] containing the uptime and Wi-Fi signal
+    /// strength from the telemetry message. The heap memory is not available
+    /// in STATE telemetry (only in STATUS responses).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tasmor_lib::telemetry::TelemetryState;
+    ///
+    /// let json = r#"{"UptimeSec":172800,"Wifi":{"Signal":-55}}"#;
+    /// let state: TelemetryState = serde_json::from_str(json).unwrap();
+    ///
+    /// let info = state.to_system_info();
+    /// assert_eq!(info.uptime_seconds(), Some(172800));
+    /// assert_eq!(info.wifi_rssi(), Some(-55));
+    /// ```
+    #[must_use]
+    pub fn to_system_info(&self) -> crate::state::SystemInfo {
+        let mut info = crate::state::SystemInfo::new();
+
+        if let Some(uptime) = self.uptime_sec {
+            info = info.with_uptime_sec(uptime);
+        }
+
+        // Use signal (dBm) rather than rssi (percentage) as it's more useful
+        if let Some(wifi) = &self.wifi
+            && let Some(signal) = wifi.signal
+        {
+            // Saturate i32 to i8 range - truncation is safe after clamping
+            #[allow(clippy::cast_possible_truncation)]
+            let rssi = signal.clamp(i32::from(i8::MIN), i32::from(i8::MAX)) as i8;
+            info = info.with_wifi_rssi(rssi);
+        }
+
+        info
+    }
 }
 
 /// Parses a STATE telemetry JSON payload.
@@ -615,5 +654,66 @@ mod tests {
         } else {
             panic!("Expected batch with multiple changes");
         }
+    }
+
+    // ========== to_system_info() Tests ==========
+
+    #[test]
+    fn to_system_info_with_uptime() {
+        let json = r#"{"UptimeSec":172800}"#;
+        let state: TelemetryState = serde_json::from_str(json).unwrap();
+
+        let info = state.to_system_info();
+        assert_eq!(info.uptime_seconds(), Some(172800));
+        assert!(info.wifi_rssi().is_none());
+        assert!(info.heap().is_none());
+    }
+
+    #[test]
+    fn to_system_info_with_wifi_signal() {
+        let json = r#"{"Wifi":{"Signal":-55}}"#;
+        let state: TelemetryState = serde_json::from_str(json).unwrap();
+
+        let info = state.to_system_info();
+        assert!(info.uptime_seconds().is_none());
+        assert_eq!(info.wifi_rssi(), Some(-55));
+    }
+
+    #[test]
+    fn to_system_info_with_all_fields() {
+        let json = r#"{"UptimeSec":172800,"Wifi":{"Signal":-60,"RSSI":80}}"#;
+        let state: TelemetryState = serde_json::from_str(json).unwrap();
+
+        let info = state.to_system_info();
+        assert_eq!(info.uptime_seconds(), Some(172800));
+        assert_eq!(info.wifi_rssi(), Some(-60)); // Uses Signal (dBm), not RSSI (%)
+    }
+
+    #[test]
+    fn to_system_info_empty_when_no_system_data() {
+        let json = r#"{"POWER":"ON","Dimmer":75}"#;
+        let state: TelemetryState = serde_json::from_str(json).unwrap();
+
+        let info = state.to_system_info();
+        assert!(info.is_empty());
+    }
+
+    #[test]
+    fn to_system_info_from_real_tasmota_payload() {
+        let json = r#"{
+            "Time":"2025-12-24T14:24:03",
+            "Uptime":"1T23:46:58",
+            "UptimeSec":172018,
+            "Heap":25,
+            "POWER":"OFF",
+            "Wifi":{"AP":1,"SSId":"test","Signal":-52,"Channel":11}
+        }"#;
+        let state: TelemetryState = serde_json::from_str(json).unwrap();
+
+        let info = state.to_system_info();
+        assert_eq!(info.uptime_seconds(), Some(172018));
+        assert_eq!(info.wifi_rssi(), Some(-52));
+        // Note: Heap is not extracted from TelemetryState (only available via Status)
+        assert!(info.heap().is_none());
     }
 }

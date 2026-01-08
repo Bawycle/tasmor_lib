@@ -31,10 +31,10 @@
 //!
 //! ```toml
 //! # HTTP only
-//! tasmor_lib = { version = "0.3", default-features = false, features = ["http"] }
+//! tasmor_lib = { version = "0.4", default-features = false, features = ["http"] }
 //!
 //! # MQTT only
-//! tasmor_lib = { version = "0.3", default-features = false, features = ["mqtt"] }
+//! tasmor_lib = { version = "0.4", default-features = false, features = ["mqtt"] }
 //! ```
 //!
 //! # Quick Start
@@ -258,7 +258,7 @@ pub mod types;
 pub use capabilities::{Capabilities, CapabilitiesBuilder};
 pub use device::Device;
 pub use error::{DeviceError, Error, ParseError, ProtocolError, Result, ValueError};
-pub use state::{DeviceState, StateChange};
+pub use state::{DeviceState, StateChange, SystemInfo};
 
 // Protocol configuration
 #[cfg(feature = "http")]

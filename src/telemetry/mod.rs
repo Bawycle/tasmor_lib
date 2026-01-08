@@ -100,6 +100,36 @@ impl TelemetryMessage {
         }
     }
 
+    /// Extracts system information from the telemetry message.
+    ///
+    /// Only STATE messages contain system information (uptime, Wi-Fi signal).
+    /// Returns `None` for other message types.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tasmor_lib::telemetry::parse_telemetry;
+    ///
+    /// let msg = parse_telemetry(
+    ///     "tele/device/STATE",
+    ///     r#"{"UptimeSec":172800,"Wifi":{"Signal":-55}}"#
+    /// ).unwrap();
+    ///
+    /// if let Some(info) = msg.to_system_info() {
+    ///     println!("Uptime: {} seconds", info.uptime_seconds().unwrap_or(0));
+    /// }
+    /// ```
+    #[must_use]
+    pub fn to_system_info(&self) -> Option<crate::state::SystemInfo> {
+        match self {
+            Self::State { state, .. } => {
+                let info = state.to_system_info();
+                if info.is_empty() { None } else { Some(info) }
+            }
+            _ => None,
+        }
+    }
+
     /// Returns true if this is an online LWT message.
     #[must_use]
     pub fn is_online(&self) -> bool {
@@ -290,5 +320,43 @@ mod tests {
     fn unknown_topic_type() {
         let result = parse_telemetry("foo/device/BAR", "{}");
         assert!(result.is_err());
+    }
+
+    // ========== to_system_info() Tests ==========
+
+    #[test]
+    fn telemetry_message_to_system_info_state() {
+        let msg = parse_telemetry(
+            "tele/device/STATE",
+            r#"{"UptimeSec":172800,"Wifi":{"Signal":-55}}"#,
+        )
+        .unwrap();
+
+        let info = msg.to_system_info();
+        assert!(info.is_some());
+        let info = info.unwrap();
+        assert_eq!(info.uptime_seconds(), Some(172800));
+        assert_eq!(info.wifi_rssi(), Some(-55));
+    }
+
+    #[test]
+    fn telemetry_message_to_system_info_none_for_sensor() {
+        let msg = parse_telemetry("tele/device/SENSOR", r#"{"ENERGY":{"Power":100}}"#).unwrap();
+
+        assert!(msg.to_system_info().is_none());
+    }
+
+    #[test]
+    fn telemetry_message_to_system_info_none_for_lwt() {
+        let msg = parse_telemetry("tele/device/LWT", "Online").unwrap();
+        assert!(msg.to_system_info().is_none());
+    }
+
+    #[test]
+    fn telemetry_message_to_system_info_none_when_empty() {
+        let msg = parse_telemetry("tele/device/STATE", r#"{"POWER":"ON"}"#).unwrap();
+
+        // No system info fields, should return None
+        assert!(msg.to_system_info().is_none());
     }
 }

@@ -62,6 +62,8 @@ pub struct SharedMqttClient {
     broker: MqttBroker,
     /// Whether this client has been disconnected.
     disconnected: AtomicBool,
+    /// Timeout for waiting on command responses.
+    command_timeout: Duration,
 }
 
 impl SharedMqttClient {
@@ -74,6 +76,7 @@ impl SharedMqttClient {
         response_rx: mpsc::Receiver<String>,
         router: Arc<TopicRouter>,
         broker: MqttBroker,
+        command_timeout: Duration,
     ) -> Self {
         Self {
             client,
@@ -82,6 +85,7 @@ impl SharedMqttClient {
             router,
             broker,
             disconnected: AtomicBool::new(false),
+            command_timeout,
         }
     }
 
@@ -165,7 +169,7 @@ impl Protocol for SharedMqttClient {
         self.drain_stale_responses().await;
         self.publish_command(&cmd_name, &payload).await?;
 
-        let body = self.wait_response(Duration::from_secs(5)).await?;
+        let body = self.wait_response(self.command_timeout).await?;
         Ok(CommandResponse::new(body))
     }
 
@@ -184,7 +188,7 @@ impl Protocol for SharedMqttClient {
         self.drain_stale_responses().await;
         self.publish_command(cmd_name, payload).await?;
 
-        let body = self.wait_response(Duration::from_secs(5)).await?;
+        let body = self.wait_response(self.command_timeout).await?;
         Ok(CommandResponse::new(body))
     }
 }

@@ -236,8 +236,8 @@ impl CallbackRegistry {
         id
     }
 
-    /// Registers a callback for energy updates.
-    pub fn on_energy_updated<F>(&self, callback: F) -> SubscriptionId
+    /// Registers a callback for energy changes.
+    pub fn on_energy_changed<F>(&self, callback: F) -> SubscriptionId
     where
         F: Fn(EnergyData) + Send + Sync + 'static,
     {
@@ -615,6 +615,44 @@ mod tests {
         registry.dispatch(&StateChange::Dimmer(dimmer));
 
         assert_eq!(*received.read(), Some(dimmer));
+    }
+
+    #[test]
+    fn registry_energy_changed_callback() {
+        let registry = CallbackRegistry::new();
+        let received = Arc::new(RwLock::new(None::<EnergyData>));
+        let received_clone = received.clone();
+
+        let id = registry.on_energy_changed(move |data| {
+            *received_clone.write() = Some(data);
+        });
+
+        assert!(!registry.is_empty());
+        assert_eq!(registry.callback_count(), 1);
+
+        // Dispatch an energy change
+        registry.dispatch(&StateChange::Energy {
+            power: Some(150.0),
+            voltage: Some(230.0),
+            current: Some(0.65),
+            power_factor: None,
+            apparent_power: None,
+            reactive_power: None,
+            energy_today: None,
+            energy_yesterday: None,
+            energy_total: None,
+            total_start_time: None,
+        });
+
+        let received_data = received.read().clone();
+        assert!(received_data.is_some());
+        let data = received_data.unwrap();
+        assert_eq!(data.power, Some(150.0));
+        assert_eq!(data.voltage, Some(230.0));
+
+        // Unsubscribe
+        assert!(registry.unsubscribe(id));
+        assert!(registry.is_empty());
     }
 
     #[test]

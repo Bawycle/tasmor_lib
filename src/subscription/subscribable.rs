@@ -99,10 +99,10 @@ pub trait Subscribable {
     where
         F: Fn(Scheme) + Send + Sync + 'static;
 
-    /// Subscribes to energy monitoring updates.
+    /// Subscribes to energy monitoring changes.
     ///
-    /// The callback is called whenever energy data is received.
-    fn on_energy_updated<F>(&self, callback: F) -> SubscriptionId
+    /// The callback is called whenever energy data changes.
+    fn on_energy_changed<F>(&self, callback: F) -> SubscriptionId
     where
         F: Fn(EnergyData) + Send + Sync + 'static;
 
