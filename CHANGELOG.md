@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-01-08
+
 ### Fixed
 
 - **Device<SharedMqttClient> now implements Clone and Debug** - Fixed `#[derive(Clone, Debug)]` adding unnecessary `P: Clone + Debug` bounds. Manual implementations now correctly allow `Device<P>` to be Clone/Debug for any `P: Protocol`, matching the documented behavior
@@ -138,7 +140,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - README with usage examples
   - CONTRIBUTING.md with development guidelines
 
-[Unreleased]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.4.0...HEAD
+[Unreleased]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.4.1...HEAD
+[0.4.1]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.4.0...v0.4.1
 [0.4.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.3.0...v0.4.0
 [0.3.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.2.1...v0.3.0
 [0.2.1]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.2.0...v0.2.1
