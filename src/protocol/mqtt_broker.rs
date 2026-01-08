@@ -101,6 +101,9 @@ use crate::protocol::TopicRouter;
 /// Global counter for generating unique client IDs.
 static BROKER_CLIENT_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// Default timeout for MQTT command responses.
+pub const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Configuration for an MQTT broker connection.
 #[derive(Debug, Clone)]
 pub struct MqttBrokerConfig {
@@ -109,6 +112,7 @@ pub struct MqttBrokerConfig {
     credentials: Option<(String, String)>,
     keep_alive: Duration,
     connection_timeout: Duration,
+    command_timeout: Duration,
 }
 
 impl Default for MqttBrokerConfig {
@@ -119,6 +123,7 @@ impl Default for MqttBrokerConfig {
             credentials: None,
             keep_alive: Duration::from_secs(30),
             connection_timeout: Duration::from_secs(10),
+            command_timeout: DEFAULT_COMMAND_TIMEOUT,
         }
     }
 }
@@ -188,6 +193,12 @@ impl MqttBroker {
     #[must_use]
     pub fn has_credentials(&self) -> bool {
         self.inner.config.credentials.is_some()
+    }
+
+    /// Returns the command timeout for devices on this broker.
+    #[must_use]
+    pub fn command_timeout(&self) -> Duration {
+        self.inner.config.command_timeout
     }
 
     /// Returns the MQTT client for internal use.
@@ -540,6 +551,33 @@ impl MqttBrokerBuilder {
         self
     }
 
+    /// Sets the timeout for waiting on command responses (default: 5 seconds).
+    ///
+    /// This timeout applies to all commands sent via devices created from this broker.
+    /// Increase this value if you have slow-responding devices or routines with delays.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tasmor_lib::MqttBroker;
+    /// use std::time::Duration;
+    ///
+    /// # async fn example() -> tasmor_lib::Result<()> {
+    /// // Increase timeout for slow devices
+    /// let broker = MqttBroker::builder()
+    ///     .host("192.168.1.50")
+    ///     .command_timeout(Duration::from_secs(15))
+    ///     .build()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn command_timeout(mut self, duration: Duration) -> Self {
+        self.config.command_timeout = duration;
+        self
+    }
+
     /// Builds and connects to the MQTT broker.
     ///
     /// # Errors
@@ -749,19 +787,33 @@ mod tests {
     }
 
     #[test]
+    fn builder_with_command_timeout() {
+        let builder = MqttBrokerBuilder::default().command_timeout(Duration::from_secs(15));
+        assert_eq!(builder.config.command_timeout, Duration::from_secs(15));
+    }
+
+    #[test]
+    fn builder_default_command_timeout() {
+        let builder = MqttBrokerBuilder::default();
+        assert_eq!(builder.config.command_timeout, Duration::from_secs(5));
+    }
+
+    #[test]
     fn builder_chain() {
         let builder = MqttBrokerBuilder::default()
             .host("192.168.1.50")
             .port(8883)
             .credentials("admin", "secret")
             .keep_alive(Duration::from_secs(45))
-            .connection_timeout(Duration::from_secs(15));
+            .connection_timeout(Duration::from_secs(15))
+            .command_timeout(Duration::from_secs(10));
 
         assert_eq!(builder.config.host, "192.168.1.50");
         assert_eq!(builder.config.port, 8883);
         assert!(builder.config.credentials.is_some());
         assert_eq!(builder.config.keep_alive, Duration::from_secs(45));
         assert_eq!(builder.config.connection_timeout, Duration::from_secs(15));
+        assert_eq!(builder.config.command_timeout, Duration::from_secs(10));
     }
 
     #[tokio::test]

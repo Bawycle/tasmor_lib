@@ -72,8 +72,7 @@ use super::StateChange;
 ///     .with_wifi_rssi(-60)
 ///     .with_heap(25000);
 ///
-/// assert_eq!(info.uptime_sec(), Some(172800));
-/// assert_eq!(info.uptime_seconds(), Some(172800)); // Alias
+/// assert_eq!(info.uptime_seconds(), Some(172800));
 /// ```
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SystemInfo {
@@ -114,15 +113,6 @@ impl SystemInfo {
     }
 
     /// Returns the device uptime in seconds.
-    #[must_use]
-    pub fn uptime_sec(&self) -> Option<u64> {
-        self.uptime_sec
-    }
-
-    /// Returns the device uptime in seconds.
-    ///
-    /// This is an alias for [`uptime_sec()`](Self::uptime_sec) for API consistency
-    /// with [`TelemetryState::uptime_seconds()`](crate::telemetry::TelemetryState::uptime_seconds).
     #[must_use]
     pub fn uptime_seconds(&self) -> Option<u64> {
         self.uptime_sec
@@ -999,7 +989,6 @@ mod tests {
     fn system_info_new_is_empty() {
         let info = SystemInfo::new();
         assert!(info.is_empty());
-        assert!(info.uptime_sec().is_none());
         assert!(info.uptime_seconds().is_none());
         assert!(info.wifi_rssi().is_none());
         assert!(info.heap().is_none());
@@ -1013,7 +1002,7 @@ mod tests {
             .with_heap(25000);
 
         assert!(!info.is_empty());
-        assert_eq!(info.uptime_sec(), Some(172800));
+        assert_eq!(info.uptime_seconds(), Some(172800));
         assert_eq!(info.uptime_seconds(), Some(172800));
         assert_eq!(info.wifi_rssi(), Some(-55));
         assert_eq!(info.heap(), Some(25000));
@@ -1028,7 +1017,7 @@ mod tests {
         info.merge(&update);
 
         // Original values preserved, new value added
-        assert_eq!(info.uptime_sec(), Some(100));
+        assert_eq!(info.uptime_seconds(), Some(100));
         assert_eq!(info.wifi_rssi(), Some(-50));
         assert_eq!(info.heap(), Some(30000));
     }
@@ -1042,7 +1031,7 @@ mod tests {
         info.merge(&update);
 
         // Updated values
-        assert_eq!(info.uptime_sec(), Some(200));
+        assert_eq!(info.uptime_seconds(), Some(200));
         assert_eq!(info.wifi_rssi(), Some(-50)); // Preserved
         assert_eq!(info.heap(), Some(30000));
     }
@@ -1077,7 +1066,7 @@ mod tests {
         state.update_system_info(&info2);
 
         let sys_info = state.system_info().unwrap();
-        assert_eq!(sys_info.uptime_sec(), Some(100)); // Preserved
+        assert_eq!(sys_info.uptime_seconds(), Some(100)); // Preserved
         assert_eq!(sys_info.wifi_rssi(), Some(-55)); // Added
     }
 

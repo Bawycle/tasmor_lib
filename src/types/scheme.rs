@@ -7,6 +7,12 @@
 //!
 //! This module provides a type-safe representation of Tasmota light schemes,
 //! ensuring values are always within the valid range of 0-4.
+//!
+//! # Device Methods
+//!
+//! Use [`Scheme`] with these [`Device`](crate::Device) methods:
+//! - [`set_scheme()`](crate::Device::set_scheme) - Set the light effect/scheme
+//! - [`get_scheme()`](crate::Device::get_scheme) - Query current scheme
 
 use std::fmt;
 

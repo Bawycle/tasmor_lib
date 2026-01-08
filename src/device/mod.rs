@@ -202,11 +202,32 @@ impl<P: Protocol> Device<P> {
 
     // ========== Power Control ==========
 
-    /// Turns on a specific relay.
+    /// Turns on the first relay (POWER1).
+    ///
+    /// For multi-relay devices, use [`power_on_index`](Self::power_on_index) to
+    /// control a specific relay.
     ///
     /// # Errors
     ///
-    /// Returns error if the command fails.
+    /// Returns [`Error::Protocol`] if:
+    /// - The device is unreachable (connection timeout, DNS failure)
+    /// - The device returns an invalid response
+    /// - For MQTT: the broker connection is lost
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tasmor_lib::Device;
+    ///
+    /// # async fn example() -> tasmor_lib::Result<()> {
+    /// let (device, _) = Device::http("192.168.1.100").build().await?;
+    ///
+    /// // Turn on the device
+    /// let response = device.power_on().await?;
+    /// println!("Power state: {:?}", response.first_power_state()?);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn power_on(&self) -> Result<PowerResponse, Error> {
         self.power_on_index(PowerIndex::one()).await
     }
@@ -215,16 +236,36 @@ impl<P: Protocol> Device<P> {
     ///
     /// # Errors
     ///
-    /// Returns error if the command fails.
+    /// Returns [`Error::Protocol`] if the device is unreachable or returns an invalid response.
     pub async fn power_on_index(&self, index: PowerIndex) -> Result<PowerResponse, Error> {
         self.set_power(index, PowerState::On).await
     }
 
-    /// Turns off a specific relay.
+    /// Turns off the first relay (POWER1).
+    ///
+    /// For multi-relay devices, use [`power_off_index`](Self::power_off_index) to
+    /// control a specific relay.
     ///
     /// # Errors
     ///
-    /// Returns error if the command fails.
+    /// Returns [`Error::Protocol`] if:
+    /// - The device is unreachable (connection timeout, DNS failure)
+    /// - The device returns an invalid response
+    /// - For MQTT: the broker connection is lost
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tasmor_lib::Device;
+    ///
+    /// # async fn example() -> tasmor_lib::Result<()> {
+    /// let (device, _) = Device::http("192.168.1.100").build().await?;
+    ///
+    /// // Turn off the device
+    /// device.power_off().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn power_off(&self) -> Result<PowerResponse, Error> {
         self.power_off_index(PowerIndex::one()).await
     }
@@ -233,16 +274,31 @@ impl<P: Protocol> Device<P> {
     ///
     /// # Errors
     ///
-    /// Returns error if the command fails.
+    /// Returns [`Error::Protocol`] if the device is unreachable or returns an invalid response.
     pub async fn power_off_index(&self, index: PowerIndex) -> Result<PowerResponse, Error> {
         self.set_power(index, PowerState::Off).await
     }
 
-    /// Toggles a specific relay.
+    /// Toggles the first relay (POWER1).
     ///
     /// # Errors
     ///
-    /// Returns error if the command fails.
+    /// Returns [`Error::Protocol`] if the device is unreachable or returns an invalid response.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tasmor_lib::Device;
+    ///
+    /// # async fn example() -> tasmor_lib::Result<()> {
+    /// let (device, _) = Device::http("192.168.1.100").build().await?;
+    ///
+    /// // Toggle the device
+    /// let response = device.power_toggle().await?;
+    /// println!("Power is now: {:?}", response.first_power_state()?);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn power_toggle(&self) -> Result<PowerResponse, Error> {
         self.power_toggle_index(PowerIndex::one()).await
     }
@@ -251,7 +307,7 @@ impl<P: Protocol> Device<P> {
     ///
     /// # Errors
     ///
-    /// Returns error if the command fails.
+    /// Returns [`Error::Protocol`] if the device is unreachable or returns an invalid response.
     pub async fn power_toggle_index(&self, index: PowerIndex) -> Result<PowerResponse, Error> {
         let cmd = PowerCommand::Toggle { index };
         let response = self.send_command(&cmd).await?;
@@ -344,13 +400,36 @@ impl<P: Protocol> Device<P> {
 
     // ========== Dimmer ==========
 
-    /// Sets the dimmer level.
+    /// Sets the dimmer level (brightness) for dimmable lights.
     ///
-    /// Returns a typed response including the new dimmer level and power state.
+    /// The dimmer value must be between 0 and 100. Use the [`Dimmer`] type
+    /// to ensure valid values at compile time.
     ///
     /// # Errors
     ///
-    /// Returns error if the device doesn't support dimming or the command fails.
+    /// Returns [`Error::Device`] with [`DeviceError::UnsupportedCapability`] if
+    /// the device doesn't support dimming (check with
+    /// [`capabilities().supports_dimmer_control()`](Capabilities::supports_dimmer_control)).
+    ///
+    /// Returns [`Error::Protocol`] if the device is unreachable or returns an invalid response.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tasmor_lib::{Device, Dimmer};
+    ///
+    /// # async fn example() -> tasmor_lib::Result<()> {
+    /// let (device, _) = Device::http("192.168.1.100").build().await?;
+    ///
+    /// // Set brightness to 75%
+    /// let dimmer = Dimmer::new(75)?;
+    /// let response = device.set_dimmer(dimmer).await?;
+    /// println!("Dimmer set to {}%", response.dimmer());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`DeviceError::UnsupportedCapability`]: crate::error::DeviceError::UnsupportedCapability
     pub async fn set_dimmer(&self, value: Dimmer) -> Result<DimmerResponse, Error> {
         self.check_capability("dimmer", self.capabilities.supports_dimmer_control())?;
         let cmd = DimmerCommand::Set(value);
@@ -365,11 +444,18 @@ impl<P: Protocol> Device<P> {
 
     /// Gets the current dimmer level.
     ///
-    /// Returns a typed response including the current dimmer level and power state.
+    /// This is a **point-in-time query** that fetches the current dimmer value
+    /// from the device. For continuous monitoring, use MQTT subscriptions via
+    /// [`on_dimmer_changed`](crate::subscription::Subscribable::on_dimmer_changed).
     ///
     /// # Errors
     ///
-    /// Returns error if the device doesn't support dimming or the command fails.
+    /// Returns [`Error::Device`] with [`DeviceError::UnsupportedCapability`] if
+    /// the device doesn't support dimming.
+    ///
+    /// Returns [`Error::Protocol`] if the device is unreachable or returns an invalid response.
+    ///
+    /// [`DeviceError::UnsupportedCapability`]: crate::error::DeviceError::UnsupportedCapability
     pub async fn get_dimmer(&self) -> Result<DimmerResponse, Error> {
         self.check_capability("dimmer", self.capabilities.supports_dimmer_control())?;
         let cmd = DimmerCommand::Get;
@@ -785,11 +871,41 @@ impl<P: Protocol> Device<P> {
 
     // ========== Energy Monitoring ==========
 
-    /// Gets energy monitoring data.
+    /// Gets energy monitoring data (voltage, current, power consumption).
+    ///
+    /// Returns comprehensive energy data including instantaneous readings and
+    /// accumulated totals. Only available on devices with energy monitoring
+    /// capabilities (e.g., smart plugs with power metering).
     ///
     /// # Errors
     ///
-    /// Returns error if the device doesn't support energy monitoring or the command fails.
+    /// Returns [`Error::Device`] with [`DeviceError::UnsupportedCapability`] if
+    /// the device doesn't support energy monitoring (check with
+    /// [`capabilities().supports_energy_monitoring()`](Capabilities::supports_energy_monitoring)).
+    ///
+    /// Returns [`Error::Protocol`] if the device is unreachable or returns an invalid response.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tasmor_lib::Device;
+    ///
+    /// # async fn example() -> tasmor_lib::Result<()> {
+    /// let (device, _) = Device::http("192.168.1.100").build().await?;
+    ///
+    /// if device.capabilities().supports_energy_monitoring() {
+    ///     let response = device.energy().await?;
+    ///     if let Some(energy) = response.energy() {
+    ///         println!("Power: {} W", energy.power);
+    ///         println!("Voltage: {} V", energy.voltage);
+    ///         println!("Today: {} kWh", energy.today);
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`DeviceError::UnsupportedCapability`]: crate::error::DeviceError::UnsupportedCapability
     pub async fn energy(&self) -> Result<EnergyResponse, Error> {
         self.check_capability(
             "energy monitoring",
@@ -979,16 +1095,27 @@ impl<P: Protocol> Device<P> {
 
     // ========== Initial State Query ==========
 
-    /// Queries the device for its current state.
+    /// Queries the device for its complete current state.
     ///
-    /// This method queries all supported capabilities and returns a complete
-    /// `DeviceState` with the current values. It's called automatically by
-    /// the device builders to provide initial state.
+    /// This method queries **all** supported capabilities and returns a complete
+    /// [`DeviceState`] with current values. It's called automatically by the
+    /// device builders to provide initial state.
+    ///
+    /// # `query_state()` vs `get_*` Methods
+    ///
+    /// | Method | Use Case |
+    /// |--------|----------|
+    /// | `query_state()` | Get full device state (all capabilities at once) |
+    /// | `get_power()`, `get_dimmer()`, etc. | Get a single specific value |
+    ///
+    /// Use `query_state()` when you need a complete snapshot of the device.
+    /// Use individual `get_*` methods when you only need one specific value
+    /// and want to minimize network traffic.
     ///
     /// # System Info
     ///
     /// The returned state includes system info (`wifi_rssi`, `heap`) from the
-    /// Status response. However, `uptime_sec` is **not available** via HTTP
+    /// Status response. However, `uptime_seconds` is **not available** via HTTP
     /// Status commands - it's only available in MQTT telemetry messages.
     /// For MQTT devices, use [`TelemetryState::to_system_info()`] or
     /// [`TelemetryMessage::to_system_info()`] to get complete system info
@@ -1341,11 +1468,11 @@ impl Subscribable for Device<SharedMqttClient> {
         self.callbacks.on_scheme_changed(callback)
     }
 
-    fn on_energy_updated<F>(&self, callback: F) -> SubscriptionId
+    fn on_energy_changed<F>(&self, callback: F) -> SubscriptionId
     where
         F: Fn(EnergyData) + Send + Sync + 'static,
     {
-        self.callbacks.on_energy_updated(callback)
+        self.callbacks.on_energy_changed(callback)
     }
 
     fn on_connected<F>(&self, callback: F) -> SubscriptionId

@@ -7,6 +7,12 @@
 //!
 //! This module provides a type-safe representation of the wakeup duration
 //! used with the Wakeup scheme (Scheme 1).
+//!
+//! # Device Methods
+//!
+//! Use [`WakeupDuration`] with these [`Device`](crate::Device) methods:
+//! - [`set_wakeup_duration()`](crate::Device::set_wakeup_duration) - Set wakeup timing
+//! - [`get_wakeup_duration()`](crate::Device::get_wakeup_duration) - Query current duration
 
 use std::fmt;
 

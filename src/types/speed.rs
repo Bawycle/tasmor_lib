@@ -7,6 +7,13 @@
 //!
 //! This module provides a type-safe representation of fade speed values
 //! for smooth light transitions in Tasmota devices.
+//!
+//! # Device Methods
+//!
+//! Use [`FadeSpeed`] with these [`Device`](crate::Device) methods:
+//! - [`set_fade_speed()`](crate::Device::set_fade_speed) - Set transition speed
+//! - [`get_fade_speed()`](crate::Device::get_fade_speed) - Query current speed
+//! - [`enable_fade()`](crate::Device::enable_fade) / [`disable_fade()`](crate::Device::disable_fade) - Toggle fade transitions
 
 use std::fmt;
 

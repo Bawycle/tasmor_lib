@@ -7,6 +7,14 @@
 //!
 //! This module provides types for controlling power state and addressing
 //! specific power channels on multi-relay devices.
+//!
+//! # Device Methods
+//!
+//! Use [`PowerState`] and [`PowerIndex`] with these [`Device`](crate::Device) methods:
+//! - [`power_on()`](crate::Device::power_on) / [`power_off()`](crate::Device::power_off) - Control first relay
+//! - [`power_on_index()`](crate::Device::power_on_index) / [`power_off_index()`](crate::Device::power_off_index) - Control specific relay
+//! - [`set_power()`](crate::Device::set_power) - Set power state of a specific relay
+//! - [`get_power()`](crate::Device::get_power) - Query current power state
 
 use std::fmt;
 use std::str::FromStr;
