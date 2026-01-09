@@ -78,6 +78,8 @@ pub use routine::{MAX_ROUTINE_STEPS, Routine, RoutineBuilder};
 pub use scheme::{SchemeCommand, WakeupDurationCommand};
 pub use status::{StatusCommand, StatusType};
 
+use crate::protocol::ResponseSpec;
+
 /// A command that can be sent to a Tasmota device.
 ///
 /// Commands are serialized to the Tasmota command format for transmission
@@ -118,6 +120,17 @@ pub trait Command {
     /// Returns empty string for query commands.
     fn mqtt_payload(&self) -> String {
         self.payload().unwrap_or_default()
+    }
+
+    /// Returns the response specification for this command.
+    ///
+    /// Most commands expect a single response. Commands that return multiple
+    /// MQTT messages (like `Status 0`) should override this to specify
+    /// which topic suffixes to expect.
+    ///
+    /// The default implementation returns `ResponseSpec::Single`.
+    fn response_spec(&self) -> ResponseSpec {
+        ResponseSpec::Single
     }
 }
 

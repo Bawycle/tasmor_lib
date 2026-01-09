@@ -71,6 +71,7 @@ mod power;
 mod rgb_color;
 mod scheme;
 mod speed;
+mod uptime;
 mod wakeup_duration;
 
 pub use color::{ColorTemperature, HsbColor};
@@ -80,4 +81,5 @@ pub use power::{PowerIndex, PowerState};
 pub use rgb_color::RgbColor;
 pub use scheme::Scheme;
 pub use speed::FadeSpeed;
+pub use uptime::parse_uptime;
 pub use wakeup_duration::WakeupDuration;

@@ -108,6 +108,7 @@ impl TelemetryMessage {
     /// # Examples
     ///
     /// ```
+    /// use std::time::Duration;
     /// use tasmor_lib::telemetry::parse_telemetry;
     ///
     /// let msg = parse_telemetry(
@@ -116,7 +117,8 @@ impl TelemetryMessage {
     /// ).unwrap();
     ///
     /// if let Some(info) = msg.to_system_info() {
-    ///     println!("Uptime: {} seconds", info.uptime_seconds().unwrap_or(0));
+    ///     let uptime = info.uptime().unwrap_or(Duration::ZERO);
+    ///     println!("Uptime: {} seconds", uptime.as_secs());
     /// }
     /// ```
     #[must_use]
@@ -326,6 +328,8 @@ mod tests {
 
     #[test]
     fn telemetry_message_to_system_info_state() {
+        use std::time::Duration;
+
         let msg = parse_telemetry(
             "tele/device/STATE",
             r#"{"UptimeSec":172800,"Wifi":{"Signal":-55}}"#,
@@ -335,7 +339,7 @@ mod tests {
         let info = msg.to_system_info();
         assert!(info.is_some());
         let info = info.unwrap();
-        assert_eq!(info.uptime_seconds(), Some(172800));
+        assert_eq!(info.uptime(), Some(Duration::from_secs(172800)));
         assert_eq!(info.wifi_rssi(), Some(-55));
     }
 

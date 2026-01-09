@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING: Uptime now returns `Duration`** - `SystemInfo::uptime()`, `DeviceState::uptime()`, and `TelemetryState::uptime()` now return `Option<Duration>` instead of `Option<u64>`. Use `.as_secs()` if you need the raw seconds value
+- **BREAKING: Removed `uptime_seconds()`** - Use `uptime()` instead, which returns `std::time::Duration`
+- **BREAKING: Removed `TelemetryState::uptime_string()`** - Use `uptime()` instead for a typed `Duration` value
+- **BREAKING: `Command` trait extended** - Added `response_spec()` method. Existing implementations remain compatible thanks to the default implementation
+
+### Fixed
+
+- **MQTT status queries now return complete data** - `query_state()` and `build()` via MQTT now return the same complete device information as HTTP, including uptime. Previously some fields were missing when using MQTT
+
 ## [0.4.1] - 2026-01-08
 
 ### Fixed

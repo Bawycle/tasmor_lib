@@ -16,7 +16,7 @@ A modern, type-safe Rust library for controlling [Tasmota](https://tasmota.githu
 ## Features
 
 - **Type-safe API** - Compile-time guarantees for valid commands and values
-- **Dual protocol support** - Control devices via MQTT or HTTP
+- **Dual protocol support** - Control devices via MQTT or HTTP with full feature parity
 - **Async/await** - Built on [Tokio](https://tokio.rs) for efficient async I/O
 - **Full device support** - Lights (RGB/CCT), switches, relays, energy monitors
 - **Event-driven architecture** - Subscribe to device state changes in real-time (MQTT)
@@ -524,12 +524,15 @@ The `examples/` directory contains complete runnable examples:
 | `energy_test.rs` | Energy monitoring with formatted output |
 | `routine_test.rs` | Wakeup routine with gradual brightness increase |
 | `discovery_test.rs` | MQTT device discovery |
+| `uptime.rs` | Device uptime retrieval via HTTP, MQTT, and subscriptions |
 
 ```bash
 cargo run --example bulb_test -- 192.168.1.50 tasmota_topic user pass
 cargo run --example energy_test -- 192.168.1.50 tasmota_plug user pass
 cargo run --example routine_test -- 192.168.1.50 tasmota_bulb user pass
 cargo run --example discovery_test -- 192.168.1.50 user pass
+cargo run --example uptime -- http 192.168.1.100 admin password
+cargo run --example uptime -- mqtt 192.168.1.50 tasmota_device user pass
 ```
 
 ## Documentation

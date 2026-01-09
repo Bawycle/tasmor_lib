@@ -97,6 +97,7 @@ use tokio::sync::{RwLock, mpsc, oneshot};
 
 use crate::error::ProtocolError;
 use crate::protocol::TopicRouter;
+use crate::protocol::response_collector::MqttMessage;
 
 /// Global counter for generating unique client IDs.
 static BROKER_CLIENT_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -131,7 +132,7 @@ impl Default for MqttBrokerConfig {
 /// A subscription to a device topic on the broker.
 pub(crate) struct DeviceSubscription {
     /// Channel to send command responses (RESULT, STATUS*) to the device.
-    pub response_tx: mpsc::Sender<String>,
+    pub response_tx: mpsc::Sender<MqttMessage>,
     /// Router for dispatching messages to callbacks.
     pub router: Arc<TopicRouter>,
 }
@@ -241,7 +242,7 @@ impl MqttBroker {
     /// - `stat/<topic>/+` for command responses
     /// - `tele/<topic>/+` for telemetry
     ///
-    /// Returns a receiver channel for command responses.
+    /// Returns a receiver channel for command responses (with topic suffix metadata).
     ///
     /// # Errors
     ///
@@ -249,7 +250,7 @@ impl MqttBroker {
     pub(crate) async fn add_device_subscription(
         &self,
         device_topic: String,
-    ) -> Result<(mpsc::Receiver<String>, Arc<TopicRouter>), ProtocolError> {
+    ) -> Result<(mpsc::Receiver<MqttMessage>, Arc<TopicRouter>), ProtocolError> {
         // Subscribe to stat/<topic>/+ for command responses
         let stat_topic = format!("stat/{device_topic}/+");
         self.inner
@@ -273,7 +274,8 @@ impl MqttBroker {
         );
 
         // Create channels and router for this device
-        let (response_tx, response_rx) = mpsc::channel::<String>(10);
+        // Channel capacity increased to handle multi-message responses (e.g., Status 0)
+        let (response_tx, response_rx) = mpsc::channel::<MqttMessage>(20);
         let router = Arc::new(TopicRouter::new());
 
         // Register the subscription
@@ -364,10 +366,13 @@ impl MqttBroker {
                 tracing::debug!(
                     topic = %topic,
                     device = %device_topic,
+                    suffix = %suffix,
                     "Routing response to device"
                 );
+                // Send as MqttMessage with topic suffix for multi-message collection
+                let msg = MqttMessage::new(suffix.to_string(), payload);
                 // Ignore send errors - the device may have been dropped
-                let _ = sub.response_tx.send(payload).await;
+                let _ = sub.response_tx.send(msg).await;
             }
         }
     }

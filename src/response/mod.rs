@@ -62,5 +62,6 @@ pub use rgb_color::RgbColorResponse;
 pub use routine::RoutineResponse;
 pub use scheme::{SchemeResponse, WakeupDurationResponse};
 pub use status::{
-    StatusDeviceParameters, StatusFirmware, StatusMemory, StatusMqtt, StatusNetwork, StatusResponse,
+    StatusDeviceParameters, StatusFirmware, StatusMemory, StatusMqtt, StatusNetwork,
+    StatusParameters, StatusResponse,
 };

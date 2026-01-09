@@ -1136,11 +1136,10 @@ impl<P: Protocol> Device<P> {
     /// # System Info
     ///
     /// The returned state includes system info (`wifi_rssi`, `heap`) from the
-    /// Status response. However, `uptime_seconds` is **not available** via HTTP
-    /// Status commands - it's only available in MQTT telemetry messages.
-    /// For MQTT devices, use [`TelemetryState::to_system_info()`] or
-    /// [`TelemetryMessage::to_system_info()`] to get complete system info
-    /// including uptime from periodic telemetry.
+    /// Status response. For HTTP devices, uptime is parsed from the
+    /// `StatusPRM.Uptime` string. For MQTT devices, uptime can also come
+    /// from telemetry messages. Use [`SystemInfo::uptime()`] to get the
+    /// uptime as a [`Duration`].
     ///
     /// # Errors
     ///
@@ -1268,6 +1267,14 @@ impl<P: Protocol> Device<P> {
             Ok(status_response) => {
                 let mut sys_info = crate::state::SystemInfo::new();
 
+                // Get uptime from StatusPRM
+                if let Some(prm) = &status_response.status_prm
+                    && let Some(uptime) = prm.uptime()
+                {
+                    sys_info = sys_info.with_uptime(uptime);
+                    tracing::debug!(uptime_secs = uptime.as_secs(), "Got uptime");
+                }
+
                 // Get heap from StatusMEM
                 if let Some(mem) = &status_response.memory {
                     sys_info = sys_info.with_heap(mem.heap);
@@ -1279,9 +1286,6 @@ impl<P: Protocol> Device<P> {
                     sys_info = sys_info.with_wifi_rssi(net.rssi);
                     tracing::debug!(rssi = net.rssi, "Got WiFi RSSI");
                 }
-
-                // Note: UptimeSec is not available in Status 0, only uptime string
-                // in StatusPRM. For accurate uptime, rely on telemetry.
 
                 if !sys_info.is_empty() {
                     state.set_system_info(sys_info);
