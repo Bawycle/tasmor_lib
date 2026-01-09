@@ -72,11 +72,12 @@ impl Command for SchemeCommand {
 /// # Examples
 ///
 /// ```
+/// use std::time::Duration;
 /// use tasmor_lib::command::{Command, WakeupDurationCommand};
 /// use tasmor_lib::types::WakeupDuration;
 ///
 /// // Set wakeup duration to 5 minutes
-/// let cmd = WakeupDurationCommand::Set(WakeupDuration::from_minutes(5).unwrap());
+/// let cmd = WakeupDurationCommand::Set(WakeupDuration::new(Duration::from_secs(300)).unwrap());
 /// assert_eq!(cmd.name(), "WakeupDuration");
 /// assert_eq!(cmd.payload(), Some("300".to_string()));
 ///
@@ -115,6 +116,8 @@ impl Command for WakeupDurationCommand {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
     #[test]
@@ -177,29 +180,22 @@ mod tests {
 
     #[test]
     fn wakeup_duration_command_set() {
-        let duration = WakeupDuration::new(300).unwrap();
+        let duration = WakeupDuration::new(Duration::from_secs(300)).unwrap();
         let cmd = WakeupDurationCommand::Set(duration);
         assert_eq!(cmd.name(), "WakeupDuration");
         assert_eq!(cmd.payload(), Some("300".to_string()));
     }
 
     #[test]
-    fn wakeup_duration_command_from_minutes() {
-        let duration = WakeupDuration::from_minutes(5).unwrap();
-        let cmd = WakeupDurationCommand::Set(duration);
-        assert_eq!(cmd.payload(), Some("300".to_string()));
-    }
-
-    #[test]
     fn wakeup_duration_command_http() {
-        let duration = WakeupDuration::new(60).unwrap();
+        let duration = WakeupDuration::new(Duration::from_secs(60)).unwrap();
         let cmd = WakeupDurationCommand::Set(duration);
         assert_eq!(cmd.to_http_command(), "WakeupDuration 60");
     }
 
     #[test]
     fn wakeup_duration_command_mqtt() {
-        let duration = WakeupDuration::new(60).unwrap();
+        let duration = WakeupDuration::new(Duration::from_secs(60)).unwrap();
         let cmd = WakeupDurationCommand::Set(duration);
         assert_eq!(cmd.mqtt_topic_suffix(), "WakeupDuration");
         assert_eq!(cmd.mqtt_payload(), "60");

@@ -46,7 +46,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tasmor_lib::subscription::Subscribable;
 use tasmor_lib::types::{
-    ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState, RgbColor, Scheme,
+    ColorTemperature, Dimmer, FadeDuration, HsbColor, PowerIndex, PowerState, RgbColor, Scheme,
     WakeupDuration,
 };
 use tasmor_lib::{Capabilities, Device, MqttBroker};
@@ -521,12 +521,12 @@ mod http_protocol {
         println!("Initial wakeup duration: {:?}", initial.duration());
 
         // Set to 5 minutes
-        let duration = WakeupDuration::from_minutes(5).unwrap();
+        let duration = WakeupDuration::new(Duration::from_secs(300)).unwrap();
         let response = device.set_wakeup_duration(duration).await.unwrap();
         assert_eq!(response.duration().unwrap().seconds(), 300);
 
         // Set to 30 seconds
-        let duration = WakeupDuration::new(30).unwrap();
+        let duration = WakeupDuration::new(Duration::from_secs(30)).unwrap();
         let response = device.set_wakeup_duration(duration).await.unwrap();
         assert_eq!(response.duration().unwrap().seconds(), 30);
 
@@ -551,21 +551,21 @@ mod http_protocol {
 
         // Get initial fade state
         let initial_fade = device.get_fade().await.unwrap();
-        let initial_speed = device.get_fade_speed().await.unwrap();
+        let initial_duration = device.get_fade_duration().await.unwrap();
         println!(
-            "Initial fade: {:?}, speed: {:?}",
+            "Initial fade: {:?}, duration: {:?}",
             initial_fade.is_enabled(),
-            initial_speed.speed()
+            initial_duration.duration()
         );
 
         // Enable fade
         let response = device.enable_fade().await.unwrap();
         assert!(response.is_enabled().unwrap(), "Fade should be enabled");
 
-        // Set fade speed to 5
-        let speed = FadeSpeed::new(5).unwrap();
-        let response = device.set_fade_speed(speed).await.unwrap();
-        assert_eq!(response.speed().unwrap().value(), 5);
+        // Set fade duration to 2.5 seconds (value 5)
+        let duration = FadeDuration::new(Duration::from_millis(2500)).unwrap();
+        let response = device.set_fade_duration(duration).await.unwrap();
+        assert_eq!(response.duration().unwrap().value(), 5);
 
         // Test fade effect
         device.power_on().await.unwrap();
@@ -582,8 +582,8 @@ mod http_protocol {
         if initial_fade.is_enabled().unwrap() {
             device.enable_fade().await.unwrap();
         }
-        if let Ok(s) = initial_speed.speed() {
-            device.set_fade_speed(s).await.unwrap();
+        if let Ok(d) = initial_duration.duration() {
+            device.set_fade_duration(d).await.unwrap();
         }
     }
 
@@ -1184,21 +1184,21 @@ mod mqtt_protocol {
 
         // Get initial fade state
         let initial_fade = device.get_fade().await.unwrap();
-        let initial_speed = device.get_fade_speed().await.unwrap();
+        let initial_duration = device.get_fade_duration().await.unwrap();
         println!(
-            "MQTT Initial fade: {:?}, speed: {:?}",
+            "MQTT Initial fade: {:?}, duration: {:?}",
             initial_fade.is_enabled(),
-            initial_speed.speed()
+            initial_duration.duration()
         );
 
         // Enable fade
         let response = device.enable_fade().await.unwrap();
         assert!(response.is_enabled().unwrap(), "Fade should be enabled");
 
-        // Set fade speed
-        let speed = FadeSpeed::new(4).unwrap();
-        let response = device.set_fade_speed(speed).await.unwrap();
-        assert_eq!(response.speed().unwrap().value(), 4);
+        // Set fade duration to 2 seconds (value 4)
+        let duration = FadeDuration::new(Duration::from_secs(2)).unwrap();
+        let response = device.set_fade_duration(duration).await.unwrap();
+        assert_eq!(response.duration().unwrap().value(), 4);
 
         // Disable fade
         let response = device.disable_fade().await.unwrap();
@@ -1208,8 +1208,8 @@ mod mqtt_protocol {
         if initial_fade.is_enabled().unwrap() {
             device.enable_fade().await.unwrap();
         }
-        if let Ok(s) = initial_speed.speed() {
-            device.set_fade_speed(s).await.unwrap();
+        if let Ok(d) = initial_duration.duration() {
+            device.set_fade_duration(d).await.unwrap();
         }
 
         device.disconnect().await;
@@ -1290,12 +1290,12 @@ mod mqtt_protocol {
         println!("MQTT Initial wakeup duration: {:?}", initial.duration());
 
         // Set to 3 minutes
-        let duration = WakeupDuration::from_minutes(3).unwrap();
+        let duration = WakeupDuration::new(Duration::from_secs(180)).unwrap();
         let response = device.set_wakeup_duration(duration).await.unwrap();
         assert_eq!(response.duration().unwrap().seconds(), 180);
 
         // Set to 45 seconds
-        let duration = WakeupDuration::new(45).unwrap();
+        let duration = WakeupDuration::new(Duration::from_secs(45)).unwrap();
         let response = device.set_wakeup_duration(duration).await.unwrap();
         assert_eq!(response.duration().unwrap().seconds(), 45);
 

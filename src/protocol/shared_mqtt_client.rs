@@ -18,6 +18,7 @@ use tokio::sync::{Mutex, mpsc};
 
 use crate::command::Command;
 use crate::error::ProtocolError;
+use crate::protocol::response_collector::{MqttMessage, ResponseSpec, collect_responses};
 use crate::protocol::{CommandResponse, Protocol};
 use crate::subscription::CallbackRegistry;
 
@@ -54,8 +55,8 @@ pub struct SharedMqttClient {
     client: rumqttc::AsyncClient,
     /// The device topic (e.g., `tasmota_bulb`).
     topic: String,
-    /// Channel for receiving command responses.
-    response_rx: Arc<Mutex<mpsc::Receiver<String>>>,
+    /// Channel for receiving command responses (with topic suffix metadata).
+    response_rx: Arc<Mutex<mpsc::Receiver<MqttMessage>>>,
     /// Router for dispatching messages to callbacks.
     router: Arc<TopicRouter>,
     /// Reference to the broker for cleanup.
@@ -73,7 +74,7 @@ impl SharedMqttClient {
     pub(crate) fn new(
         client: rumqttc::AsyncClient,
         topic: String,
-        response_rx: mpsc::Receiver<String>,
+        response_rx: mpsc::Receiver<MqttMessage>,
         router: Arc<TopicRouter>,
         broker: MqttBroker,
         command_timeout: Duration,
@@ -144,17 +145,17 @@ impl SharedMqttClient {
         }
     }
 
-    /// Waits for a response with timeout.
-    async fn wait_response(&self, timeout: Duration) -> Result<String, ProtocolError> {
+    /// Collects responses according to the given response specification.
+    ///
+    /// For single-response commands, waits for one message.
+    /// For multi-response commands (like Status 0), collects multiple messages
+    /// and merges them into a single JSON response.
+    async fn collect_command_responses(
+        &self,
+        spec: &ResponseSpec,
+    ) -> Result<String, ProtocolError> {
         let mut rx = self.response_rx.lock().await;
-
-        #[allow(clippy::cast_possible_truncation)]
-        let timeout_ms = timeout.as_millis() as u64;
-
-        tokio::time::timeout(timeout, rx.recv())
-            .await
-            .map_err(|_| ProtocolError::Timeout(timeout_ms))?
-            .ok_or_else(|| ProtocolError::ConnectionFailed("Response channel closed".to_string()))
+        collect_responses(&mut rx, spec, self.command_timeout).await
     }
 }
 
@@ -165,11 +166,12 @@ impl Protocol for SharedMqttClient {
     ) -> Result<CommandResponse, ProtocolError> {
         let cmd_name = command.mqtt_topic_suffix();
         let payload = command.mqtt_payload();
+        let response_spec = command.response_spec();
 
         self.drain_stale_responses().await;
         self.publish_command(&cmd_name, &payload).await?;
 
-        let body = self.wait_response(self.command_timeout).await?;
+        let body = self.collect_command_responses(&response_spec).await?;
         Ok(CommandResponse::new(body))
     }
 
@@ -188,7 +190,10 @@ impl Protocol for SharedMqttClient {
         self.drain_stale_responses().await;
         self.publish_command(cmd_name, payload).await?;
 
-        let body = self.wait_response(self.command_timeout).await?;
+        // Raw commands expect a single response
+        let body = self
+            .collect_command_responses(&ResponseSpec::Single)
+            .await?;
         Ok(CommandResponse::new(body))
     }
 }

@@ -5,12 +5,16 @@
 
 //! Parser for Tasmota STATE telemetry messages.
 
+use std::time::Duration;
+
 use serde::Deserialize;
 use serde::de::{self, Deserializer};
 
 use crate::error::ParseError;
 use crate::state::StateChange;
-use crate::types::{ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerState, Scheme};
+use crate::types::{
+    ColorTemperature, Dimmer, FadeDuration, HsbColor, PowerState, Scheme, parse_uptime,
+};
 
 /// Deserializes a boolean from either "ON"/"OFF" string or 0/1 integer.
 fn deserialize_bool_or_int<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
@@ -295,16 +299,33 @@ impl TelemetryState {
         self.scheme
     }
 
-    /// Returns the device uptime as a string (e.g., "17T04:02:54").
+    /// Returns the device uptime as a [`Duration`].
+    ///
+    /// This method tries to parse the uptime in this order:
+    /// 1. Parse the `Uptime` string (e.g., "17T04:02:54")
+    /// 2. Fall back to `UptimeSec` field if string parsing fails
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use tasmor_lib::telemetry::TelemetryState;
+    ///
+    /// let json = r#"{"Uptime":"1T23:46:58","UptimeSec":172018}"#;
+    /// let state: TelemetryState = serde_json::from_str(json).unwrap();
+    ///
+    /// assert_eq!(state.uptime(), Some(Duration::from_secs(172018)));
+    /// ```
     #[must_use]
-    pub fn uptime(&self) -> Option<&str> {
-        self.uptime.as_deref()
-    }
-
-    /// Returns the device uptime in seconds.
-    #[must_use]
-    pub fn uptime_seconds(&self) -> Option<u64> {
-        self.uptime_sec
+    pub fn uptime(&self) -> Option<Duration> {
+        // Try parsing the string format first
+        if let Some(uptime_str) = &self.uptime
+            && let Ok(duration) = parse_uptime(uptime_str)
+        {
+            return Some(duration);
+        }
+        // Fall back to seconds field
+        self.uptime_sec.map(Duration::from_secs)
     }
 
     /// Returns the Wi-Fi information.
@@ -352,11 +373,11 @@ impl TelemetryState {
             changes.push(StateChange::FadeEnabled(fade));
         }
 
-        // Fade speed
+        // Fade duration
         if let Some(speed_value) = self.speed
-            && let Ok(speed) = FadeSpeed::new(speed_value)
+            && let Ok(duration) = FadeDuration::from_raw(speed_value)
         {
-            changes.push(StateChange::FadeSpeed(speed));
+            changes.push(StateChange::FadeDuration(duration));
         }
 
         // If we have multiple changes, wrap in a batch
@@ -369,28 +390,29 @@ impl TelemetryState {
 
     /// Extracts system information from telemetry.
     ///
-    /// This creates a [`SystemInfo`] containing the uptime and Wi-Fi signal
+    /// This creates a [`crate::state::SystemInfo`] containing the uptime and Wi-Fi signal
     /// strength from the telemetry message. The heap memory is not available
     /// in STATE telemetry (only in STATUS responses).
     ///
     /// # Examples
     ///
     /// ```
+    /// use std::time::Duration;
     /// use tasmor_lib::telemetry::TelemetryState;
     ///
     /// let json = r#"{"UptimeSec":172800,"Wifi":{"Signal":-55}}"#;
     /// let state: TelemetryState = serde_json::from_str(json).unwrap();
     ///
     /// let info = state.to_system_info();
-    /// assert_eq!(info.uptime_seconds(), Some(172800));
+    /// assert_eq!(info.uptime(), Some(Duration::from_secs(172800)));
     /// assert_eq!(info.wifi_rssi(), Some(-55));
     /// ```
     #[must_use]
     pub fn to_system_info(&self) -> crate::state::SystemInfo {
         let mut info = crate::state::SystemInfo::new();
 
-        if let Some(uptime) = self.uptime_sec {
-            info = info.with_uptime_sec(uptime);
+        if let Some(uptime) = self.uptime() {
+            info = info.with_uptime(uptime);
         }
 
         // Use signal (dBm) rather than rssi (percentage) as it's more useful
@@ -561,11 +583,21 @@ mod tests {
     }
 
     #[test]
-    fn parse_uptime() {
+    fn parse_uptime_from_string() {
         let json = r#"{"Uptime":"17T04:02:54","UptimeSec":1483374}"#;
         let state: TelemetryState = serde_json::from_str(json).unwrap();
 
-        assert_eq!(state.uptime_seconds(), Some(1_483_374));
+        // Should parse from Uptime string: 17 * 86400 + 4 * 3600 + 2 * 60 + 54 = 1483374
+        assert_eq!(state.uptime(), Some(Duration::from_secs(1_483_374)));
+    }
+
+    #[test]
+    fn parse_uptime_from_seconds_only() {
+        let json = r#"{"UptimeSec":172800}"#;
+        let state: TelemetryState = serde_json::from_str(json).unwrap();
+
+        // Falls back to UptimeSec when Uptime string is not present
+        assert_eq!(state.uptime(), Some(Duration::from_secs(172_800)));
     }
 
     #[test]
@@ -631,7 +663,7 @@ mod tests {
         let changes = state.to_state_changes();
         assert_eq!(changes.len(), 1);
         if let StateChange::Batch(batch) = &changes[0] {
-            // Should contain: power, dimmer, color_temp, hsb_color, scheme, fade_enabled, fade_speed
+            // Should contain: power, dimmer, color_temp, hsb_color, scheme, fade_enabled, fade_duration
             assert!(
                 batch.len() >= 7,
                 "Expected at least 7 changes, got {}",
@@ -648,9 +680,11 @@ mod tests {
                 .any(|c| matches!(c, StateChange::FadeEnabled(true)));
             assert!(has_fade, "FadeEnabled(true) should be in the batch");
 
-            // Verify FadeSpeed is in the batch
-            let has_speed = batch.iter().any(|c| matches!(c, StateChange::FadeSpeed(_)));
-            assert!(has_speed, "FadeSpeed should be in the batch");
+            // Verify FadeDuration is in the batch
+            let has_duration = batch
+                .iter()
+                .any(|c| matches!(c, StateChange::FadeDuration(_)));
+            assert!(has_duration, "FadeDuration should be in the batch");
         } else {
             panic!("Expected batch with multiple changes");
         }
@@ -664,7 +698,7 @@ mod tests {
         let state: TelemetryState = serde_json::from_str(json).unwrap();
 
         let info = state.to_system_info();
-        assert_eq!(info.uptime_seconds(), Some(172800));
+        assert_eq!(info.uptime(), Some(Duration::from_secs(172800)));
         assert!(info.wifi_rssi().is_none());
         assert!(info.heap().is_none());
     }
@@ -675,7 +709,7 @@ mod tests {
         let state: TelemetryState = serde_json::from_str(json).unwrap();
 
         let info = state.to_system_info();
-        assert!(info.uptime_seconds().is_none());
+        assert!(info.uptime().is_none());
         assert_eq!(info.wifi_rssi(), Some(-55));
     }
 
@@ -685,7 +719,7 @@ mod tests {
         let state: TelemetryState = serde_json::from_str(json).unwrap();
 
         let info = state.to_system_info();
-        assert_eq!(info.uptime_seconds(), Some(172800));
+        assert_eq!(info.uptime(), Some(Duration::from_secs(172800)));
         assert_eq!(info.wifi_rssi(), Some(-60)); // Uses Signal (dBm), not RSSI (%)
     }
 
@@ -700,6 +734,7 @@ mod tests {
 
     #[test]
     fn to_system_info_from_real_tasmota_payload() {
+        // 1T23:46:58 = 1 * 86400 + 23 * 3600 + 46 * 60 + 58 = 172018
         let json = r#"{
             "Time":"2025-12-24T14:24:03",
             "Uptime":"1T23:46:58",
@@ -711,7 +746,7 @@ mod tests {
         let state: TelemetryState = serde_json::from_str(json).unwrap();
 
         let info = state.to_system_info();
-        assert_eq!(info.uptime_seconds(), Some(172018));
+        assert_eq!(info.uptime(), Some(Duration::from_secs(172018)));
         assert_eq!(info.wifi_rssi(), Some(-52));
         // Note: Heap is not extracted from TelemetryState (only available via Status)
         assert!(info.heap().is_none());

@@ -5,7 +5,11 @@
 
 //! Status response parsing.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Deserializer};
+
+use crate::types::parse_uptime;
 
 /// Deserializes a value that can be either a number or a string representation of a number.
 /// This is needed because Tasmota sometimes returns numeric values as strings.
@@ -422,13 +426,45 @@ pub struct StatusParameters {
     #[serde(default)]
     pub restart_reason: String,
 
-    /// Uptime.
-    #[serde(default)]
-    pub uptime: String,
+    /// Uptime string (format: "1T23:46:58").
+    ///
+    /// Use [`uptime()`](Self::uptime) to get a [`Duration`] instead.
+    #[serde(default, rename = "Uptime")]
+    pub uptime_string: String,
 
     /// Boot count.
     #[serde(default, deserialize_with = "deserialize_string_or_number_u32_opt")]
     pub boot_count: u32,
+}
+
+impl StatusParameters {
+    /// Returns the device uptime as a [`Duration`].
+    ///
+    /// Parses the uptime string field (format "XdTHH:MM:SS").
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use tasmor_lib::response::StatusParameters;
+    ///
+    /// let json = r#"{"Uptime":"1T23:46:58","BootCount":42,"Baudrate":115200}"#;
+    /// let params: StatusParameters = serde_json::from_str(json).unwrap();
+    ///
+    /// // 1 day + 23 hours + 46 minutes + 58 seconds = 172018 seconds
+    /// assert_eq!(params.uptime(), Some(Duration::from_secs(172018)));
+    /// ```
+    ///
+    /// # Returns
+    ///
+    /// Returns `None` if the uptime string is empty or cannot be parsed.
+    #[must_use]
+    pub fn uptime(&self) -> Option<Duration> {
+        if self.uptime_string.is_empty() {
+            return None;
+        }
+        parse_uptime(&self.uptime_string).ok()
+    }
 }
 
 /// Firmware information from Status 2.

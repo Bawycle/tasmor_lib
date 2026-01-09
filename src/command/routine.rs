@@ -65,12 +65,12 @@
 use std::time::Duration;
 
 use crate::command::{
-    ColorTemperatureCommand, Command, DimmerCommand, FadeCommand, FadeSpeedCommand,
+    ColorTemperatureCommand, Command, DimmerCommand, FadeCommand, FadeDurationCommand,
     HsbColorCommand, PowerCommand, SchemeCommand, StartupFadeCommand, WakeupDurationCommand,
 };
 use crate::error::{DeviceError, Error};
 use crate::types::{
-    ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState, RgbColor, Scheme,
+    ColorTemperature, Dimmer, FadeDuration, HsbColor, PowerIndex, PowerState, RgbColor, Scheme,
     WakeupDuration,
 };
 
@@ -358,11 +358,12 @@ impl RoutineBuilder {
     /// # Examples
     ///
     /// ```
+    /// use std::time::Duration;
     /// use tasmor_lib::command::Routine;
     /// use tasmor_lib::types::WakeupDuration;
     ///
     /// let routine = Routine::builder()
-    ///     .set_wakeup_duration(WakeupDuration::from_minutes(5).unwrap())
+    ///     .set_wakeup_duration(WakeupDuration::new(Duration::from_secs(300)).unwrap())
     ///     .build()
     ///     .unwrap();
     /// ```
@@ -407,22 +408,23 @@ impl RoutineBuilder {
         self.add_command(&FadeCommand::Disable)
     }
 
-    /// Sets the fade transition speed.
+    /// Sets the fade transition duration.
     ///
     /// # Examples
     ///
     /// ```
+    /// use std::time::Duration;
     /// use tasmor_lib::command::Routine;
-    /// use tasmor_lib::types::FadeSpeed;
+    /// use tasmor_lib::types::FadeDuration;
     ///
     /// let routine = Routine::builder()
-    ///     .set_fade_speed(FadeSpeed::SLOW)
+    ///     .set_fade_duration(FadeDuration::new(Duration::from_secs(20)).unwrap())
     ///     .build()
     ///     .unwrap();
     /// ```
     #[must_use]
-    pub fn set_fade_speed(self, speed: FadeSpeed) -> Self {
-        self.add_command(&FadeSpeedCommand::Set(speed))
+    pub fn set_fade_duration(self, duration: FadeDuration) -> Self {
+        self.add_command(&FadeDurationCommand::Set(duration))
     }
 
     /// Enables fade effect at device startup.
@@ -715,7 +717,7 @@ mod tests {
     #[test]
     fn wakeup_duration_control() {
         let routine = Routine::builder()
-            .set_wakeup_duration(WakeupDuration::new(300).unwrap())
+            .set_wakeup_duration(WakeupDuration::new(Duration::from_secs(300)).unwrap())
             .build()
             .unwrap();
 
@@ -726,7 +728,7 @@ mod tests {
     fn fade_control() {
         let routine = Routine::builder()
             .enable_fade()
-            .set_fade_speed(FadeSpeed::SLOW)
+            .set_fade_duration(FadeDuration::new(Duration::from_secs(20)).unwrap())
             .build()
             .unwrap();
 
@@ -807,7 +809,7 @@ mod tests {
         let routine = Routine::builder()
             .power_on(PowerIndex::one())
             .enable_fade()
-            .set_fade_speed(FadeSpeed::SLOW)
+            .set_fade_duration(FadeDuration::new(Duration::from_secs(20)).unwrap())
             .set_dimmer(Dimmer::new(10).unwrap())
             .set_color_temperature(ColorTemperature::WARM)
             .delay(Duration::from_secs(60))

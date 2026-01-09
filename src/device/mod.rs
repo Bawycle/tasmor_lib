@@ -74,23 +74,23 @@ use std::sync::Arc;
 
 use crate::capabilities::Capabilities;
 use crate::command::{
-    ColorTemperatureCommand, Command, DimmerCommand, EnergyCommand, FadeCommand, FadeSpeedCommand,
-    HsbColorCommand, PowerCommand, SchemeCommand, StartupFadeCommand, StatusCommand,
-    WakeupDurationCommand,
+    ColorTemperatureCommand, Command, DimmerCommand, EnergyCommand, FadeCommand,
+    FadeDurationCommand, HsbColorCommand, PowerCommand, SchemeCommand, StartupFadeCommand,
+    StatusCommand, WakeupDurationCommand,
 };
 use crate::error::{DeviceError, Error};
 #[cfg(feature = "http")]
 use crate::protocol::HttpClient;
 use crate::protocol::{CommandResponse, Protocol};
 use crate::response::{
-    ColorTemperatureResponse, DimmerResponse, EnergyResponse, FadeResponse, FadeSpeedResponse,
+    ColorTemperatureResponse, DimmerResponse, EnergyResponse, FadeDurationResponse, FadeResponse,
     HsbColorResponse, PowerResponse, RgbColorResponse, SchemeResponse, StartupFadeResponse,
     StatusResponse, WakeupDurationResponse,
 };
 use crate::state::DeviceState;
 use crate::subscription::CallbackRegistry;
 use crate::types::{
-    ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState, RgbColor, Scheme,
+    ColorTemperature, Dimmer, FadeDuration, HsbColor, PowerIndex, PowerState, RgbColor, Scheme,
     WakeupDuration,
 };
 
@@ -739,11 +739,12 @@ impl<P: Protocol> Device<P> {
     /// # Examples
     ///
     /// ```no_run
+    /// use std::time::Duration;
     /// use tasmor_lib::WakeupDuration;
     ///
     /// # async fn example(device: &tasmor_lib::Device<impl tasmor_lib::protocol::Protocol>) -> tasmor_lib::Result<()> {
     /// // Set wakeup duration to 5 minutes
-    /// let duration = WakeupDuration::from_minutes(5)?;
+    /// let duration = WakeupDuration::new(Duration::from_secs(300))?;
     /// device.set_wakeup_duration(duration).await?;
     /// # Ok(())
     /// # }
@@ -825,28 +826,31 @@ impl<P: Protocol> Device<P> {
         response.parse().map_err(Error::Parse)
     }
 
-    /// Sets the fade transition speed.
+    /// Sets the fade transition duration.
     ///
-    /// Returns a typed response with the new speed value.
+    /// Returns a typed response with the new duration value.
     ///
     /// # Errors
     ///
     /// Returns error if the command fails.
-    pub async fn set_fade_speed(&self, speed: FadeSpeed) -> Result<FadeSpeedResponse, Error> {
-        let cmd = FadeSpeedCommand::Set(speed);
+    pub async fn set_fade_duration(
+        &self,
+        duration: FadeDuration,
+    ) -> Result<FadeDurationResponse, Error> {
+        let cmd = FadeDurationCommand::Set(duration);
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
     }
 
-    /// Gets the current fade speed setting.
+    /// Gets the current fade duration setting.
     ///
-    /// Returns a typed response with the current speed value.
+    /// Returns a typed response with the current duration value.
     ///
     /// # Errors
     ///
     /// Returns error if the command fails.
-    pub async fn get_fade_speed(&self) -> Result<FadeSpeedResponse, Error> {
-        let cmd = FadeSpeedCommand::Get;
+    pub async fn get_fade_duration(&self) -> Result<FadeDurationResponse, Error> {
+        let cmd = FadeDurationCommand::Get;
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
     }
@@ -1136,11 +1140,10 @@ impl<P: Protocol> Device<P> {
     /// # System Info
     ///
     /// The returned state includes system info (`wifi_rssi`, `heap`) from the
-    /// Status response. However, `uptime_seconds` is **not available** via HTTP
-    /// Status commands - it's only available in MQTT telemetry messages.
-    /// For MQTT devices, use [`TelemetryState::to_system_info()`] or
-    /// [`TelemetryMessage::to_system_info()`] to get complete system info
-    /// including uptime from periodic telemetry.
+    /// Status response. For HTTP devices, uptime is parsed from the
+    /// `StatusPRM.Uptime` string. For MQTT devices, uptime can also come
+    /// from telemetry messages. Use [`crate::state::SystemInfo::uptime()`] to get the
+    /// uptime as a [`std::time::Duration`].
     ///
     /// # Errors
     ///
@@ -1252,14 +1255,14 @@ impl<P: Protocol> Device<P> {
                 Err(e) => tracing::debug!(error = %e, "Failed to get fade state"),
             }
 
-            match self.get_fade_speed().await {
-                Ok(speed_response) => {
-                    if let Ok(speed) = speed_response.speed() {
-                        tracing::debug!(fade_speed = speed.value(), "Got fade speed");
-                        state.set_fade_speed(speed);
+            match self.get_fade_duration().await {
+                Ok(duration_response) => {
+                    if let Ok(duration) = duration_response.duration() {
+                        tracing::debug!(fade_duration = ?duration.as_duration(), "Got fade duration");
+                        state.set_fade_duration(duration);
                     }
                 }
-                Err(e) => tracing::debug!(error = %e, "Failed to get fade speed"),
+                Err(e) => tracing::debug!(error = %e, "Failed to get fade duration"),
             }
         }
 
@@ -1267,6 +1270,14 @@ impl<P: Protocol> Device<P> {
         match self.status().await {
             Ok(status_response) => {
                 let mut sys_info = crate::state::SystemInfo::new();
+
+                // Get uptime from StatusPRM
+                if let Some(prm) = &status_response.status_prm
+                    && let Some(uptime) = prm.uptime()
+                {
+                    sys_info = sys_info.with_uptime(uptime);
+                    tracing::debug!(uptime_secs = uptime.as_secs(), "Got uptime");
+                }
 
                 // Get heap from StatusMEM
                 if let Some(mem) = &status_response.memory {
@@ -1279,9 +1290,6 @@ impl<P: Protocol> Device<P> {
                     sys_info = sys_info.with_wifi_rssi(net.rssi);
                     tracing::debug!(rssi = net.rssi, "Got WiFi RSSI");
                 }
-
-                // Note: UptimeSec is not available in Status 0, only uptime string
-                // in StatusPRM. For accurate uptime, rely on telemetry.
 
                 if !sys_info.is_empty() {
                     state.set_system_info(sys_info);

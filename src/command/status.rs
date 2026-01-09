@@ -7,7 +7,10 @@
 //!
 //! This module provides commands for querying device status information.
 
+use std::time::Duration;
+
 use crate::command::Command;
+use crate::protocol::ResponseSpec;
 
 /// Type of status information to query.
 ///
@@ -183,6 +186,9 @@ impl Default for StatusCommand {
     }
 }
 
+/// Default timeout for collecting multi-message MQTT responses.
+const MULTI_RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
+
 impl Command for StatusCommand {
     fn name(&self) -> String {
         "Status".to_string()
@@ -192,6 +198,15 @@ impl Command for StatusCommand {
         match self.status_type {
             StatusType::Abbreviated => None,
             other => Some(other.value().to_string()),
+        }
+    }
+
+    fn response_spec(&self) -> ResponseSpec {
+        match self.status_type {
+            // Status 0 returns multiple MQTT messages
+            StatusType::All => ResponseSpec::status_all(MULTI_RESPONSE_TIMEOUT),
+            // All other status types return a single message
+            _ => ResponseSpec::Single,
         }
     }
 }

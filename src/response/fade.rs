@@ -10,7 +10,7 @@
 use serde::Deserialize;
 
 use crate::error::ParseError;
-use crate::types::FadeSpeed;
+use crate::types::FadeDuration;
 
 /// Response from fade enable/disable commands.
 ///
@@ -64,40 +64,40 @@ impl FadeResponse {
     }
 }
 
-/// Response from fade speed (Speed) commands.
+/// Response from fade duration (Speed) commands.
 ///
-/// Tasmota returns `{"Speed":X}` where X is 1-40.
+/// Tasmota returns `{"Speed":X}` where X is 1-40 (representing 0.5-20 seconds).
 ///
 /// # Examples
 ///
 /// ```
-/// use tasmor_lib::response::FadeSpeedResponse;
+/// use tasmor_lib::response::FadeDurationResponse;
 ///
 /// let json = r#"{"Speed":20}"#;
-/// let response: FadeSpeedResponse = serde_json::from_str(json).unwrap();
-/// assert_eq!(response.speed_value(), 20);
-/// assert!(response.speed().is_ok());
+/// let response: FadeDurationResponse = serde_json::from_str(json).unwrap();
+/// assert_eq!(response.raw_value(), 20);
+/// assert!(response.duration().is_ok());
 /// ```
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct FadeSpeedResponse {
+pub struct FadeDurationResponse {
     speed: u8,
 }
 
-impl FadeSpeedResponse {
+impl FadeDurationResponse {
     /// Returns the raw speed value (1-40).
     #[must_use]
-    pub fn speed_value(&self) -> u8 {
+    pub fn raw_value(&self) -> u8 {
         self.speed
     }
 
-    /// Returns the speed as a validated `FadeSpeed` type.
+    /// Returns the duration as a validated `FadeDuration` type.
     ///
     /// # Errors
     ///
     /// Returns error if the value is outside the valid range (1-40).
-    pub fn speed(&self) -> Result<FadeSpeed, ParseError> {
-        FadeSpeed::new(self.speed).map_err(|_| ParseError::InvalidValue {
+    pub fn duration(&self) -> Result<FadeDuration, ParseError> {
+        FadeDuration::from_raw(self.speed).map_err(|_| ParseError::InvalidValue {
             field: "Speed".to_string(),
             message: format!("expected 1-40, got {}", self.speed),
         })
@@ -182,19 +182,19 @@ mod tests {
     }
 
     #[test]
-    fn fade_speed_response() {
+    fn fade_duration_response() {
         let json = r#"{"Speed":20}"#;
-        let response: FadeSpeedResponse = serde_json::from_str(json).unwrap();
-        assert_eq!(response.speed_value(), 20);
-        assert!(response.speed().is_ok());
+        let response: FadeDurationResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(response.raw_value(), 20);
+        assert!(response.duration().is_ok());
     }
 
     #[test]
-    fn fade_speed_invalid() {
+    fn fade_duration_invalid() {
         // Value outside range should fail validation
         let json = r#"{"Speed":50}"#;
-        let response: FadeSpeedResponse = serde_json::from_str(json).unwrap();
-        assert!(response.speed().is_err());
+        let response: FadeDurationResponse = serde_json::from_str(json).unwrap();
+        assert!(response.duration().is_err());
     }
 
     #[test]

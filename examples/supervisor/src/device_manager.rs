@@ -640,7 +640,8 @@ impl DeviceManager {
 
     /// Sets the wakeup duration (1-3000 seconds).
     pub async fn set_wakeup_duration(&self, config_id: Uuid, seconds: u16) -> Result<(), String> {
-        let duration = tasmor_lib::WakeupDuration::new(seconds).map_err(|e| e.to_string())?;
+        let duration = tasmor_lib::WakeupDuration::new(std::time::Duration::from_secs(u64::from(seconds)))
+            .map_err(|e| e.to_string())?;
 
         let devices = self.devices.read().await;
         let entry = devices.get(&config_id).ok_or("Device not found")?;
@@ -704,9 +705,13 @@ impl DeviceManager {
         Ok(())
     }
 
-    /// Sets the fade transition speed (1-40).
-    pub async fn set_fade_speed(&self, config_id: Uuid, speed: u8) -> Result<(), String> {
-        let fade_speed = tasmor_lib::FadeSpeed::new(speed).map_err(|e| e.to_string())?;
+    /// Sets the fade transition duration (1-40, each unit = 0.5 seconds).
+    pub async fn set_fade_duration(&self, config_id: Uuid, speed: u8) -> Result<(), String> {
+        // Convert raw speed value to duration (speed * 0.5 seconds)
+        let duration_ms = u64::from(speed) * 500;
+        let fade_duration =
+            tasmor_lib::FadeDuration::new(std::time::Duration::from_millis(duration_ms))
+                .map_err(|e| e.to_string())?;
 
         let devices = self.devices.read().await;
         let entry = devices.get(&config_id).ok_or("Device not found")?;
@@ -714,13 +719,13 @@ impl DeviceManager {
         match &entry.handle {
             DeviceHandle::Http(device) => {
                 device
-                    .set_fade_speed(fade_speed)
+                    .set_fade_duration(fade_duration)
                     .await
                     .map_err(|e| e.to_string())?;
             }
             DeviceHandle::Mqtt { device, .. } => {
                 device
-                    .set_fade_speed(fade_speed)
+                    .set_fade_duration(fade_duration)
                     .await
                     .map_err(|e| e.to_string())?;
             }
@@ -858,14 +863,14 @@ impl DeviceManager {
             }
         }
 
-        // Query fade speed if supported
-        let fade_speed_result = match &entry.handle {
-            DeviceHandle::Http(device) => device.get_fade_speed().await,
-            DeviceHandle::Mqtt { device, .. } => device.get_fade_speed().await,
+        // Query fade duration if supported
+        let fade_duration_result = match &entry.handle {
+            DeviceHandle::Http(device) => device.get_fade_duration().await,
+            DeviceHandle::Mqtt { device, .. } => device.get_fade_duration().await,
         };
-        if let Ok(speed_response) = fade_speed_result {
-            if let Ok(speed) = speed_response.speed() {
-                state.set_fade_speed(speed);
+        if let Ok(duration_response) = fade_duration_result {
+            if let Ok(duration) = duration_response.duration() {
+                state.set_fade_duration(duration);
             }
         }
 

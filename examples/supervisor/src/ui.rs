@@ -396,16 +396,17 @@ fn http_device_card(
                         response.fade_toggle_clicked = true;
                     }
                     if ui.selectable_label(!fade_on, "Off").clicked() {
-                        response.fade_speed_changed = Some(0);
+                        response.fade_duration_changed = Some(0);
                     }
 
-                    ui.label("Speed:");
-                    let mut speed_value = f32::from(device.fade_speed_value().unwrap_or(10));
-                    let speed_response = ui.add(egui::Slider::new(&mut speed_value, 1.0..=40.0));
-                    if speed_response.drag_stopped() || speed_response.lost_focus() {
+                    ui.label("Duration:");
+                    let mut duration_value = f32::from(device.fade_duration_value().unwrap_or(10));
+                    let duration_response =
+                        ui.add(egui::Slider::new(&mut duration_value, 1.0..=40.0));
+                    if duration_response.drag_stopped() || duration_response.lost_focus() {
                         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                        let speed = speed_value as u8;
-                        response.fade_speed_changed = Some(speed);
+                        let duration = duration_value as u8;
+                        response.fade_duration_changed = Some(duration);
                     }
                 });
             }
@@ -741,17 +742,18 @@ fn mqtt_device_card(ui: &mut Ui, device: &DeviceState) -> DeviceCardResponse {
                             response.fade_toggle_clicked = true;
                         }
                         if ui.selectable_label(!fade_on, "Off").clicked() {
-                            response.fade_speed_changed = Some(0);
+                            response.fade_duration_changed = Some(0);
                         }
 
-                        ui.label("Speed:");
-                        let mut speed_value = f32::from(device.fade_speed_value().unwrap_or(10));
-                        let speed_response =
-                            ui.add(egui::Slider::new(&mut speed_value, 1.0..=40.0));
-                        if speed_response.drag_stopped() || speed_response.lost_focus() {
+                        ui.label("Duration:");
+                        let mut duration_value =
+                            f32::from(device.fade_duration_value().unwrap_or(10));
+                        let duration_response =
+                            ui.add(egui::Slider::new(&mut duration_value, 1.0..=40.0));
+                        if duration_response.drag_stopped() || duration_response.lost_focus() {
                             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                            let speed = speed_value as u8;
-                            response.fade_speed_changed = Some(speed);
+                            let duration = duration_value as u8;
+                            response.fade_duration_changed = Some(duration);
                         }
                     });
                 }
@@ -812,8 +814,8 @@ pub struct DeviceCardResponse {
     pub rgb_color_changed: Option<String>,
     /// Fade toggle button was clicked
     pub fade_toggle_clicked: bool,
-    /// Fade speed changed (1-40)
-    pub fade_speed_changed: Option<u8>,
+    /// Fade duration changed (1-40)
+    pub fade_duration_changed: Option<u8>,
 }
 
 /// Renders the add device dialog.

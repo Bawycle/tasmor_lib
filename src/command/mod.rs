@@ -18,7 +18,7 @@
 //! | [`HsbColorCommand`] | Set RGB color in HSB format | Red, Blue |
 //! | [`SchemeCommand`] | Set light scheme/effect (0-4) | Wakeup, Random |
 //! | [`WakeupDurationCommand`] | Set wakeup duration (1-3000s) | 5 minutes |
-//! | [`FadeSpeedCommand`] | Set fade transition speed (1-40) | Fast, Slow |
+//! | [`FadeDurationCommand`] | Set fade transition duration (0.5-20s) | 2s, 10s |
 //! | [`FadeCommand`] | Enable/disable fade transitions | On, Off |
 //! | [`EnergyCommand`] | Query energy consumption | Get, Reset |
 //! | [`StatusCommand`] | Query device status | Status 0-10 |
@@ -71,12 +71,14 @@ mod status;
 
 pub use energy::EnergyCommand;
 pub use light::{
-    ColorTemperatureCommand, DimmerCommand, FadeSpeedCommand, HsbColorCommand, StateCommand,
+    ColorTemperatureCommand, DimmerCommand, FadeDurationCommand, HsbColorCommand, StateCommand,
 };
 pub use power::{FadeCommand, PowerCommand, StartupFadeCommand};
 pub use routine::{MAX_ROUTINE_STEPS, Routine, RoutineBuilder};
 pub use scheme::{SchemeCommand, WakeupDurationCommand};
 pub use status::{StatusCommand, StatusType};
+
+use crate::protocol::ResponseSpec;
 
 /// A command that can be sent to a Tasmota device.
 ///
@@ -118,6 +120,17 @@ pub trait Command {
     /// Returns empty string for query commands.
     fn mqtt_payload(&self) -> String {
         self.payload().unwrap_or_default()
+    }
+
+    /// Returns the response specification for this command.
+    ///
+    /// Most commands expect a single response. Commands that return multiple
+    /// MQTT messages (like `Status 0`) should override this to specify
+    /// which topic suffixes to expect.
+    ///
+    /// The default implementation returns `ResponseSpec::Single`.
+    fn response_spec(&self) -> ResponseSpec {
+        ResponseSpec::Single
     }
 }
 

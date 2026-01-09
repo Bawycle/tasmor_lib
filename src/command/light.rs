@@ -9,7 +9,7 @@
 //! temperature, HSB color, and transition speed.
 
 use crate::command::Command;
-use crate::types::{ColorTemperature, Dimmer, FadeSpeed, HsbColor};
+use crate::types::{ColorTemperature, Dimmer, FadeDuration, HsbColor};
 
 /// Command to control dimmer/brightness level.
 ///
@@ -207,44 +207,45 @@ impl Command for HsbColorCommand {
     }
 }
 
-/// Command to control fade transition speed.
+/// Command to control fade transition duration.
 ///
 /// # Examples
 ///
 /// ```
-/// use tasmor_lib::command::{Command, FadeSpeedCommand};
-/// use tasmor_lib::types::FadeSpeed;
+/// use std::time::Duration;
+/// use tasmor_lib::command::{Command, FadeDurationCommand};
+/// use tasmor_lib::types::FadeDuration;
 ///
-/// // Set medium speed
-/// let cmd = FadeSpeedCommand::Set(FadeSpeed::MEDIUM);
+/// // Set duration to 10 seconds
+/// let cmd = FadeDurationCommand::Set(FadeDuration::new(Duration::from_secs(10)).unwrap());
 /// assert_eq!(cmd.name(), "Speed");
 /// assert_eq!(cmd.payload(), Some("20".to_string()));
 ///
-/// // Increase speed (slower transitions)
-/// let slower = FadeSpeedCommand::Increase;
+/// // Increase duration (slower transitions)
+/// let slower = FadeDurationCommand::Increase;
 /// assert_eq!(slower.payload(), Some("+".to_string()));
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FadeSpeedCommand {
-    /// Query the current speed setting.
+pub enum FadeDurationCommand {
+    /// Query the current duration setting.
     Get,
-    /// Set the speed to a specific value.
-    Set(FadeSpeed),
-    /// Increase speed value (slower transitions).
+    /// Set the duration to a specific value.
+    Set(FadeDuration),
+    /// Increase duration (slower transitions).
     Increase,
-    /// Decrease speed value (faster transitions).
+    /// Decrease duration (faster transitions).
     Decrease,
 }
 
-impl FadeSpeedCommand {
-    /// Creates a command to set a specific speed.
+impl FadeDurationCommand {
+    /// Creates a command to set a specific duration.
     #[must_use]
-    pub const fn set(value: FadeSpeed) -> Self {
+    pub const fn set(value: FadeDuration) -> Self {
         Self::Set(value)
     }
 }
 
-impl Command for FadeSpeedCommand {
+impl Command for FadeDurationCommand {
     fn name(&self) -> String {
         "Speed".to_string()
     }
@@ -252,7 +253,7 @@ impl Command for FadeSpeedCommand {
     fn payload(&self) -> Option<String> {
         match self {
             Self::Get => None,
-            Self::Set(speed) => Some(speed.value().to_string()),
+            Self::Set(duration) => Some(duration.value().to_string()),
             Self::Increase => Some("+".to_string()),
             Self::Decrease => Some("-".to_string()),
         }
@@ -266,7 +267,7 @@ impl Command for FadeSpeedCommand {
 /// - Dimmer level
 /// - Color temperature (CT)
 /// - HSB color
-/// - Fade/Speed settings
+/// - Fade/Duration settings
 ///
 /// This is useful for synchronizing local state with the device,
 /// especially after establishing a connection.
@@ -295,6 +296,8 @@ impl Command for StateCommand {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
     #[test]
@@ -361,16 +364,22 @@ mod tests {
     }
 
     #[test]
-    fn fade_speed_command_set() {
-        let cmd = FadeSpeedCommand::Set(FadeSpeed::SLOW);
+    fn fade_duration_command_set() {
+        let cmd = FadeDurationCommand::Set(FadeDuration::new(Duration::from_secs(20)).unwrap());
         assert_eq!(cmd.name(), "Speed");
         assert_eq!(cmd.payload(), Some("40".to_string()));
     }
 
     #[test]
-    fn fade_speed_command_adjustments() {
-        assert_eq!(FadeSpeedCommand::Increase.payload(), Some("+".to_string()));
-        assert_eq!(FadeSpeedCommand::Decrease.payload(), Some("-".to_string()));
+    fn fade_duration_command_adjustments() {
+        assert_eq!(
+            FadeDurationCommand::Increase.payload(),
+            Some("+".to_string())
+        );
+        assert_eq!(
+            FadeDurationCommand::Decrease.payload(),
+            Some("-".to_string())
+        );
     }
 
     #[test]

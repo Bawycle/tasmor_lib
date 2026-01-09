@@ -55,7 +55,7 @@ use crate::error::ParseError;
 /// | `HSBColor` | `String` | Color in HSB format ("hue,sat,bri") |
 /// | `CT` | `u16` | Color temperature in mireds |
 /// | `Fade` | `String` | Fade enabled ("ON" or "OFF") |
-/// | `Speed` | `u8` | Fade speed (1-40) |
+/// | `Speed` | `u8` | Fade duration raw value (1-40) |
 ///
 /// # Examples
 ///
