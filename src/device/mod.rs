@@ -74,23 +74,23 @@ use std::sync::Arc;
 
 use crate::capabilities::Capabilities;
 use crate::command::{
-    ColorTemperatureCommand, Command, DimmerCommand, EnergyCommand, FadeCommand, FadeSpeedCommand,
-    HsbColorCommand, PowerCommand, SchemeCommand, StartupFadeCommand, StatusCommand,
-    WakeupDurationCommand,
+    ColorTemperatureCommand, Command, DimmerCommand, EnergyCommand, FadeCommand,
+    FadeDurationCommand, HsbColorCommand, PowerCommand, SchemeCommand, StartupFadeCommand,
+    StatusCommand, WakeupDurationCommand,
 };
 use crate::error::{DeviceError, Error};
 #[cfg(feature = "http")]
 use crate::protocol::HttpClient;
 use crate::protocol::{CommandResponse, Protocol};
 use crate::response::{
-    ColorTemperatureResponse, DimmerResponse, EnergyResponse, FadeResponse, FadeSpeedResponse,
+    ColorTemperatureResponse, DimmerResponse, EnergyResponse, FadeDurationResponse, FadeResponse,
     HsbColorResponse, PowerResponse, RgbColorResponse, SchemeResponse, StartupFadeResponse,
     StatusResponse, WakeupDurationResponse,
 };
 use crate::state::DeviceState;
 use crate::subscription::CallbackRegistry;
 use crate::types::{
-    ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState, RgbColor, Scheme,
+    ColorTemperature, Dimmer, FadeDuration, HsbColor, PowerIndex, PowerState, RgbColor, Scheme,
     WakeupDuration,
 };
 
@@ -739,11 +739,12 @@ impl<P: Protocol> Device<P> {
     /// # Examples
     ///
     /// ```no_run
+    /// use std::time::Duration;
     /// use tasmor_lib::WakeupDuration;
     ///
     /// # async fn example(device: &tasmor_lib::Device<impl tasmor_lib::protocol::Protocol>) -> tasmor_lib::Result<()> {
     /// // Set wakeup duration to 5 minutes
-    /// let duration = WakeupDuration::from_minutes(5)?;
+    /// let duration = WakeupDuration::new(Duration::from_secs(300))?;
     /// device.set_wakeup_duration(duration).await?;
     /// # Ok(())
     /// # }
@@ -825,28 +826,31 @@ impl<P: Protocol> Device<P> {
         response.parse().map_err(Error::Parse)
     }
 
-    /// Sets the fade transition speed.
+    /// Sets the fade transition duration.
     ///
-    /// Returns a typed response with the new speed value.
+    /// Returns a typed response with the new duration value.
     ///
     /// # Errors
     ///
     /// Returns error if the command fails.
-    pub async fn set_fade_speed(&self, speed: FadeSpeed) -> Result<FadeSpeedResponse, Error> {
-        let cmd = FadeSpeedCommand::Set(speed);
+    pub async fn set_fade_duration(
+        &self,
+        duration: FadeDuration,
+    ) -> Result<FadeDurationResponse, Error> {
+        let cmd = FadeDurationCommand::Set(duration);
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
     }
 
-    /// Gets the current fade speed setting.
+    /// Gets the current fade duration setting.
     ///
-    /// Returns a typed response with the current speed value.
+    /// Returns a typed response with the current duration value.
     ///
     /// # Errors
     ///
     /// Returns error if the command fails.
-    pub async fn get_fade_speed(&self) -> Result<FadeSpeedResponse, Error> {
-        let cmd = FadeSpeedCommand::Get;
+    pub async fn get_fade_duration(&self) -> Result<FadeDurationResponse, Error> {
+        let cmd = FadeDurationCommand::Get;
         let response = self.send_command(&cmd).await?;
         response.parse().map_err(Error::Parse)
     }
@@ -1251,14 +1255,14 @@ impl<P: Protocol> Device<P> {
                 Err(e) => tracing::debug!(error = %e, "Failed to get fade state"),
             }
 
-            match self.get_fade_speed().await {
-                Ok(speed_response) => {
-                    if let Ok(speed) = speed_response.speed() {
-                        tracing::debug!(fade_speed = speed.value(), "Got fade speed");
-                        state.set_fade_speed(speed);
+            match self.get_fade_duration().await {
+                Ok(duration_response) => {
+                    if let Ok(duration) = duration_response.duration() {
+                        tracing::debug!(fade_duration = ?duration.as_duration(), "Got fade duration");
+                        state.set_fade_duration(duration);
                     }
                 }
-                Err(e) => tracing::debug!(error = %e, "Failed to get fade speed"),
+                Err(e) => tracing::debug!(error = %e, "Failed to get fade duration"),
             }
         }
 

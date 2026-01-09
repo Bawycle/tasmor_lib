@@ -81,7 +81,7 @@ impl WakeupDurationResponse {
     ///
     /// Returns `ParseError` if the duration value is invalid.
     pub fn duration(&self) -> Result<WakeupDuration, ParseError> {
-        WakeupDuration::new(self.wakeup_duration).map_err(|_| ParseError::InvalidValue {
+        WakeupDuration::from_raw(self.wakeup_duration).map_err(|_| ParseError::InvalidValue {
             field: "WakeupDuration".to_string(),
             message: format!("invalid wakeup duration: {}", self.wakeup_duration),
         })

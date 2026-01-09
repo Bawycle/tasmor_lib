@@ -21,7 +21,7 @@
 //! | [`SchemeResponse`] | `Scheme` | Light scheme/effect (0-4) |
 //! | [`WakeupDurationResponse`] | `WakeupDuration` | Wakeup effect duration |
 //! | [`FadeResponse`] | `Fade` | Fade transition enable/disable |
-//! | [`FadeSpeedResponse`] | `Speed` | Fade transition speed (1-40) |
+//! | [`FadeDurationResponse`] | `Speed` | Fade transition duration (0.5-20s) |
 //! | [`StartupFadeResponse`] | `SetOption91` | Fade at startup setting |
 //! | [`EnergyResponse`] | `Status 10` | Power consumption data |
 //! | [`StatusResponse`] | `Status 0` | Full device status |
@@ -56,7 +56,7 @@ mod status;
 pub use color::{ColorTemperatureResponse, HsbColorResponse};
 pub use dimmer::DimmerResponse;
 pub use energy::EnergyResponse;
-pub use fade::{FadeResponse, FadeSpeedResponse, StartupFadeResponse};
+pub use fade::{FadeDurationResponse, FadeResponse, StartupFadeResponse};
 pub use power::PowerResponse;
 pub use rgb_color::RgbColorResponse;
 pub use routine::RoutineResponse;

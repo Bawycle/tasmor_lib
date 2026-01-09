@@ -13,7 +13,7 @@ use serde::de::{self, Deserializer};
 use crate::error::ParseError;
 use crate::state::StateChange;
 use crate::types::{
-    ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerState, Scheme, parse_uptime,
+    ColorTemperature, Dimmer, FadeDuration, HsbColor, PowerState, Scheme, parse_uptime,
 };
 
 /// Deserializes a boolean from either "ON"/"OFF" string or 0/1 integer.
@@ -373,11 +373,11 @@ impl TelemetryState {
             changes.push(StateChange::FadeEnabled(fade));
         }
 
-        // Fade speed
+        // Fade duration
         if let Some(speed_value) = self.speed
-            && let Ok(speed) = FadeSpeed::new(speed_value)
+            && let Ok(duration) = FadeDuration::from_raw(speed_value)
         {
-            changes.push(StateChange::FadeSpeed(speed));
+            changes.push(StateChange::FadeDuration(duration));
         }
 
         // If we have multiple changes, wrap in a batch
@@ -663,7 +663,7 @@ mod tests {
         let changes = state.to_state_changes();
         assert_eq!(changes.len(), 1);
         if let StateChange::Batch(batch) = &changes[0] {
-            // Should contain: power, dimmer, color_temp, hsb_color, scheme, fade_enabled, fade_speed
+            // Should contain: power, dimmer, color_temp, hsb_color, scheme, fade_enabled, fade_duration
             assert!(
                 batch.len() >= 7,
                 "Expected at least 7 changes, got {}",
@@ -680,9 +680,11 @@ mod tests {
                 .any(|c| matches!(c, StateChange::FadeEnabled(true)));
             assert!(has_fade, "FadeEnabled(true) should be in the batch");
 
-            // Verify FadeSpeed is in the batch
-            let has_speed = batch.iter().any(|c| matches!(c, StateChange::FadeSpeed(_)));
-            assert!(has_speed, "FadeSpeed should be in the batch");
+            // Verify FadeDuration is in the batch
+            let has_duration = batch
+                .iter()
+                .any(|c| matches!(c, StateChange::FadeDuration(_)));
+            assert!(has_duration, "FadeDuration should be in the batch");
         } else {
             panic!("Expected batch with multiple changes");
         }

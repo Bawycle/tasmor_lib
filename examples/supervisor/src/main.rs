@@ -498,10 +498,10 @@ impl TasmotaSupervisor {
             }
         }
 
-        // Fade speed changed (0 means disable fade)
-        if let Some(speed) = response.fade_speed_changed {
+        // Fade duration changed (0 means disable fade)
+        if let Some(duration) = response.fade_duration_changed {
             let dm = &self.device_manager;
-            if speed == 0 {
+            if duration == 0 {
                 match rt.block_on(dm.disable_fade(device_id)) {
                     Ok(()) => {
                         if is_http {
@@ -523,14 +523,14 @@ impl TasmotaSupervisor {
                     }
                 }
             } else {
-                match rt.block_on(dm.set_fade_speed(device_id, speed)) {
+                match rt.block_on(dm.set_fade_duration(device_id, duration)) {
                     Ok(()) => {
                         if is_http {
                             self.log_to_console(
                                 device_id,
                                 ConsoleEntry::success(
-                                    &format!("set_fade_speed({speed})"),
-                                    &format!("Speed = {speed}"),
+                                    &format!("set_fade_duration({duration})"),
+                                    &format!("Duration = {duration}"),
                                 ),
                             );
                         }
@@ -539,7 +539,10 @@ impl TasmotaSupervisor {
                         if is_http {
                             self.log_to_console(
                                 device_id,
-                                ConsoleEntry::error(&format!("set_fade_speed({speed})"), &e),
+                                ConsoleEntry::error(
+                                    &format!("set_fade_duration({duration})"),
+                                    &e,
+                                ),
                             );
                         } else {
                             self.error_message = Some(e);
@@ -894,6 +897,8 @@ mod tests {
             add_dialog_state: AddDeviceDialogState::new(),
             edit_dialog_state: None,
             error_message: None,
+            broker_count: 0,
+            subscription_count: 0,
         }
     }
 

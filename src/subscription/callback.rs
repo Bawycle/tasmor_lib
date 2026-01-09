@@ -436,7 +436,7 @@ impl CallbackRegistry {
             }
             StateChange::WakeupDuration(_)
             | StateChange::FadeEnabled(_)
-            | StateChange::FadeSpeed(_) => {
+            | StateChange::FadeDuration(_) => {
                 // These have no specific callbacks; changes are captured
                 // by generic state_changed callbacks
             }

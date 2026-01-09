@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING: Removed `uptime_seconds()`** - Use `uptime()` instead, which returns `std::time::Duration`
 - **BREAKING: Removed `TelemetryState::uptime_string()`** - Use `uptime()` instead for a typed `Duration` value
 - **BREAKING: `Command` trait extended** - Added `response_spec()` method. Existing implementations remain compatible thanks to the default implementation
+- **BREAKING: `WakeupDuration::new()` now takes `Duration`** - Use `WakeupDuration::new(Duration::from_secs(300))` instead of `WakeupDuration::new(300)`. The duration is rounded to the nearest second. Range: 1-3000 seconds
+- **BREAKING: Removed `WakeupDuration::from_minutes()`** - Use `WakeupDuration::new(Duration::from_secs(minutes * 60))` instead
+- **BREAKING: `FadeSpeed` renamed to `FadeDuration`** - Renamed for consistency with `WakeupDuration`. Also renamed: `FadeSpeedCommand` → `FadeDurationCommand`, `FadeSpeedResponse` → `FadeDurationResponse`, `Device::set_fade_speed()` → `set_fade_duration()`, `Device::get_fade_speed()` → `get_fade_duration()`
+- **BREAKING: `FadeDuration::new()` now takes `Duration`** - Use `FadeDuration::new(Duration::from_secs(2))` instead of `FadeSpeed::new(4)`. The duration is rounded to the nearest 0.5 second. Range: 0.5-20 seconds
+- **BREAKING: Removed `FadeSpeed::FAST`, `MEDIUM`, `SLOW` constants** - Use `FadeDuration::new(Duration::...)` instead
 
 ### Fixed
 
@@ -67,7 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Command routines** - Execute multiple commands as a single atomic operation with optional delays between steps (max 30 steps). Supports power, lighting, fade, and scheme commands
 - **MQTT device discovery** - Automatically discover all Tasmota devices connected to an MQTT broker
 - **Device disconnect** - Properly close device connections to release resources
-- **Fade state tracking** - Initial device state now includes fade enabled/disabled status and fade speed for light devices
+- **Fade state tracking** - Initial device state now includes fade enabled/disabled status and fade duration for light devices
 
 ### Changed
 

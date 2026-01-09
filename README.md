@@ -30,7 +30,7 @@ A modern, type-safe Rust library for controlling [Tasmota](https://tasmota.githu
 | Lighting | Dimmer, color temperature (CCT), HSB color control |
 | Energy monitoring | Power, voltage, current, energy consumption tracking |
 | Device status | Query firmware, network, and sensor information |
-| Transitions | Fade effects and speed control |
+| Transitions | Fade effects and duration control |
 | Light schemes | Effects (wakeup, color cycling, random) |
 | RGB colors | Hex color input (#RRGGBB) with HSB conversion |
 | Routines | Execute multiple commands atomically via Backlog0 |

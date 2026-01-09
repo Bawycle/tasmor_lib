@@ -5,12 +5,14 @@
 
 //! Integration tests for HTTP protocol using wiremock.
 
+use std::time::Duration;
+
 use tasmor_lib::command::{
-    ColorTemperatureCommand, DimmerCommand, EnergyCommand, FadeCommand, FadeSpeedCommand,
+    ColorTemperatureCommand, DimmerCommand, EnergyCommand, FadeCommand, FadeDurationCommand,
     HsbColorCommand, PowerCommand, StartupFadeCommand, StatusCommand,
 };
 use tasmor_lib::protocol::{HttpClient, HttpClientBuilder, Protocol};
-use tasmor_lib::types::{ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState};
+use tasmor_lib::types::{ColorTemperature, Dimmer, FadeDuration, HsbColor, PowerIndex, PowerState};
 use tasmor_lib::{Capabilities, Device};
 use wiremock::matchers::{method, query_param, query_param_contains};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -256,7 +258,7 @@ mod http_client {
             .build()
             .unwrap();
 
-        let cmd = FadeSpeedCommand::Set(FadeSpeed::new(20).unwrap());
+        let cmd = FadeDurationCommand::Set(FadeDuration::new(Duration::from_secs(10)).unwrap());
         let response = client.send_command(&cmd).await.unwrap();
 
         assert!(response.body().contains("20"));
@@ -751,7 +753,7 @@ mod device_light_commands {
     }
 
     #[tokio::test]
-    async fn set_fade_speed() {
+    async fn set_fade_duration() {
         let mock_server = MockServer::start().await;
 
         Mock::given(method("GET"))
@@ -764,7 +766,7 @@ mod device_light_commands {
 
         let device = create_light_device(&mock_server).await;
         device
-            .set_fade_speed(FadeSpeed::new(15).unwrap())
+            .set_fade_duration(FadeDuration::new(Duration::from_millis(7500)).unwrap())
             .await
             .unwrap();
     }

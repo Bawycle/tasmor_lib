@@ -305,10 +305,10 @@ impl ManagedDevice {
         self.state.fade_enabled()
     }
 
-    /// Returns the fade speed value (1-40).
+    /// Returns the fade duration raw value (1-40).
     #[must_use]
-    pub fn fade_speed_value(&self) -> Option<u8> {
-        self.state.fade_speed().map(|s| s.value())
+    pub fn fade_duration_value(&self) -> Option<u8> {
+        self.state.fade_duration().map(|d| d.value())
     }
 }
 

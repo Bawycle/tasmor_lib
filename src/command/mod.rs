@@ -18,7 +18,7 @@
 //! | [`HsbColorCommand`] | Set RGB color in HSB format | Red, Blue |
 //! | [`SchemeCommand`] | Set light scheme/effect (0-4) | Wakeup, Random |
 //! | [`WakeupDurationCommand`] | Set wakeup duration (1-3000s) | 5 minutes |
-//! | [`FadeSpeedCommand`] | Set fade transition speed (1-40) | Fast, Slow |
+//! | [`FadeDurationCommand`] | Set fade transition duration (0.5-20s) | 2s, 10s |
 //! | [`FadeCommand`] | Enable/disable fade transitions | On, Off |
 //! | [`EnergyCommand`] | Query energy consumption | Get, Reset |
 //! | [`StatusCommand`] | Query device status | Status 0-10 |
@@ -71,7 +71,7 @@ mod status;
 
 pub use energy::EnergyCommand;
 pub use light::{
-    ColorTemperatureCommand, DimmerCommand, FadeSpeedCommand, HsbColorCommand, StateCommand,
+    ColorTemperatureCommand, DimmerCommand, FadeDurationCommand, HsbColorCommand, StateCommand,
 };
 pub use power::{FadeCommand, PowerCommand, StartupFadeCommand};
 pub use routine::{MAX_ROUTINE_STEPS, Routine, RoutineBuilder};

@@ -271,7 +271,7 @@ pub use command::{Routine, RoutineBuilder};
 
 // Response types (returned by Device methods)
 pub use response::{
-    ColorTemperatureResponse, DimmerResponse, EnergyResponse, FadeResponse, FadeSpeedResponse,
+    ColorTemperatureResponse, DimmerResponse, EnergyResponse, FadeDurationResponse, FadeResponse,
     HsbColorResponse, PowerResponse, RgbColorResponse, RoutineResponse, SchemeResponse,
     StartupFadeResponse, StatusResponse, WakeupDurationResponse,
 };
@@ -282,6 +282,6 @@ pub use subscription::{Subscribable, SubscriptionId};
 
 // Value types (parameters for commands and state)
 pub use types::{
-    ColorTemperature, DateTimeParseError, Dimmer, FadeSpeed, HsbColor, PowerIndex, PowerState,
+    ColorTemperature, DateTimeParseError, Dimmer, FadeDuration, HsbColor, PowerIndex, PowerState,
     RgbColor, Scheme, TasmotaDateTime, WakeupDuration,
 };

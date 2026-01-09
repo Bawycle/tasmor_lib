@@ -18,7 +18,7 @@
 //! - [`StateChange::Scheme`] - Light scheme/effect changes
 //! - [`StateChange::WakeupDuration`] - Wakeup effect duration changes
 //! - [`StateChange::FadeEnabled`] - Fade transition enable/disable
-//! - [`StateChange::FadeSpeed`] - Fade transition speed changes
+//! - [`StateChange::FadeDuration`] - Fade transition speed changes
 //! - [`StateChange::Energy`] - Energy monitoring updates
 //! - [`StateChange::Batch`] - Multiple changes grouped together
 //!
@@ -57,7 +57,7 @@
 //! ```
 
 use crate::types::{
-    ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerState, Scheme, TasmotaDateTime,
+    ColorTemperature, Dimmer, FadeDuration, HsbColor, PowerState, Scheme, TasmotaDateTime,
     WakeupDuration,
 };
 
@@ -103,8 +103,8 @@ pub enum StateChange {
     /// Fade enabled/disabled.
     FadeEnabled(bool),
 
-    /// Fade speed changed.
-    FadeSpeed(FadeSpeed),
+    /// Fade duration changed.
+    FadeDuration(FadeDuration),
 
     /// Energy monitoring data updated.
     ///
@@ -202,10 +202,10 @@ impl StateChange {
         Self::FadeEnabled(enabled)
     }
 
-    /// Creates a fade speed change.
+    /// Creates a fade duration change.
     #[must_use]
-    pub fn fade_speed(speed: FadeSpeed) -> Self {
-        Self::FadeSpeed(speed)
+    pub fn fade_duration(duration: FadeDuration) -> Self {
+        Self::FadeDuration(duration)
     }
 
     /// Creates an energy reading change with basic power data.
@@ -277,7 +277,7 @@ impl StateChange {
                 | Self::Scheme(_)
                 | Self::WakeupDuration(_)
                 | Self::FadeEnabled(_)
-                | Self::FadeSpeed(_)
+                | Self::FadeDuration(_)
         )
     }
 
@@ -313,6 +313,8 @@ impl StateChange {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
     #[test]
@@ -355,7 +357,10 @@ mod tests {
     fn is_light() {
         assert!(StateChange::Dimmer(Dimmer::MAX).is_light());
         assert!(StateChange::fade_enabled(true).is_light());
-        assert!(StateChange::fade_speed(FadeSpeed::MEDIUM).is_light());
+        assert!(
+            StateChange::fade_duration(FadeDuration::new(Duration::from_secs(10)).unwrap())
+                .is_light()
+        );
         assert!(!StateChange::power_on().is_light());
     }
 
@@ -367,8 +372,9 @@ mod tests {
         let disabled = StateChange::fade_enabled(false);
         assert!(matches!(disabled, StateChange::FadeEnabled(false)));
 
-        let speed = StateChange::fade_speed(FadeSpeed::FAST);
-        assert!(matches!(speed, StateChange::FadeSpeed(_)));
+        let duration =
+            StateChange::fade_duration(FadeDuration::new(Duration::from_millis(500)).unwrap());
+        assert!(matches!(duration, StateChange::FadeDuration(_)));
     }
 
     #[test]

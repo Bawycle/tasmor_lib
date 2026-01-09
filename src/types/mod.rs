@@ -21,7 +21,7 @@
 //! | [`RgbColor`] | R:0-255, G:0-255, B:0-255 | Color in RGB format |
 //! | [`Scheme`] | 0-4 | Light effect (Single/Wakeup/Cycle/Random) |
 //! | [`WakeupDuration`] | 1-3000 seconds | Duration for wakeup effect |
-//! | [`FadeSpeed`] | 1-40 | Transition speed (1=fastest) |
+//! | [`FadeDuration`] | 0.5-20 seconds | Duration for fade transitions |
 //! | [`TasmotaDateTime`] | ISO 8601 | Datetime from telemetry |
 //!
 //! # Construction Patterns
@@ -70,9 +70,7 @@ mod dimmer;
 mod power;
 mod rgb_color;
 mod scheme;
-mod speed;
-mod uptime;
-mod wakeup_duration;
+mod time;
 
 pub use color::{ColorTemperature, HsbColor};
 pub use datetime::{DateTimeParseError, TasmotaDateTime};
@@ -80,6 +78,4 @@ pub use dimmer::Dimmer;
 pub use power::{PowerIndex, PowerState};
 pub use rgb_color::RgbColor;
 pub use scheme::Scheme;
-pub use speed::FadeSpeed;
-pub use uptime::parse_uptime;
-pub use wakeup_duration::WakeupDuration;
+pub use time::{FadeDuration, WakeupDuration, parse_uptime};

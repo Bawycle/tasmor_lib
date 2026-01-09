@@ -48,7 +48,7 @@
 use std::time::Duration;
 
 use crate::types::{
-    ColorTemperature, Dimmer, FadeSpeed, HsbColor, PowerState, Scheme, TasmotaDateTime,
+    ColorTemperature, Dimmer, FadeDuration, HsbColor, PowerState, Scheme, TasmotaDateTime,
     WakeupDuration,
 };
 
@@ -243,8 +243,8 @@ pub struct DeviceState {
     wakeup_duration: Option<WakeupDuration>,
     /// Whether fade transitions are enabled.
     fade_enabled: Option<bool>,
-    /// Fade transition speed (1-40).
-    fade_speed: Option<FadeSpeed>,
+    /// Fade transition duration (1-40 raw value, 0.5-20 seconds).
+    fade_duration: Option<FadeDuration>,
     /// Current power consumption in Watts.
     power_consumption: Option<f32>,
     /// Current voltage in Volts.
@@ -450,20 +450,20 @@ impl DeviceState {
         self.fade_enabled = None;
     }
 
-    /// Gets the fade transition speed.
+    /// Gets the fade transition duration.
     #[must_use]
-    pub fn fade_speed(&self) -> Option<FadeSpeed> {
-        self.fade_speed
+    pub fn fade_duration(&self) -> Option<FadeDuration> {
+        self.fade_duration
     }
 
-    /// Sets the fade transition speed.
-    pub fn set_fade_speed(&mut self, speed: FadeSpeed) {
-        self.fade_speed = Some(speed);
+    /// Sets the fade transition duration.
+    pub fn set_fade_duration(&mut self, duration: FadeDuration) {
+        self.fade_duration = Some(duration);
     }
 
-    /// Clears the fade speed.
-    pub fn clear_fade_speed(&mut self) {
-        self.fade_speed = None;
+    /// Clears the fade duration.
+    pub fn clear_fade_duration(&mut self) {
+        self.fade_duration = None;
     }
 
     // ========== Energy Monitoring ==========
@@ -716,11 +716,11 @@ impl DeviceState {
                     true
                 }
             }
-            StateChange::FadeSpeed(speed) => {
-                if self.fade_speed == Some(*speed) {
+            StateChange::FadeDuration(duration) => {
+                if self.fade_duration == Some(*duration) {
                     false
                 } else {
-                    self.fade_speed = Some(*speed);
+                    self.fade_duration = Some(*duration);
                     true
                 }
             }
@@ -998,8 +998,8 @@ mod tests {
         // Fade should be enabled
         assert_eq!(state.fade_enabled(), Some(true));
 
-        // Fade speed should be set
-        assert_eq!(state.fade_speed().map(|s| s.value()), Some(2));
+        // Fade duration should be set
+        assert_eq!(state.fade_duration().map(|s| s.value()), Some(2));
     }
 
     #[test]
@@ -1008,7 +1008,7 @@ mod tests {
 
         // Initially None
         assert!(state.fade_enabled().is_none());
-        assert!(state.fade_speed().is_none());
+        assert!(state.fade_duration().is_none());
 
         // Set fade enabled
         state.set_fade_enabled(true);
@@ -1017,16 +1017,16 @@ mod tests {
         state.set_fade_enabled(false);
         assert_eq!(state.fade_enabled(), Some(false));
 
-        // Set fade speed
-        let speed = FadeSpeed::new(15).unwrap();
-        state.set_fade_speed(speed);
-        assert_eq!(state.fade_speed(), Some(speed));
+        // Set fade duration
+        let duration = FadeDuration::from_raw(15).unwrap();
+        state.set_fade_duration(duration);
+        assert_eq!(state.fade_duration(), Some(duration));
 
         // Clear
         state.clear_fade_enabled();
-        state.clear_fade_speed();
+        state.clear_fade_duration();
         assert!(state.fade_enabled().is_none());
-        assert!(state.fade_speed().is_none());
+        assert!(state.fade_duration().is_none());
     }
 
     #[test]
@@ -1041,11 +1041,11 @@ mod tests {
         // Applying same state returns false
         assert!(!state.apply(&change));
 
-        // Apply fade speed
-        let speed = FadeSpeed::new(20).unwrap();
-        let change = StateChange::FadeSpeed(speed);
+        // Apply fade duration
+        let duration = FadeDuration::from_raw(20).unwrap();
+        let change = StateChange::FadeDuration(duration);
         assert!(state.apply(&change));
-        assert_eq!(state.fade_speed(), Some(speed));
+        assert_eq!(state.fade_duration(), Some(duration));
     }
 
     // ========== SystemInfo Tests ==========
