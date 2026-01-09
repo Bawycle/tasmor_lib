@@ -1142,8 +1142,8 @@ impl<P: Protocol> Device<P> {
     /// The returned state includes system info (`wifi_rssi`, `heap`) from the
     /// Status response. For HTTP devices, uptime is parsed from the
     /// `StatusPRM.Uptime` string. For MQTT devices, uptime can also come
-    /// from telemetry messages. Use [`SystemInfo::uptime()`] to get the
-    /// uptime as a [`Duration`].
+    /// from telemetry messages. Use [`crate::state::SystemInfo::uptime()`] to get the
+    /// uptime as a [`std::time::Duration`].
     ///
     /// # Errors
     ///

@@ -5,19 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - 2026-01-09
 
 ### Changed
 
 - **BREAKING: Uptime now returns `Duration`** - `SystemInfo::uptime()`, `DeviceState::uptime()`, and `TelemetryState::uptime()` now return `Option<Duration>` instead of `Option<u64>`. Use `.as_secs()` if you need the raw seconds value
-- **BREAKING: Removed `uptime_seconds()`** - Use `uptime()` instead, which returns `std::time::Duration`
-- **BREAKING: Removed `TelemetryState::uptime_string()`** - Use `uptime()` instead for a typed `Duration` value
 - **BREAKING: `Command` trait extended** - Added `response_spec()` method. Existing implementations remain compatible thanks to the default implementation
-- **BREAKING: `WakeupDuration::new()` now takes `Duration`** - Use `WakeupDuration::new(Duration::from_secs(300))` instead of `WakeupDuration::new(300)`. The duration is rounded to the nearest second. Range: 1-3000 seconds
-- **BREAKING: Removed `WakeupDuration::from_minutes()`** - Use `WakeupDuration::new(Duration::from_secs(minutes * 60))` instead
-- **BREAKING: `FadeSpeed` renamed to `FadeDuration`** - Renamed for consistency with `WakeupDuration`. Also renamed: `FadeSpeedCommand` → `FadeDurationCommand`, `FadeSpeedResponse` → `FadeDurationResponse`, `Device::set_fade_speed()` → `set_fade_duration()`, `Device::get_fade_speed()` → `get_fade_duration()`
-- **BREAKING: `FadeDuration::new()` now takes `Duration`** - Use `FadeDuration::new(Duration::from_secs(2))` instead of `FadeSpeed::new(4)`. The duration is rounded to the nearest 0.5 second. Range: 0.5-20 seconds
-- **BREAKING: Removed `FadeSpeed::FAST`, `MEDIUM`, `SLOW` constants** - Use `FadeDuration::new(Duration::...)` instead
+- **BREAKING: `WakeupDuration::new()` now takes `Duration`** - Use `WakeupDuration::new(Duration::from_secs(300))` instead of `WakeupDuration::new(300)`. Range: 1-3000 seconds
+- **BREAKING: `FadeSpeed` renamed to `FadeDuration`** - Also renamed: `FadeSpeedCommand` → `FadeDurationCommand`, `FadeSpeedResponse` → `FadeDurationResponse`, `Device::set_fade_speed()` → `set_fade_duration()`, `Device::get_fade_speed()` → `get_fade_duration()`. Now takes `Duration` (range: 0.5-20 seconds)
+
+### Removed
+
+- **BREAKING: `uptime_seconds()` and `uptime_string()`** - Use `uptime()` instead, which returns `Option<Duration>`
+- **BREAKING: `WakeupDuration::from_minutes()`** - Use `WakeupDuration::new(Duration::from_secs(minutes * 60))` instead
+- **BREAKING: `FadeSpeed::FAST`, `MEDIUM`, `SLOW` constants** - Use `FadeDuration::new(Duration::...)` instead
 
 ### Fixed
 
@@ -156,7 +157,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - README with usage examples
   - CONTRIBUTING.md with development guidelines
 
-[Unreleased]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.4.1...HEAD
+[Unreleased]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.5.0...HEAD
+[0.5.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.4.1...v0.5.0
 [0.4.1]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.4.0...v0.4.1
 [0.4.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.3.0...v0.4.0
 [0.3.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.2.1...v0.3.0
