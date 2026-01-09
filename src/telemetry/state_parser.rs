@@ -390,7 +390,7 @@ impl TelemetryState {
 
     /// Extracts system information from telemetry.
     ///
-    /// This creates a [`SystemInfo`] containing the uptime and Wi-Fi signal
+    /// This creates a [`crate::state::SystemInfo`] containing the uptime and Wi-Fi signal
     /// strength from the telemetry message. The heap memory is not available
     /// in STATE telemetry (only in STATUS responses).
     ///
