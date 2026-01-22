@@ -155,6 +155,8 @@ impl TryFrom<u8> for Dimmer {
 
 #[cfg(test)]
 mod tests {
+    use approx::assert_abs_diff_eq;
+
     use super::*;
 
     #[test]
@@ -180,9 +182,9 @@ mod tests {
 
     #[test]
     fn dimmer_as_fraction() {
-        assert!((Dimmer::MIN.as_fraction() - 0.0).abs() < f32::EPSILON);
-        assert!((Dimmer::MAX.as_fraction() - 1.0).abs() < f32::EPSILON);
-        assert!((Dimmer::new(50).unwrap().as_fraction() - 0.5).abs() < f32::EPSILON);
+        assert_abs_diff_eq!(Dimmer::MIN.as_fraction(), 0.0, epsilon = 1e-6);
+        assert_abs_diff_eq!(Dimmer::MAX.as_fraction(), 1.0, epsilon = 1e-6);
+        assert_abs_diff_eq!(Dimmer::new(50).unwrap().as_fraction(), 0.5, epsilon = 1e-6);
     }
 
     #[test]

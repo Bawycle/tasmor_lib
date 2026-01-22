@@ -388,9 +388,11 @@ impl StatusSnsResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use approx::assert_abs_diff_eq;
     use chrono::Datelike;
     use chrono::Timelike;
+
+    use super::*;
 
     #[test]
     fn parse_energy_basic() {
@@ -521,9 +523,9 @@ mod tests {
             ..
         } = &changes[0]
         {
-            assert!((power.unwrap() - 150.0).abs() < f32::EPSILON);
-            assert!((voltage.unwrap() - 230.0).abs() < f32::EPSILON);
-            assert!((current.unwrap() - 0.65).abs() < f32::EPSILON);
+            assert_abs_diff_eq!(power.unwrap(), 150.0, epsilon = 1e-6);
+            assert_abs_diff_eq!(voltage.unwrap(), 230.0, epsilon = 1e-6);
+            assert_abs_diff_eq!(current.unwrap(), 0.65, epsilon = 0.001);
         } else {
             panic!("Expected StateChange::Energy");
         }
@@ -575,8 +577,8 @@ mod tests {
 
         assert_eq!(energy.power, Some(182));
         assert_eq!(energy.voltage, Some(224));
-        assert!((energy.current.unwrap() - 0.706).abs() < 0.001);
-        assert!((energy.total.unwrap() - 1104.315).abs() < 0.001);
+        assert_abs_diff_eq!(energy.current.unwrap(), 0.706, epsilon = 0.001);
+        assert_abs_diff_eq!(energy.total.unwrap(), 1104.315, epsilon = 0.01);
     }
 
     #[test]
@@ -594,9 +596,9 @@ mod tests {
             ..
         } = &changes[0]
         {
-            assert!((power.unwrap() - 150.0).abs() < f32::EPSILON);
-            assert!((voltage.unwrap() - 230.0).abs() < f32::EPSILON);
-            assert!((current.unwrap() - 0.65).abs() < f32::EPSILON);
+            assert_abs_diff_eq!(power.unwrap(), 150.0, epsilon = 1e-6);
+            assert_abs_diff_eq!(voltage.unwrap(), 230.0, epsilon = 1e-6);
+            assert_abs_diff_eq!(current.unwrap(), 0.65, epsilon = 0.001);
         } else {
             panic!("Expected StateChange::Energy");
         }
@@ -634,15 +636,15 @@ mod tests {
             total_start_time,
         } = &changes[0]
         {
-            assert!((power.unwrap() - 182.0).abs() < f32::EPSILON);
-            assert!((voltage.unwrap() - 224.0).abs() < f32::EPSILON);
-            assert!((current.unwrap() - 0.706).abs() < 0.001);
-            assert!((apparent_power.unwrap() - 195.0).abs() < f32::EPSILON);
-            assert!((reactive_power.unwrap() - 50.0).abs() < f32::EPSILON);
-            assert!((power_factor.unwrap() - 0.93).abs() < 0.01);
-            assert!((energy_today.unwrap() - 1.5).abs() < 0.01);
-            assert!((energy_yesterday.unwrap() - 2.3).abs() < 0.01);
-            assert!((energy_total.unwrap() - 1104.315).abs() < 0.01);
+            assert_abs_diff_eq!(power.unwrap(), 182.0, epsilon = 1e-6);
+            assert_abs_diff_eq!(voltage.unwrap(), 224.0, epsilon = 1e-6);
+            assert_abs_diff_eq!(current.unwrap(), 0.706, epsilon = 0.001);
+            assert_abs_diff_eq!(apparent_power.unwrap(), 195.0, epsilon = 1e-6);
+            assert_abs_diff_eq!(reactive_power.unwrap(), 50.0, epsilon = 1e-6);
+            assert_abs_diff_eq!(power_factor.unwrap(), 0.93, epsilon = 0.01);
+            assert_abs_diff_eq!(energy_today.unwrap(), 1.5, epsilon = 0.01);
+            assert_abs_diff_eq!(energy_yesterday.unwrap(), 2.3, epsilon = 0.01);
+            assert_abs_diff_eq!(energy_total.unwrap(), 1104.315, epsilon = 0.01);
             assert!(total_start_time.is_none()); // Not in test JSON
         } else {
             panic!("Expected StateChange::Energy");

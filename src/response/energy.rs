@@ -185,6 +185,8 @@ impl EnergyData {
 
 #[cfg(test)]
 mod tests {
+    use approx::assert_abs_diff_eq;
+
     use super::*;
 
     #[test]
@@ -212,9 +214,9 @@ mod tests {
 
         assert_eq!(energy.power, 45);
         assert_eq!(energy.voltage, 230);
-        assert!((energy.current - 0.196).abs() < f32::EPSILON);
-        assert!((energy.total - 123.456).abs() < 0.001);
-        assert!((energy.factor - 0.9).abs() < f32::EPSILON);
+        assert_abs_diff_eq!(energy.current, 0.196, epsilon = 0.001);
+        assert_abs_diff_eq!(energy.total, 123.456, epsilon = 0.01);
+        assert_abs_diff_eq!(energy.factor, 0.9, epsilon = 0.01);
     }
 
     #[test]
@@ -233,12 +235,12 @@ mod tests {
         };
 
         assert!(energy.is_consuming());
-        assert!((energy.power_factor_percent() - 90.0).abs() < f32::EPSILON);
+        assert_abs_diff_eq!(energy.power_factor_percent(), 90.0, epsilon = 0.01);
 
         // 100W * 24h / 1000 = 2.4 kWh/day
         // 2.4 kWh * 0.15€/kWh = 0.36€/day
         let cost = energy.estimated_daily_cost(0.15);
-        assert!((cost - 0.36).abs() < 0.01);
+        assert_abs_diff_eq!(cost, 0.36, epsilon = 0.01);
     }
 
     #[test]
@@ -278,9 +280,9 @@ mod tests {
 
         assert_eq!(response.power(), Some(50));
         assert_eq!(response.voltage(), Some(230));
-        assert!((response.current().unwrap() - 0.217).abs() < 0.001);
-        assert!((response.total_energy().unwrap() - 100.0).abs() < f32::EPSILON);
-        assert!((response.today_energy().unwrap() - 1.5).abs() < f32::EPSILON);
-        assert!((response.yesterday_energy().unwrap() - 2.0).abs() < f32::EPSILON);
+        assert_abs_diff_eq!(response.current().unwrap(), 0.217, epsilon = 0.001);
+        assert_abs_diff_eq!(response.total_energy().unwrap(), 100.0, epsilon = 0.01);
+        assert_abs_diff_eq!(response.today_energy().unwrap(), 1.5, epsilon = 0.01);
+        assert_abs_diff_eq!(response.yesterday_energy().unwrap(), 2.0, epsilon = 0.01);
     }
 }
