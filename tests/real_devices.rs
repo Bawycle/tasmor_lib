@@ -41,8 +41,8 @@
 //! ```
 
 use std::env;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use tasmor_lib::subscription::Subscribable;
 use tasmor_lib::types::{
@@ -646,7 +646,7 @@ mod http_protocol {
 
         // Basic sanity checks
         assert!(
-            energy.voltage > 200 && energy.voltage < 250,
+            energy.voltage > 200.0 && energy.voltage < 250.0,
             "Voltage should be ~230V"
         );
     }
