@@ -277,6 +277,12 @@ impl ManagedDevice {
         self.state.energy_total()
     }
 
+    /// Returns the AC frequency in Hz, or `None` for DC monitors.
+    #[must_use]
+    pub fn frequency(&self) -> Option<f32> {
+        self.state.frequency()
+    }
+
     /// Returns the timestamp when total energy counting started.
     ///
     /// Returns a [`TasmotaDateTime`] which provides:

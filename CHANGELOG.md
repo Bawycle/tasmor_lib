@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`frequency` field on energy types** — `EnergyData` (HTTP response), `StateChange::Energy`, `DeviceState`, and the subscription `EnergyData` callback struct now all carry `frequency: Option<f32>` (Hz). The field is `None` for DC monitors and devices that do not report it. Fully propagated through the MQTT telemetry pipeline (`EnergyReading` → `StateChange::Energy` → subscriber callbacks). New convenience accessors: `EnergyResponse::frequency()` and `DeviceState::frequency()` / `set_frequency()`.
+
 ### Fixed
 
 - **BREAKING: Energy power and voltage fields are now `f32`** — `EnergyData` and `EnergyReading` fields `power`, `apparent_power`, `reactive_power` (previously `u32`) and `voltage` (previously `u16`) are now `f32`. Tasmota devices configured with `WattRes`/`VoltRes` > 0 report these fields as floats; the previous integer types caused serde deserialization failures. Update any code that assigned these fields to integer variables or cast them explicitly.

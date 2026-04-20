@@ -328,6 +328,7 @@ impl SensorData {
                     energy_yesterday: energy.yesterday,
                     energy_total: energy.total,
                     total_start_time,
+                    frequency: energy.frequency,
                 });
             }
         }
@@ -632,6 +633,7 @@ mod tests {
             energy_yesterday,
             energy_total,
             total_start_time,
+            frequency,
         } = &changes[0]
         {
             assert_abs_diff_eq!(power.unwrap(), 182.0, epsilon = 1e-6);
@@ -644,6 +646,7 @@ mod tests {
             assert_abs_diff_eq!(energy_yesterday.unwrap(), 2.3, epsilon = 0.01);
             assert_abs_diff_eq!(energy_total.unwrap(), 1104.315, epsilon = 0.01);
             assert!(total_start_time.is_none()); // Not in test JSON
+            assert!(frequency.is_none()); // Not in test JSON
         } else {
             panic!("Expected StateChange::Energy");
         }

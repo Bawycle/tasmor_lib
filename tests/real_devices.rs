@@ -41,8 +41,8 @@
 //! ```
 
 use std::env;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tasmor_lib::subscription::Subscribable;
 use tasmor_lib::types::{

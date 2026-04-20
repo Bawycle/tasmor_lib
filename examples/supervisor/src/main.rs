@@ -539,10 +539,7 @@ impl TasmotaSupervisor {
                         if is_http {
                             self.log_to_console(
                                 device_id,
-                                ConsoleEntry::error(
-                                    &format!("set_fade_duration({duration})"),
-                                    &e,
-                                ),
+                                ConsoleEntry::error(&format!("set_fade_duration({duration})"), &e),
                             );
                         } else {
                             self.error_message = Some(e);
@@ -799,7 +796,11 @@ impl eframe::App for TasmotaSupervisor {
                             self.broker_count,
                             if self.broker_count == 1 { "" } else { "s" },
                             self.subscription_count,
-                            if self.subscription_count == 1 { "" } else { "s" }
+                            if self.subscription_count == 1 {
+                                ""
+                            } else {
+                                "s"
+                            }
                         ));
                         ui.separator();
                     }

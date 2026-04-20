@@ -1172,6 +1172,10 @@ fn render_energy_section(ui: &mut Ui, device: &DeviceState, response: &mut Devic
         if let Some(pf) = device.power_factor() {
             ui.label(format!("| PF: {pf:.2}"));
         }
+
+        if let Some(freq) = device.frequency() {
+            ui.label(format!("| {freq:.1} Hz"));
+        }
     });
 
     // Secondary readings (apparent/reactive power and consumption)

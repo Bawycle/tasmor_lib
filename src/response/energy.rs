@@ -101,6 +101,12 @@ impl EnergyResponse {
     pub fn yesterday_energy(&self) -> Option<f32> {
         self.energy().map(|e| e.yesterday)
     }
+
+    /// Returns the AC frequency in Hz, or `None` for DC monitors or devices that do not report it.
+    #[must_use]
+    pub fn frequency(&self) -> Option<f32> {
+        self.energy().and_then(|e| e.frequency)
+    }
 }
 
 /// Sensor status wrapper containing energy and other sensor data.
@@ -159,6 +165,10 @@ pub struct EnergyData {
     /// Current in Amperes.
     #[serde(default)]
     pub current: f32,
+
+    /// AC frequency in Hz. `None` for DC monitors or devices that do not report it.
+    #[serde(default)]
+    pub frequency: Option<f32>,
 }
 
 impl EnergyData {
@@ -261,6 +271,7 @@ mod tests {
             factor: 0.9,
             voltage: 230.0,
             current: 0.435,
+            frequency: None,
         };
 
         assert!(energy.is_consuming());
@@ -285,6 +296,7 @@ mod tests {
             factor: 0.9,
             voltage: 230.004,
             current: 0.435,
+            frequency: None,
         };
 
         assert!(energy.is_consuming());
@@ -380,5 +392,50 @@ mod tests {
         assert_abs_diff_eq!(response.total_energy().unwrap(), 100.012, epsilon = 0.001);
         assert_abs_diff_eq!(response.today_energy().unwrap(), 1.234, epsilon = 0.001);
         assert_abs_diff_eq!(response.yesterday_energy().unwrap(), 2.123, epsilon = 0.001);
+    }
+
+    #[test]
+    fn parse_energy_with_frequency() {
+        let json = r#"{
+            "StatusSNS": {
+                "Time": "2024-01-01T12:00:00",
+                "ENERGY": {
+                    "Total": 10.0,
+                    "Yesterday": 1.0,
+                    "Today": 0.5,
+                    "Power": 60,
+                    "Voltage": 230,
+                    "Current": 0.26,
+                    "Frequency": 50.1
+                }
+            }
+        }"#;
+
+        let response: EnergyResponse = serde_json::from_str(json).unwrap();
+        let energy = response.energy().unwrap();
+
+        assert_abs_diff_eq!(energy.frequency.unwrap(), 50.1, epsilon = 0.01);
+    }
+
+    #[test]
+    fn parse_energy_without_frequency_yields_none() {
+        let json = r#"{
+            "StatusSNS": {
+                "Time": "2024-01-01T12:00:00",
+                "ENERGY": {
+                    "Total": 10.0,
+                    "Yesterday": 1.0,
+                    "Today": 0.5,
+                    "Power": 60,
+                    "Voltage": 12,
+                    "Current": 5.0
+                }
+            }
+        }"#;
+
+        let response: EnergyResponse = serde_json::from_str(json).unwrap();
+        let energy = response.energy().unwrap();
+
+        assert!(energy.frequency.is_none());
     }
 }

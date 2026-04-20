@@ -133,6 +133,8 @@ pub enum StateChange {
         ///
         /// Contains both naive datetime and timezone-aware datetime if available.
         total_start_time: Option<TasmotaDateTime>,
+        /// AC frequency in Hz. `None` for DC monitors or devices that do not report it.
+        frequency: Option<f32>,
     },
 
     /// Multiple changes at once.
@@ -222,6 +224,7 @@ impl StateChange {
             energy_yesterday: None,
             energy_total: None,
             total_start_time: None,
+            frequency: None,
         }
     }
 
@@ -239,6 +242,7 @@ impl StateChange {
         energy_yesterday: Option<f32>,
         energy_total: Option<f32>,
         total_start_time: Option<TasmotaDateTime>,
+        frequency: Option<f32>,
     ) -> Self {
         Self::Energy {
             power,
@@ -251,6 +255,7 @@ impl StateChange {
             energy_yesterday,
             energy_total,
             total_start_time,
+            frequency,
         }
     }
 
