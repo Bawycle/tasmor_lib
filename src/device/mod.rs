@@ -1148,7 +1148,7 @@ impl<P: Protocol> Device<P> {
     /// # Errors
     ///
     /// Returns error if any of the queries fail.
-    #[allow(clippy::cast_precision_loss, clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines)]
     pub async fn query_state(&self) -> Result<DeviceState, Error> {
         tracing::debug!(
             energy_monitoring = self.capabilities.supports_energy_monitoring(),

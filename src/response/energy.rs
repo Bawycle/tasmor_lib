@@ -211,11 +211,11 @@ mod tests {
         let response: EnergyResponse = serde_json::from_str(json).unwrap();
         let energy = response.energy().unwrap();
 
-        assert_eq!(energy.power, 45.001);
-        assert_eq!(energy.voltage, 229.987);
-        assert!((energy.current - 0.196).abs() < f32::EPSILON);
-        assert!((energy.total - 123.456).abs() < 0.001);
-        assert!((energy.factor - 0.9).abs() < f32::EPSILON);
+        assert_abs_diff_eq!(energy.power, 45.001, epsilon = 0.0001);
+        assert_abs_diff_eq!(energy.voltage, 229.987, epsilon = 0.001);
+        assert_abs_diff_eq!(energy.current, 0.196, epsilon = 0.001);
+        assert_abs_diff_eq!(energy.total, 123.456, epsilon = 0.001);
+        assert_abs_diff_eq!(energy.factor, 0.9, epsilon = 0.01);
     }
 
     #[test]
@@ -328,8 +328,8 @@ mod tests {
         }"#;
 
         let response: EnergyResponse = serde_json::from_str(json).unwrap();
-        assert_eq!(response.power(), Some(25.987));
-        assert_eq!(response.voltage(), Some(120.555));
+        assert_abs_diff_eq!(response.power().unwrap(), 25.987, epsilon = 0.001);
+        assert_abs_diff_eq!(response.voltage().unwrap(), 120.555, epsilon = 0.001);
     }
 
     #[test]
@@ -374,11 +374,11 @@ mod tests {
 
         let response: EnergyResponse = serde_json::from_str(json).unwrap();
 
-        assert_eq!(response.power(), Some(50.345));
-        assert_eq!(response.voltage(), Some(230.456));
-        assert!((response.current().unwrap() - 0.21789).abs() < 0.001);
-        assert!((response.total_energy().unwrap() - 100.012).abs() < f32::EPSILON);
-        assert!((response.today_energy().unwrap() - 1.234).abs() < f32::EPSILON);
-        assert!((response.yesterday_energy().unwrap() - 2.123).abs() < f32::EPSILON);
+        assert_abs_diff_eq!(response.power().unwrap(), 50.345, epsilon = 0.001);
+        assert_abs_diff_eq!(response.voltage().unwrap(), 230.456, epsilon = 0.001);
+        assert_abs_diff_eq!(response.current().unwrap(), 0.21789, epsilon = 0.001);
+        assert_abs_diff_eq!(response.total_energy().unwrap(), 100.012, epsilon = 0.001);
+        assert_abs_diff_eq!(response.today_energy().unwrap(), 1.234, epsilon = 0.001);
+        assert_abs_diff_eq!(response.yesterday_energy().unwrap(), 2.123, epsilon = 0.001);
     }
 }

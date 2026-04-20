@@ -305,7 +305,6 @@ impl SensorData {
 
     /// Converts the sensor data into a list of state changes.
     #[must_use]
-    #[allow(clippy::cast_precision_loss)]
     pub fn to_state_changes(&self) -> Vec<StateChange> {
         let mut changes = Vec::new();
 

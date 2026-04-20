@@ -5,6 +5,7 @@
 
 //! Integration tests for HTTP protocol using wiremock.
 
+use approx::assert_abs_diff_eq;
 use std::time::Duration;
 
 use tasmor_lib::command::{
@@ -976,8 +977,8 @@ mod device_energy_commands {
         let response = device.energy().await.unwrap();
 
         let energy = response.energy().unwrap();
-        assert_eq!(energy.power, 45.123);
-        assert_eq!(energy.voltage, 230.234);
+        assert_abs_diff_eq!(energy.power, 45.123, epsilon = 0.001);
+        assert_abs_diff_eq!(energy.voltage, 230.234, epsilon = 0.001);
     }
 
     #[tokio::test]

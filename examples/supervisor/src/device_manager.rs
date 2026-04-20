@@ -834,17 +834,16 @@ impl DeviceManager {
             DeviceHandle::Http(device) => device.energy().await,
             DeviceHandle::Mqtt { device, .. } => device.energy().await,
         };
-        #[allow(clippy::cast_precision_loss)]
         if let Ok(energy_response) = energy_result {
             if let Some(energy) = energy_response.energy() {
-                state.set_power_consumption(energy.power as f32);
-                state.set_voltage(f32::from(energy.voltage));
+                state.set_power_consumption(energy.power);
+                state.set_voltage(energy.voltage);
                 state.set_current(energy.current);
                 state.set_energy_today(energy.today);
                 state.set_energy_yesterday(energy.yesterday);
                 state.set_energy_total(energy.total);
-                state.set_apparent_power(energy.apparent_power as f32);
-                state.set_reactive_power(energy.reactive_power as f32);
+                state.set_apparent_power(energy.apparent_power);
+                state.set_reactive_power(energy.reactive_power);
                 state.set_power_factor(energy.factor);
                 if let Some(start_time) = &energy.total_start_time {
                     state.set_total_start_time(start_time.clone());
