@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-04-20
+
 ### Added
 
 - **`frequency` field on energy types** — `EnergyData` (HTTP response), `StateChange::Energy`, `DeviceState`, and the subscription `EnergyData` callback struct now all carry `frequency: Option<f32>` (Hz). The field is `None` for DC monitors and devices that do not report it. Fully propagated through the MQTT telemetry pipeline (`EnergyReading` → `StateChange::Energy` → subscriber callbacks). New convenience accessors: `EnergyResponse::frequency()` and `DeviceState::frequency()` / `set_frequency()`.
@@ -167,7 +169,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - README with usage examples
   - CONTRIBUTING.md with development guidelines
 
-[Unreleased]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.5.0...HEAD
+[Unreleased]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.6.0...HEAD
+[0.6.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.5.0...v0.6.0
 [0.5.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.4.1...v0.5.0
 [0.4.1]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.4.0...v0.4.1
 [0.4.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.3.0...v0.4.0

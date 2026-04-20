@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TasmoR Lib is a Rust library for controlling Tasmota devices via MQTT and HTTP protocols. It provides a type-safe async API built on Tokio. Current version: 0.5.0 (pre-1.0, API may change).
+TasmoR Lib is a Rust library for controlling Tasmota devices via MQTT and HTTP protocols. It provides a type-safe async API built on Tokio. Current version: 0.6.0 (pre-1.0, API may change).
 
 ## Common Commands
 
