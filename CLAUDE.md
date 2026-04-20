@@ -4,123 +4,86 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TasmoR Lib is a Rust library to control [Tasmota](https://tasmota.github.io/docs/) devices over MQTT and HTTP.
+TasmoR Lib is a Rust library for controlling Tasmota devices via MQTT and HTTP protocols. It provides a type-safe async API built on Tokio. Current version: 0.5.0 (pre-1.0, API may change).
 
-## Development Workflow (TDD)
-
-Follow this strict order for all changes:
-
-1. **Write tests first** - Define expected behavior through unit tests
-2. **Implement code** - Write the minimum code to make tests pass
-3. **Verify** - Run the full verification pipeline before committing
-
-## Build & Verification Commands
+## Common Commands
 
 ```bash
-# Full verification pipeline (run all in order before committing)
+# Full verification pipeline (run before committing)
 cargo check && cargo build && cargo test && cargo fmt --check && cargo clippy -- -D warnings -W clippy::pedantic
 
-# Individual commands
-cargo check                                      # Type checking without building
-cargo build                                      # Compile the library
-cargo test                                       # Run all tests
-cargo test <test_name>                           # Run a specific test
-cargo test --lib                                 # Run only library tests
-cargo test --doc                                 # Run documentation tests
-cargo tarpaulin                                  # Determine code coverage achieved via tests
-cargo fmt                                        # Format code
-cargo fmt --check                                # Check formatting without modifying
-cargo clippy -- -D warnings -W clippy::pedantic # Lint with pedantic warnings as errors
+# Run a single test
+cargo test test_name
 
-# Documentation
-cargo doc --no-deps --open                       # Generate and open documentation
-cargo doc --no-deps --document-private-items     # Include private items in docs
+# Run tests for a specific module
+cargo test module_name::
+
+# Test with only one protocol feature
+cargo test --no-default-features --features http
+cargo test --no-default-features --features mqtt
+
+# Documentation tests only
+cargo test --doc
+
+# Generate docs
+cargo doc --no-deps --open
 ```
 
-## Clippy Configuration
+## Architecture
 
-Use pedantic warnings. A warning can only be suppressed with:
-1. A `#[allow(...)]` attribute on the specific item
-2. A comment explaining **why** the warning is acceptable
+### Protocol Layer (`src/protocol/`)
 
-```rust
-// Example: allowing a clippy warning with justification
-#[allow(clippy::cast_possible_truncation)]
-// Truncation is acceptable here because value is validated to be < 256
-fn to_u8(value: u32) -> u8 {
-    value as u8
-}
-```
+Two protocol backends behind a unified `Device` API:
+- **HTTP** (`http.rs`): Stateless request/response via reqwest. No event subscriptions.
+- **MQTT** (`mqtt_broker.rs`, `shared_mqtt_client.rs`, `topic_router.rs`, `response_collector.rs`): Persistent pub/sub via rumqttc. Supports real-time event subscriptions. Multiple devices share a single broker connection.
 
-## Code Documentation Standards
+Protocol choice is encoded in the type system — calling subscription methods on HTTP devices is a compile-time error.
 
-### Module-level documentation
-Every module must have a `//!` doc comment explaining:
-- Purpose of the module
-- Main types and their relationships
-- Usage examples with `# Examples` section
+### Device Layer (`src/device/`)
 
-### Public API documentation
-All public items (`pub`) require:
-- A summary line (first line, concise)
-- Detailed description if non-trivial
-- `# Examples` section with runnable code
-- `# Errors` section if the function returns `Result`
-- `# Panics` section if the function can panic
+`Device<P>` is generic over protocol. Builders:
+- `Device::http(addr)` → `HttpBuilder` → `Device<HttpClient>`
+- `broker.device(topic)` → `BrokerDeviceBuilder` → `Device<SharedMqttClient>`
 
-### Documentation tests
-All examples in documentation must be valid, runnable code tested by `cargo test --doc`.
+Both builders support `build()` (auto-detect capabilities by querying the device) or `build_without_probe()` (user provides capabilities). Both return `(Device, DeviceState)`.
 
-```rust
-/// Connects to a Tasmota device.
-///
-/// # Examples
-///
-/// ```
-/// use tasmor_lib::Device;
-///
-/// let device = Device::new("192.168.1.100");
-/// ```
-///
-/// # Errors
-///
-/// Returns `ConnectionError` if the device is unreachable.
-pub fn connect(&self) -> Result<(), ConnectionError> {
-    // ...
-}
-```
+### Command Layer (`src/command/`)
 
-## Error Handling
+Command modules (power, light, energy, scheme, status, routine) define the Tasmota commands. `Routine` uses `Backlog0` to execute multiple commands atomically.
 
-- Use `thiserror` for library error types
-- Each error variant must have a descriptive message
-- Never use `.unwrap()` or `.expect()` on user-provided data
-- Propagate errors with `?` operator, add context when helpful
+### Type System (`src/types/`)
 
-## Architecture Guidelines
+Newtypes with validation at construction (Parse Don't Validate): `Dimmer`, `ColorTemperature`, `HsbColor`, `PowerIndex`, `RgbColor`, etc. Invalid states are unrepresentable.
 
-### Library structure
-```
-src/
-├── lib.rs          # Public API exports and crate-level docs
-├── error.rs        # Error types (using thiserror)
-├── mqtt/           # MQTT protocol implementation
-│   ├── mod.rs
-│   └── ...
-├── http/           # HTTP protocol implementation
-│   ├── mod.rs
-│   └── ...
-└── device/         # Device abstractions
-    ├── mod.rs
-    └── ...
-```
+### Response Layer (`src/response/`)
 
-### Type design
-- Use newtypes for domain values with constraints (IP addresses, ports, device IDs)
-- Prefer `&str` over `String` in function parameters when ownership isn't needed
-- Use builder pattern for types with many optional parameters
+Typed response structs returned by device command methods — parsed from Tasmota JSON responses.
 
-### Async considerations
-- Use `async`/`await` for I/O operations (network calls)
-- Provide both sync and async APIs if the library targets diverse use cases
-- Document runtime requirements (tokio, async-std) clearly
+### State & Subscriptions
+
+- `src/state/`: `DeviceState` tracks current device state; `StateChange` represents diffs.
+- `src/subscription/`: `Subscribable` trait (MQTT-only) for real-time callbacks on state changes.
+- `src/telemetry/`: Parsing of raw Tasmota MQTT telemetry messages.
+
+### Capabilities (`src/capabilities.rs`)
+
+Describes what a device supports (power channels, dimmer, CCT, RGB, energy monitoring). Predefined profiles: `basic()`, `neo_coolcam()`, `rgbcct_light()`, etc. Custom via `CapabilitiesBuilder`.
+
+## Key Design Decisions
+
+- **Feature flags**: `http` and `mqtt` are both default-enabled. Code is conditionally compiled with `#[cfg(feature = "...")]`.
+- **unsafe_code = "forbid"** at crate level.
+- **clippy::pedantic** is enabled as a warning in `Cargo.toml` lints section.
+- **Rust edition 2024**, MSRV 1.92.0 (pinned via `rust-toolchain.toml`).
+- Tests use `wiremock` for HTTP mocking and `approx` for float comparisons.
+
+## Code Quality Policy
+
+- Any technical debt spotted during a read or edit — even if unrelated to the task — must be flagged explicitly with its nature and potential impact.
+- No deliberate shortcuts or "we'll fix it later" decisions. If a cleaner approach exists, it is the only acceptable approach.
+
+## Git Workflow
+
+- **Branches**: `master` (release), `dev` (development). Feature branches from `dev`.
+- **Commits**: Conventional Commits format (`feat(scope):`, `fix(scope):`, etc.)
+- **Branch naming**: `feat/`, `fix/`, `docs/`, `refactor/`
