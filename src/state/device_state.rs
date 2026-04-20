@@ -265,6 +265,8 @@ pub struct DeviceState {
     energy_total: Option<f32>,
     /// Timestamp when total energy counting started.
     total_start_time: Option<TasmotaDateTime>,
+    /// AC frequency in Hz. `None` for DC monitors or devices that do not report it.
+    frequency: Option<f32>,
     /// System diagnostic information (uptime, Wi-Fi, memory).
     ///
     /// This is read-only data that does **not** trigger callbacks.
@@ -582,6 +584,17 @@ impl DeviceState {
         self.total_start_time = Some(time);
     }
 
+    /// Gets the AC frequency in Hz, or `None` for DC monitors or devices that do not report it.
+    #[must_use]
+    pub fn frequency(&self) -> Option<f32> {
+        self.frequency
+    }
+
+    /// Sets the AC frequency.
+    pub fn set_frequency(&mut self, hz: f32) {
+        self.frequency = Some(hz);
+    }
+
     // ========== System Info ==========
 
     /// Gets the system diagnostic information.
@@ -735,6 +748,7 @@ impl DeviceState {
                 energy_yesterday,
                 energy_total,
                 total_start_time,
+                frequency,
             } => {
                 let mut changed = false;
 
@@ -759,6 +773,7 @@ impl DeviceState {
                 update_if_some!(energy_today, energy_today);
                 update_if_some!(energy_yesterday, energy_yesterday);
                 update_if_some!(energy_total, energy_total);
+                update_if_some!(frequency, frequency);
 
                 // Handle datetime field separately (not a Copy type)
                 if let Some(time) = total_start_time

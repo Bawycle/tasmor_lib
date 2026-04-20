@@ -42,6 +42,7 @@ use std::time::Duration;
 use tasmor_lib::MqttBroker;
 
 #[tokio::main]
+#[allow(clippy::too_many_lines)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
 
@@ -63,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
 
-    println!("Connecting to MQTT broker {}:{}...", host, port);
+    println!("Connecting to MQTT broker {host}:{port}...");
 
     // Build broker connection
     let mut builder = MqttBroker::builder().host(host).port(port);
@@ -134,7 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let (device, _) = &devices[0];
                     match device.power_toggle().await {
                         Ok(resp) => {
-                            println!("Power toggled! New state: {:?}", resp.first_power_state())
+                            println!("Power toggled! New state: {:?}", resp.first_power_state());
                         }
                         Err(e) => println!("Error toggling power: {e}"),
                     }

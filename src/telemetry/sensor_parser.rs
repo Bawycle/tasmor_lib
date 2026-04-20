@@ -26,8 +26,8 @@ use crate::types::TasmotaDateTime;
 /// let data: SensorData = serde_json::from_str(json).unwrap();
 ///
 /// if let Some(energy) = data.energy() {
-///     assert_eq!(energy.power, Some(150));
-///     assert_eq!(energy.voltage, Some(230));
+///     assert_eq!(energy.power, Some(150.0));
+///     assert_eq!(energy.voltage, Some(230.0));
 /// }
 /// ```
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -95,15 +95,15 @@ pub struct EnergyReading {
 
     /// Current power consumption (in Watts).
     #[serde(rename = "Power", default)]
-    pub power: Option<u32>,
+    pub power: Option<f32>,
 
     /// Apparent power (in VA).
     #[serde(rename = "ApparentPower", default)]
-    pub apparent_power: Option<u32>,
+    pub apparent_power: Option<f32>,
 
     /// Reactive power (in `VAr`).
     #[serde(rename = "ReactivePower", default)]
-    pub reactive_power: Option<u32>,
+    pub reactive_power: Option<f32>,
 
     /// Power factor (0-1).
     #[serde(rename = "Factor", default)]
@@ -111,7 +111,7 @@ pub struct EnergyReading {
 
     /// Voltage (in Volts).
     #[serde(rename = "Voltage", default)]
-    pub voltage: Option<u16>,
+    pub voltage: Option<f32>,
 
     /// Current (in Amps).
     #[serde(rename = "Current", default)]
@@ -305,7 +305,6 @@ impl SensorData {
 
     /// Converts the sensor data into a list of state changes.
     #[must_use]
-    #[allow(clippy::cast_precision_loss)]
     pub fn to_state_changes(&self) -> Vec<StateChange> {
         let mut changes = Vec::new();
 
@@ -318,18 +317,18 @@ impl SensorData {
                     .as_deref()
                     .and_then(TasmotaDateTime::parse);
 
-                // Safe: power and voltage values from Tasmota are well within f32 precision range
                 changes.push(StateChange::Energy {
-                    power: energy.power.map(|p| p as f32),
-                    voltage: energy.voltage.map(f32::from),
+                    power: energy.power,
+                    voltage: energy.voltage,
                     current: energy.current,
-                    apparent_power: energy.apparent_power.map(|p| p as f32),
-                    reactive_power: energy.reactive_power.map(|p| p as f32),
+                    apparent_power: energy.apparent_power,
+                    reactive_power: energy.reactive_power,
                     power_factor: energy.factor,
                     energy_today: energy.today,
                     energy_yesterday: energy.yesterday,
                     energy_total: energy.total,
                     total_start_time,
+                    frequency: energy.frequency,
                 });
             }
         }
@@ -388,9 +387,11 @@ impl StatusSnsResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use approx::assert_abs_diff_eq;
     use chrono::Datelike;
     use chrono::Timelike;
+
+    use super::*;
 
     #[test]
     fn parse_energy_basic() {
@@ -398,7 +399,7 @@ mod tests {
         let data: SensorData = serde_json::from_str(json).unwrap();
 
         let energy = data.energy().unwrap();
-        assert_eq!(energy.power, Some(150));
+        assert_eq!(energy.power, Some(150.0));
     }
 
     #[test]
@@ -424,11 +425,11 @@ mod tests {
         assert_eq!(energy.today, Some(1.5));
         assert_eq!(energy.yesterday, Some(2.3));
         assert_eq!(energy.total, Some(1234.5));
-        assert_eq!(energy.power, Some(150));
-        assert_eq!(energy.apparent_power, Some(160));
-        assert_eq!(energy.reactive_power, Some(20));
+        assert_eq!(energy.power, Some(150.0));
+        assert_eq!(energy.apparent_power, Some(160.0));
+        assert_eq!(energy.reactive_power, Some(20.0));
         assert_eq!(energy.factor, Some(0.95));
-        assert_eq!(energy.voltage, Some(230));
+        assert_eq!(energy.voltage, Some(230.0));
         assert_eq!(energy.current, Some(0.65));
         assert_eq!(energy.frequency, Some(50.0));
     }
@@ -486,7 +487,7 @@ mod tests {
     #[test]
     fn energy_has_power_data() {
         let energy = EnergyReading {
-            power: Some(100),
+            power: Some(100.0),
             ..Default::default()
         };
         assert!(energy.has_power_data());
@@ -521,9 +522,9 @@ mod tests {
             ..
         } = &changes[0]
         {
-            assert!((power.unwrap() - 150.0).abs() < f32::EPSILON);
-            assert!((voltage.unwrap() - 230.0).abs() < f32::EPSILON);
-            assert!((current.unwrap() - 0.65).abs() < f32::EPSILON);
+            assert_abs_diff_eq!(power.unwrap(), 150.0, epsilon = 1e-6);
+            assert_abs_diff_eq!(voltage.unwrap(), 230.0, epsilon = 1e-6);
+            assert_abs_diff_eq!(current.unwrap(), 0.65, epsilon = 0.001);
         } else {
             panic!("Expected StateChange::Energy");
         }
@@ -545,7 +546,7 @@ mod tests {
         assert!(result.is_ok());
 
         let data = result.unwrap();
-        assert_eq!(data.energy().unwrap().power, Some(100));
+        assert_eq!(data.energy().unwrap().power, Some(100.0));
     }
 
     #[test]
@@ -573,10 +574,10 @@ mod tests {
         let sensor = response.sensor_data().unwrap();
         let energy = sensor.energy().unwrap();
 
-        assert_eq!(energy.power, Some(182));
-        assert_eq!(energy.voltage, Some(224));
-        assert!((energy.current.unwrap() - 0.706).abs() < 0.001);
-        assert!((energy.total.unwrap() - 1104.315).abs() < 0.001);
+        assert_eq!(energy.power, Some(182.0));
+        assert_eq!(energy.voltage, Some(224.0));
+        assert_abs_diff_eq!(energy.current.unwrap(), 0.706, epsilon = 0.001);
+        assert_abs_diff_eq!(energy.total.unwrap(), 1104.315, epsilon = 0.01);
     }
 
     #[test]
@@ -594,9 +595,9 @@ mod tests {
             ..
         } = &changes[0]
         {
-            assert!((power.unwrap() - 150.0).abs() < f32::EPSILON);
-            assert!((voltage.unwrap() - 230.0).abs() < f32::EPSILON);
-            assert!((current.unwrap() - 0.65).abs() < f32::EPSILON);
+            assert_abs_diff_eq!(power.unwrap(), 150.0, epsilon = 1e-6);
+            assert_abs_diff_eq!(voltage.unwrap(), 230.0, epsilon = 1e-6);
+            assert_abs_diff_eq!(current.unwrap(), 0.65, epsilon = 0.001);
         } else {
             panic!("Expected StateChange::Energy");
         }
@@ -632,18 +633,20 @@ mod tests {
             energy_yesterday,
             energy_total,
             total_start_time,
+            frequency,
         } = &changes[0]
         {
-            assert!((power.unwrap() - 182.0).abs() < f32::EPSILON);
-            assert!((voltage.unwrap() - 224.0).abs() < f32::EPSILON);
-            assert!((current.unwrap() - 0.706).abs() < 0.001);
-            assert!((apparent_power.unwrap() - 195.0).abs() < f32::EPSILON);
-            assert!((reactive_power.unwrap() - 50.0).abs() < f32::EPSILON);
-            assert!((power_factor.unwrap() - 0.93).abs() < 0.01);
-            assert!((energy_today.unwrap() - 1.5).abs() < 0.01);
-            assert!((energy_yesterday.unwrap() - 2.3).abs() < 0.01);
-            assert!((energy_total.unwrap() - 1104.315).abs() < 0.01);
+            assert_abs_diff_eq!(power.unwrap(), 182.0, epsilon = 1e-6);
+            assert_abs_diff_eq!(voltage.unwrap(), 224.0, epsilon = 1e-6);
+            assert_abs_diff_eq!(current.unwrap(), 0.706, epsilon = 0.001);
+            assert_abs_diff_eq!(apparent_power.unwrap(), 195.0, epsilon = 1e-6);
+            assert_abs_diff_eq!(reactive_power.unwrap(), 50.0, epsilon = 1e-6);
+            assert_abs_diff_eq!(power_factor.unwrap(), 0.93, epsilon = 0.01);
+            assert_abs_diff_eq!(energy_today.unwrap(), 1.5, epsilon = 0.01);
+            assert_abs_diff_eq!(energy_yesterday.unwrap(), 2.3, epsilon = 0.01);
+            assert_abs_diff_eq!(energy_total.unwrap(), 1104.315, epsilon = 0.01);
             assert!(total_start_time.is_none()); // Not in test JSON
+            assert!(frequency.is_none()); // Not in test JSON
         } else {
             panic!("Expected StateChange::Energy");
         }

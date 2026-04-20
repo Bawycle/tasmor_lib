@@ -1,0 +1,32 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": {
+          "tool_name": "Edit|Write",
+          "file_paths": ["**/*.rs"]
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cargo check --message-format short 2>&1 | tail -5"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": {
+          "tool_name": "Edit|Write",
+          "file_paths": ["**/Cargo.lock"]
+        },
+        "hooks": [
+          {
+            "type": "block",
+            "message": "Cargo.lock ne doit pas être édité manuellement."
+          }
+        ]
+      }
+    ]
+  }
+}

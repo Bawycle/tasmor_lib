@@ -132,6 +132,7 @@ impl DeviceManager {
     /// # Errors
     ///
     /// Returns an error if the device creation fails.
+    #[allow(clippy::too_many_lines)]
     pub async fn add_device(&self, config: DeviceConfig) -> Result<(), String> {
         let config_id = config.id;
         let capabilities = config.model.capabilities();
@@ -363,7 +364,10 @@ impl DeviceManager {
         tracing::info!(host = %key.host, "Created new MQTT broker");
 
         // Store and return
-        self.brokers.write().await.insert(key.clone(), broker.clone());
+        self.brokers
+            .write()
+            .await
+            .insert(key.clone(), broker.clone());
         Ok(broker)
     }
 
@@ -438,7 +442,9 @@ impl DeviceManager {
 
             match &entry.handle {
                 DeviceHandle::Http(device) => device.power_on().await.map_err(|e| e.to_string()),
-                DeviceHandle::Mqtt { device, .. } => device.power_on().await.map_err(|e| e.to_string()),
+                DeviceHandle::Mqtt { device, .. } => {
+                    device.power_on().await.map_err(|e| e.to_string())
+                }
             }
         }?;
 
@@ -461,7 +467,9 @@ impl DeviceManager {
 
             match &entry.handle {
                 DeviceHandle::Http(device) => device.power_off().await.map_err(|e| e.to_string()),
-                DeviceHandle::Mqtt { device, .. } => device.power_off().await.map_err(|e| e.to_string()),
+                DeviceHandle::Mqtt { device, .. } => {
+                    device.power_off().await.map_err(|e| e.to_string())
+                }
             }
         }?;
 
@@ -640,8 +648,9 @@ impl DeviceManager {
 
     /// Sets the wakeup duration (1-3000 seconds).
     pub async fn set_wakeup_duration(&self, config_id: Uuid, seconds: u16) -> Result<(), String> {
-        let duration = tasmor_lib::WakeupDuration::new(std::time::Duration::from_secs(u64::from(seconds)))
-            .map_err(|e| e.to_string())?;
+        let duration =
+            tasmor_lib::WakeupDuration::new(std::time::Duration::from_secs(u64::from(seconds)))
+                .map_err(|e| e.to_string())?;
 
         let devices = self.devices.read().await;
         let entry = devices.get(&config_id).ok_or("Device not found")?;
@@ -834,20 +843,22 @@ impl DeviceManager {
             DeviceHandle::Http(device) => device.energy().await,
             DeviceHandle::Mqtt { device, .. } => device.energy().await,
         };
-        #[allow(clippy::cast_precision_loss)]
         if let Ok(energy_response) = energy_result {
             if let Some(energy) = energy_response.energy() {
-                state.set_power_consumption(energy.power as f32);
-                state.set_voltage(f32::from(energy.voltage));
+                state.set_power_consumption(energy.power);
+                state.set_voltage(energy.voltage);
                 state.set_current(energy.current);
                 state.set_energy_today(energy.today);
                 state.set_energy_yesterday(energy.yesterday);
                 state.set_energy_total(energy.total);
-                state.set_apparent_power(energy.apparent_power as f32);
-                state.set_reactive_power(energy.reactive_power as f32);
+                state.set_apparent_power(energy.apparent_power);
+                state.set_reactive_power(energy.reactive_power);
                 state.set_power_factor(energy.factor);
                 if let Some(start_time) = &energy.total_start_time {
                     state.set_total_start_time(start_time.clone());
+                }
+                if let Some(freq) = energy.frequency {
+                    state.set_frequency(freq);
                 }
             }
         }

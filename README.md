@@ -42,7 +42,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-tasmor_lib = "0.5"
+tasmor_lib = "0.6"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 

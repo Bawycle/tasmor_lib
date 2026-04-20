@@ -646,7 +646,7 @@ mod http_protocol {
 
         // Basic sanity checks
         assert!(
-            energy.voltage > 200 && energy.voltage < 250,
+            energy.voltage > 200.0 && energy.voltage < 250.0,
             "Voltage should be ~230V"
         );
     }

@@ -115,6 +115,8 @@ pub struct EnergyData {
     pub energy_today: Option<f32>,
     /// Total energy consumed in kWh.
     pub energy_total: Option<f32>,
+    /// AC frequency in Hz. `None` for DC monitors or devices that do not report it.
+    pub frequency: Option<f32>,
 }
 
 /// Registry for managing device subscription callbacks.
@@ -446,6 +448,7 @@ impl CallbackRegistry {
                 current,
                 energy_today,
                 energy_total,
+                frequency,
                 ..
             } => {
                 let data = EnergyData {
@@ -454,6 +457,7 @@ impl CallbackRegistry {
                     current: *current,
                     energy_today: *energy_today,
                     energy_total: *energy_total,
+                    frequency: *frequency,
                 };
                 let callbacks = self.energy_callbacks.read();
                 for callback in callbacks.values() {
@@ -642,6 +646,7 @@ mod tests {
             energy_yesterday: None,
             energy_total: None,
             total_start_time: None,
+            frequency: None,
         });
 
         let received_data = received.read().clone();
@@ -828,6 +833,7 @@ mod tests {
             current: Some(0.5),
             energy_today: Some(1.5),
             energy_total: Some(150.0),
+            frequency: None,
         };
 
         let debug = format!("{data:?}");

@@ -1148,7 +1148,7 @@ impl<P: Protocol> Device<P> {
     /// # Errors
     ///
     /// Returns error if any of the queries fail.
-    #[allow(clippy::cast_precision_loss, clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines)]
     pub async fn query_state(&self) -> Result<DeviceState, Error> {
         tracing::debug!(
             energy_monitoring = self.capabilities.supports_energy_monitoring(),
@@ -1223,14 +1223,14 @@ impl<P: Protocol> Device<P> {
                             current = energy.current,
                             "Setting energy data"
                         );
-                        state.set_power_consumption(energy.power as f32);
-                        state.set_voltage(f32::from(energy.voltage));
+                        state.set_power_consumption(energy.power);
+                        state.set_voltage(energy.voltage);
                         state.set_current(energy.current);
                         state.set_energy_today(energy.today);
                         state.set_energy_yesterday(energy.yesterday);
                         state.set_energy_total(energy.total);
-                        state.set_apparent_power(energy.apparent_power as f32);
-                        state.set_reactive_power(energy.reactive_power as f32);
+                        state.set_apparent_power(energy.apparent_power);
+                        state.set_reactive_power(energy.reactive_power);
                         state.set_power_factor(energy.factor);
                         if let Some(start_time) = &energy.total_start_time {
                             state.set_total_start_time(start_time.clone());

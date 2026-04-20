@@ -71,18 +71,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("├─────────────────────────────────────┤");
 
     if let Some(voltage) = state.voltage() {
-        println!("│  Voltage:     {:>8.0} V            │", voltage);
+        println!("│  Voltage:     {voltage:>8.0} V            │");
     }
     if let Some(current) = state.current() {
-        println!("│  Current:     {:>8.3} A           │", current);
+        println!("│  Current:     {current:>8.3} A           │");
     }
     if let Some(power) = state.power_consumption() {
-        println!("│  Power:       {:>8.0} W            │", power);
+        println!("│  Power:       {power:>8.0} W            │");
     }
-    if let Some(factor) = state.power_factor() {
-        if factor > 0.0 {
-            println!("│  Power Factor:{:>8.2}             │", factor);
-        }
+    if let Some(factor) = state.power_factor()
+        && factor > 0.0
+    {
+        println!("│  Power Factor:{factor:>8.2}             │");
+    }
+    if let Some(frequency) = state.frequency() {
+        println!("│  Frequency:   {frequency:>8.2} Hz           │");
     }
 
     println!("├─────────────────────────────────────┤");
@@ -90,16 +93,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("├─────────────────────────────────────┤");
 
     if let Some(today) = state.energy_today() {
-        println!("│  Today:       {:>8.3} kWh         │", today);
+        println!("│  Today:       {today:>8.3} kWh         │");
     }
     if let Some(yesterday) = state.energy_yesterday() {
-        println!("│  Yesterday:   {:>8.3} kWh         │", yesterday);
+        println!("│  Yesterday:   {yesterday:>8.3} kWh         │");
     }
     if let Some(total) = state.energy_total() {
-        println!("│  Total:       {:>8.3} kWh         │", total);
+        println!("│  Total:       {total:>8.3} kWh         │");
     }
     if let Some(start_time) = state.total_start_time() {
-        println!("│  Since:       {:<21} │", start_time);
+        println!("│  Since:       {start_time:<21} │");
     }
 
     println!("└─────────────────────────────────────┘");

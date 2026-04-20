@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("Turning on the bulb...");
     match device.power_on().await {
-        Ok(resp) => println!("Bulb ON: {:?}", resp),
+        Ok(resp) => println!("Bulb ON: {resp:?}"),
         Err(e) => println!("Power ON sent (response parse error: {e})"),
     }
 
@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Turning off the bulb...");
     match device.power_off().await {
-        Ok(resp) => println!("Bulb OFF: {:?}", resp),
+        Ok(resp) => println!("Bulb OFF: {resp:?}"),
         Err(e) => println!("Power OFF sent (response parse error: {e})"),
     }
 
