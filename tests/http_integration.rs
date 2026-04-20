@@ -5,6 +5,7 @@
 
 //! Integration tests for HTTP protocol using wiremock.
 
+use approx::assert_abs_diff_eq;
 use std::time::Duration;
 
 use tasmor_lib::command::{
@@ -919,7 +920,7 @@ mod device_energy_commands {
     }
 
     #[tokio::test]
-    async fn get_energy() {
+    async fn get_energy_0() {
         let mock_server = MockServer::start().await;
 
         // Energy command uses "Status 10" in Tasmota (replaces deprecated Status 8)
@@ -945,8 +946,39 @@ mod device_energy_commands {
         let response = device.energy().await.unwrap();
 
         let energy = response.energy().unwrap();
-        assert_eq!(energy.power, 45);
-        assert_eq!(energy.voltage, 230);
+        assert_eq!(energy.power, 45.0);
+        assert_eq!(energy.voltage, 230.0);
+    }
+
+    #[tokio::test]
+    async fn get_energy_1() {
+        let mock_server = MockServer::start().await;
+
+        // Energy command uses "Status 10" in Tasmota (replaces deprecated Status 8)
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Status 10"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "StatusSNS": {
+                    "ENERGY": {
+                        "TotalStartTime": "2024-01-01T00:00:00",
+                        "Total": 123.45678,
+                        "Yesterday": 1.23456,
+                        "Today": 0.56789,
+                        "Power": 45.123,
+                        "Voltage": 230.234,
+                        "Current": 0.19678
+                    }
+                }
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let device = create_energy_device(&mock_server).await;
+        let response = device.energy().await.unwrap();
+
+        let energy = response.energy().unwrap();
+        assert_abs_diff_eq!(energy.power, 45.123, epsilon = 0.001);
+        assert_abs_diff_eq!(energy.voltage, 230.234, epsilon = 0.001);
     }
 
     #[tokio::test]
