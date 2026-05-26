@@ -2,10 +2,7 @@
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": {
-          "tool_name": "Edit|Write",
-          "file_paths": ["**/*.rs"]
-        },
+        "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
@@ -16,14 +13,11 @@
     ],
     "PreToolUse": [
       {
-        "matcher": {
-          "tool_name": "Edit|Write",
-          "file_paths": ["**/Cargo.lock"]
-        },
+        "matcher": "Edit|Write",
         "hooks": [
           {
-            "type": "block",
-            "message": "Cargo.lock ne doit pas être édité manuellement."
+            "type": "command",
+            "command": "python3 -c \"import json,sys; d=json.load(sys.stdin); p=d.get('tool_input',{}).get('file_path',''); print('Cargo.lock ne doit pas etre edite manuellement.',file=sys.stderr) or sys.exit(2) if 'Cargo.lock' in p else sys.exit(0)\""
           }
         ]
       }

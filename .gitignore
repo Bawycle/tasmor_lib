@@ -1,3 +1,4 @@
 /target
 /examples/supervisor/target
 /external-docs
+.claude/settings.local.json
