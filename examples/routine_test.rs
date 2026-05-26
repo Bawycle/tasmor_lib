@@ -19,7 +19,7 @@
 
 use std::env;
 use std::time::Duration;
-use tasmor_lib::{CapabilitiesBuilder, Dimmer, MqttBroker, PowerIndex, Routine};
+use tasmor_lib::{CapabilitiesBuilder, ColorTemperature, Dimmer, MqttBroker, PowerIndex, Routine};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -65,18 +65,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Initial dimmer: {dimmer}");
     }
 
-    // Build a wakeup routine: start dim, gradually increase brightness
+    // Build a wakeup routine: switch to neutral white, start dim, gradually increase brightness
     println!("\nBuilding wakeup routine...");
     let wakeup_routine = Routine::builder()
+        .enable_fade()
+        .set_fade_duration(tasmor_lib::FadeDuration::new(Duration::from_secs(2))?)
+        .set_color_temperature(ColorTemperature::NEUTRAL)
         .set_dimmer(Dimmer::new(10)?)
         .power_on(PowerIndex::one())
-        .delay(Duration::from_secs(2))
+        .delay(Duration::from_secs(3))
         .set_dimmer(Dimmer::new(30)?)
-        .delay(Duration::from_secs(2))
+        .delay(Duration::from_secs(3))
         .set_dimmer(Dimmer::new(50)?)
-        .delay(Duration::from_secs(2))
+        .delay(Duration::from_secs(3))
         .set_dimmer(Dimmer::new(75)?)
-        .delay(Duration::from_secs(2))
+        .delay(Duration::from_secs(3))
         .set_dimmer(Dimmer::new(100)?)
         .build()?;
 
@@ -94,8 +97,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Wait for the routine to complete visually
-    println!("\nWaiting 10 seconds for routine to complete...");
-    tokio::time::sleep(Duration::from_secs(10)).await;
+    println!("\nWaiting 15 seconds for routine to complete...");
+    tokio::time::sleep(Duration::from_secs(15)).await;
 
     // Turn off
     println!("Turning off...");
