@@ -20,7 +20,7 @@ A modern, type-safe Rust library for controlling [Tasmota](https://tasmota.githu
 - **Async/await** - Built on [Tokio](https://tokio.rs) for efficient async I/O
 - **Full device support** - Lights (RGB/CCT), switches, relays, energy monitors
 - **Event-driven architecture** - Subscribe to device state changes in real-time (MQTT)
-- **Well-tested** - Comprehensive unit and integration tests (580+ tests)
+- **Well-tested** - Comprehensive unit and integration tests (630+ tests)
 
 ### Supported Capabilities
 
@@ -46,16 +46,45 @@ tasmor_lib = "0.6"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
+### System Requirements
+
+The MQTT feature (enabled by default) links against the [Eclipse Paho MQTT C library](https://github.com/eclipse/paho.mqtt.c), which is compiled from source during `cargo build`.
+
+**Build-time dependencies** (required when the `mqtt` feature is enabled):
+
+| Dependency | Purpose | Install |
+|---|---|---|
+| C compiler (`cc`) | Compile paho.mqtt.c | Usually pre-installed |
+| `cmake` ≥ 3.x | Build system for paho.mqtt.c | `apt install cmake` / `brew install cmake` / `pacman -S cmake` |
+
+**Runtime dependencies** (required in the final binary):
+
+| Library | Purpose |
+|---|---|
+| `libssl` + `libcrypto` (OpenSSL) | TLS support in paho.mqtt.c |
+
+OpenSSL is present on most Linux/macOS systems. For **minimal Docker images** (e.g., `debian:slim`, `alpine`), add it explicitly:
+
+```dockerfile
+# Debian/Ubuntu
+RUN apt-get install -y libssl3
+
+# Alpine
+RUN apk add --no-cache openssl-libs-static
+```
+
+If you only use HTTP (`default-features = false, features = ["http"]`), none of these system dependencies apply.
+
 ### Feature Flags
 
 Both HTTP and MQTT protocols are enabled by default. To reduce compile time and binary size, you can enable only the protocol you need:
 
 ```toml
-# HTTP only (no MQTT dependencies)
-tasmor_lib = { version = "0.5", default-features = false, features = ["http"] }
+# HTTP only (no C dependencies, no OpenSSL requirement)
+tasmor_lib = { version = "0.6", default-features = false, features = ["http"] }
 
 # MQTT only (no HTTP dependencies)
-tasmor_lib = { version = "0.5", default-features = false, features = ["mqtt"] }
+tasmor_lib = { version = "0.6", default-features = false, features = ["mqtt"] }
 ```
 
 ## Quick Start
@@ -580,7 +609,7 @@ Built for controlling [Tasmota](https://tasmota.github.io/) open-source firmware
 
 **Key dependencies:**
 - [Tokio](https://tokio.rs) - Async runtime
-- [rumqttc](https://github.com/bytebeamio/rumqtt) - MQTT client
+- [paho-mqtt](https://github.com/eclipse/paho.mqtt.rust) - MQTT client (wraps Eclipse Paho C library)
 - [reqwest](https://github.com/seanmonstar/reqwest) - HTTP client
 
 **Testing:**

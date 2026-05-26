@@ -45,7 +45,7 @@
 //!    [`on_disconnected`](crate::subscription::Subscribable::on_disconnected)
 //!    callback is triggered for all devices.
 //!
-//! 2. **Automatic Reconnection**: The underlying MQTT client (rumqttc)
+//! 2. **Automatic Reconnection**: The underlying MQTT client (paho-mqtt)
 //!    automatically attempts to reconnect to the broker.
 //!
 //! 3. **Topic Resubscription**: When the connection is restored, all device
@@ -92,8 +92,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
-use rumqttc::{AsyncClient, EventLoop, MqttOptions, QoS};
-use tokio::sync::{RwLock, mpsc, oneshot};
+use paho_mqtt::{AsyncClient, QoS};
+use tokio::sync::{RwLock, mpsc};
 
 use crate::error::ProtocolError;
 use crate::protocol::TopicRouter;
@@ -104,6 +104,16 @@ static BROKER_CLIENT_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Default timeout for MQTT command responses.
 pub const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Events dispatched from paho-mqtt callbacks to the Tokio event loop.
+enum BrokerEvent {
+    /// An incoming MQTT message was received.
+    Message { topic: String, payload: String },
+    /// The connection to the broker was lost.
+    ConnectionLost,
+    /// The connection to the broker was (re)established.
+    Reconnected,
+}
 
 /// Configuration for an MQTT broker connection.
 #[derive(Debug, Clone)]
@@ -150,7 +160,7 @@ pub struct MqttBroker {
 }
 
 struct MqttBrokerInner {
-    /// The MQTT async client for publishing.
+    /// The paho-mqtt async client for publishing and subscribing.
     client: AsyncClient,
     /// Active device subscriptions by device topic.
     subscriptions: RwLock<HashMap<String, DeviceSubscription>>,
@@ -158,9 +168,6 @@ struct MqttBrokerInner {
     config: MqttBrokerConfig,
     /// Connection status.
     connected: AtomicBool,
-    /// Whether the initial connection has been established.
-    /// Used to distinguish reconnections from the first connection.
-    initial_connection_done: AtomicBool,
     /// Channel for sending discovered device topics during discovery.
     discovery_tx: RwLock<Option<mpsc::Sender<String>>>,
 }
@@ -273,12 +280,10 @@ impl MqttBroker {
             "Subscribed to device topics"
         );
 
-        // Create channels and router for this device
         // Channel capacity increased to handle multi-message responses (e.g., Status 0)
         let (response_tx, response_rx) = mpsc::channel::<MqttMessage>(20);
         let router = Arc::new(TopicRouter::new());
 
-        // Register the subscription
         let subscription = DeviceSubscription {
             response_tx,
             router: Arc::clone(&router),
@@ -294,10 +299,8 @@ impl MqttBroker {
 
     /// Removes a subscription for a device topic.
     pub(crate) async fn remove_device_subscription(&self, device_topic: &str) {
-        // Remove from tracking
         self.inner.subscriptions.write().await.remove(device_topic);
 
-        // Unsubscribe from MQTT topics
         let stat_topic = format!("stat/{device_topic}/+");
         let tele_topic = format!("tele/{device_topic}/+");
 
@@ -318,7 +321,6 @@ impl MqttBroker {
 
     /// Routes an incoming message to the appropriate device subscriber.
     async fn route_message(&self, topic: &str, payload: String) {
-        // Parse topic: stat/<device_topic>/<command> or tele/<device_topic>/<type>
         let parts: Vec<&str> = topic.split('/').collect();
         if parts.len() < 3 {
             return;
@@ -332,8 +334,7 @@ impl MqttBroker {
             return;
         }
 
-        // Check for discovery mode - capture device topics from discovery messages
-        // tele/+/LWT, tele/+/STATE, or stat/+/STATUS
+        // Capture device topics for active discovery sessions
         let is_discovery_topic = (prefix == "tele" && (suffix == "LWT" || suffix == "STATE"))
             || (prefix == "stat" && suffix == "STATUS");
 
@@ -345,22 +346,17 @@ impl MqttBroker {
                 device = %device_topic,
                 "Discovered device topic"
             );
-            // Ignore send errors - discovery may have stopped
             let _ = discovery_tx.send(device_topic.to_string()).await;
         }
 
-        // Route to registered device subscriptions
         let subscriptions = self.inner.subscriptions.read().await;
         let Some(sub) = subscriptions.get(device_topic) else {
             return;
         };
 
-        // Route to callbacks via the topic router
         sub.router.route(topic, &payload);
 
-        // For stat/ messages, also send to response channel if it's a command response
         if prefix == "stat" {
-            // RESULT and STATUS* are JSON responses that go to the response channel
             let is_json_response = suffix == "RESULT" || suffix.starts_with("STATUS");
             if is_json_response {
                 tracing::debug!(
@@ -369,25 +365,20 @@ impl MqttBroker {
                     suffix = %suffix,
                     "Routing response to device"
                 );
-                // Send as MqttMessage with topic suffix for multi-message collection
                 let msg = MqttMessage::new(suffix.to_string(), payload);
-                // Ignore send errors - the device may have been dropped
                 let _ = sub.response_tx.send(msg).await;
             }
         }
     }
 
-    /// Handles reconnection by resubscribing to all device topics.
+    /// Resubscribes to all device topics after a reconnection.
     ///
-    /// This is called automatically when the MQTT broker connection is restored
-    /// after a disconnection. It:
-    /// 1. Resubscribes to all device topics (`stat/<topic>/+` and `tele/<topic>/+`)
-    /// 2. Dispatches the `on_reconnected` callback to all devices
+    /// Called automatically when the MQTT connection is restored. Resubscribes
+    /// to all registered device topics and dispatches `on_reconnected` callbacks.
     async fn handle_reconnection(&self) {
         let subscriptions = self.inner.subscriptions.read().await;
 
         for (device_topic, subscription) in subscriptions.iter() {
-            // Resubscribe to MQTT topics
             let stat_topic = format!("stat/{device_topic}/+");
             let tele_topic = format!("tele/{device_topic}/+");
 
@@ -409,12 +400,8 @@ impl MqttBroker {
                 tracing::error!(topic = %tele_topic, error = %e, "Failed to resubscribe to tele topic");
             }
 
-            tracing::debug!(
-                device = %device_topic,
-                "Resubscribed to device topics"
-            );
+            tracing::debug!(device = %device_topic, "Resubscribed to device topics");
 
-            // Dispatch reconnected callback via router
             subscription.router.dispatch_reconnected_all();
         }
 
@@ -425,11 +412,8 @@ impl MqttBroker {
     }
 
     /// Dispatches disconnection event to all registered devices.
-    ///
-    /// This is called when the MQTT broker connection is lost.
     async fn dispatch_disconnected_all(&self) {
         let subscriptions = self.inner.subscriptions.read().await;
-
         for (device_topic, subscription) in subscriptions.iter() {
             tracing::debug!(device = %device_topic, "Notifying device of disconnection");
             subscription.router.dispatch_disconnected_all();
@@ -438,7 +422,7 @@ impl MqttBroker {
 
     /// Disconnects from the broker.
     ///
-    /// This will close the connection and clean up all subscriptions.
+    /// Closes the connection and cleans up all subscriptions.
     ///
     /// # Errors
     ///
@@ -450,13 +434,11 @@ impl MqttBroker {
             "Disconnecting from MQTT broker"
         );
 
-        // Clear all subscriptions
         self.inner.subscriptions.write().await.clear();
 
-        // Disconnect the client
         self.inner
             .client
-            .disconnect()
+            .disconnect(None)
             .await
             .map_err(ProtocolError::Mqtt)?;
 
@@ -598,48 +580,71 @@ impl MqttBrokerBuilder {
             ));
         }
 
-        // Generate unique client ID
         let counter = BROKER_CLIENT_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
         let client_id = format!("tasmor_{}_{}", std::process::id(), counter);
 
-        let mut mqtt_options = MqttOptions::new(&client_id, &self.config.host, self.config.port);
-        mqtt_options.set_keep_alive(self.config.keep_alive);
-        mqtt_options.set_clean_session(true);
+        let create_opts = paho_mqtt::CreateOptionsBuilder::new()
+            .server_uri(format!("tcp://{}:{}", self.config.host, self.config.port))
+            .client_id(client_id)
+            .finalize();
 
-        if let Some((ref username, ref password)) = self.config.credentials {
-            mqtt_options.set_credentials(username, password);
-        }
-
-        let (client, event_loop) = AsyncClient::new(mqtt_options, 10);
+        let client = paho_mqtt::AsyncClient::new(create_opts)
+            .map_err(|e| ProtocolError::ConnectionFailed(e.to_string()))?;
 
         let inner = MqttBrokerInner {
             client,
             subscriptions: RwLock::new(HashMap::new()),
             config: self.config.clone(),
             connected: AtomicBool::new(false),
-            initial_connection_done: AtomicBool::new(false),
             discovery_tx: RwLock::new(None),
         };
-
         let broker = MqttBroker {
             inner: Arc::new(inner),
         };
 
-        // Clone for event loop
-        let broker_clone = broker.clone();
+        // Channels bridge paho C-thread callbacks into the Tokio event loop.
+        let (event_tx, event_rx) = mpsc::unbounded_channel::<BrokerEvent>();
 
-        // Channel to signal when ConnAck is received
-        let (connack_tx, connack_rx) = oneshot::channel();
+        // Message callback: route incoming publishes.
+        {
+            let tx = event_tx.clone();
+            broker.inner.client.set_message_callback(move |_cli, msg| {
+                if let Some(msg) = msg {
+                    let _ = tx.send(BrokerEvent::Message {
+                        topic: msg.topic().to_string(),
+                        payload: msg.payload_str().into_owned(),
+                    });
+                }
+            });
+        }
 
-        // Spawn event loop handler
-        tokio::spawn(async move {
-            handle_broker_events(event_loop, broker_clone, Some(connack_tx)).await;
-        });
+        // Connection-lost callback: fires when the TCP connection drops.
+        {
+            let tx = event_tx.clone();
+            broker
+                .inner
+                .client
+                .set_connection_lost_callback(move |_cli| {
+                    let _ = tx.send(BrokerEvent::ConnectionLost);
+                });
+        }
 
-        // Wait for ConnAck with timeout
+        // Connect options with automatic exponential-backoff reconnection.
+        let conn_opts = {
+            let mut b = paho_mqtt::ConnectOptionsBuilder::new();
+            b.keep_alive_interval(self.config.keep_alive)
+                .clean_session(true)
+                .automatic_reconnect(Duration::from_millis(500), Duration::from_secs(60));
+            if let Some((ref username, ref password)) = self.config.credentials {
+                b.user_name(username).password(password.clone());
+            }
+            b.finalize()
+        };
+
+        // Connect and wait with a user-defined timeout.
         let timeout = self.config.connection_timeout;
-        match tokio::time::timeout(timeout, connack_rx).await {
-            Ok(Ok(())) => {
+        match tokio::time::timeout(timeout, broker.inner.client.connect(conn_opts)).await {
+            Ok(Ok(_)) => {
                 broker.inner.connected.store(true, Ordering::Release);
                 tracing::info!(
                     host = %self.config.host,
@@ -647,10 +652,8 @@ impl MqttBrokerBuilder {
                     "Connected to MQTT broker"
                 );
             }
-            Ok(Err(_)) => {
-                return Err(ProtocolError::ConnectionFailed(
-                    "MQTT event loop terminated unexpectedly".to_string(),
-                ));
+            Ok(Err(e)) => {
+                return Err(ProtocolError::ConnectionFailed(e.to_string()));
             }
             Err(_) => {
                 return Err(ProtocolError::ConnectionFailed(format!(
@@ -660,89 +663,60 @@ impl MqttBrokerBuilder {
             }
         }
 
+        // Set the reconnected callback only AFTER the initial connect completes,
+        // so it fires exclusively for subsequent reconnections by paho-mqtt's
+        // automatic-reconnect logic.
+        {
+            let tx = event_tx;
+            broker.inner.client.set_connected_callback(move |_cli| {
+                let _ = tx.send(BrokerEvent::Reconnected);
+            });
+        }
+
+        let broker_clone = broker.clone();
+        tokio::spawn(async move {
+            handle_broker_events(event_rx, broker_clone).await;
+        });
+
         Ok(broker)
     }
 }
 
-/// Handles MQTT events for the broker connection.
+/// Processes broker events forwarded from paho-mqtt's C-thread callbacks.
 ///
-/// This function runs the MQTT event loop and handles:
-/// - Initial connection and reconnections
-/// - Automatic topic resubscription on reconnection
-/// - Message routing to devices
-/// - Connection state management
-///
-/// # Reconnection Behavior
-///
-/// When the connection is lost and restored by rumqttc:
-/// 1. All device topic subscriptions are automatically restored
-/// 2. The `on_reconnected` callback is triggered for each device
-/// 3. Applications should call `query_state()` to refresh device state
+/// Runs for the lifetime of the broker, handling:
+/// - Incoming messages → routed to subscribed devices
+/// - Connection loss → `on_disconnected` callbacks dispatched
+/// - Reconnection → topics resubscribed, `on_reconnected` callbacks dispatched
 async fn handle_broker_events(
-    mut event_loop: EventLoop,
+    mut event_rx: mpsc::UnboundedReceiver<BrokerEvent>,
     broker: MqttBroker,
-    connack_tx: Option<oneshot::Sender<()>>,
 ) {
-    use rumqttc::{Event, Packet};
-
-    let mut connack_tx = connack_tx;
-
-    loop {
-        match event_loop.poll().await {
-            Ok(Event::Incoming(Packet::ConnAck(connack))) => {
-                tracing::debug!(?connack, "MQTT broker connected");
+    while let Some(event) = event_rx.recv().await {
+        match event {
+            BrokerEvent::Reconnected => {
                 broker.inner.connected.store(true, Ordering::Release);
-
-                // Signal initial connection
-                if let Some(tx) = connack_tx.take() {
-                    let _ = tx.send(());
-                }
-
-                // Handle reconnection (not the first connection)
-                if broker.inner.initial_connection_done.load(Ordering::Acquire) {
-                    tracing::info!("MQTT broker reconnected, restoring subscriptions");
-                    broker.handle_reconnection().await;
-                } else {
-                    broker
-                        .inner
-                        .initial_connection_done
-                        .store(true, Ordering::Release);
-                }
+                tracing::info!("MQTT broker reconnected, restoring subscriptions");
+                broker.handle_reconnection().await;
             }
-            Ok(Event::Incoming(Packet::SubAck(suback))) => {
-                tracing::debug!(?suback, "MQTT subscription acknowledged");
-            }
-            Ok(Event::Incoming(Packet::Publish(publish))) => {
-                if let Ok(payload) = String::from_utf8(publish.payload.to_vec()) {
-                    tracing::debug!(
-                        topic = %publish.topic,
-                        payload = %payload,
-                        "MQTT message received"
-                    );
-                    broker.route_message(&publish.topic, payload).await;
-                }
-            }
-            Ok(Event::Incoming(Packet::Disconnect)) => {
-                tracing::info!("MQTT broker disconnected by server");
-                broker.inner.connected.store(false, Ordering::Release);
-                broker.dispatch_disconnected_all().await;
-                // Don't break - let rumqttc attempt to reconnect
-            }
-            Ok(_) => {}
-            Err(e) => {
-                // Check if we were previously connected
+            BrokerEvent::ConnectionLost => {
                 let was_connected = broker.inner.connected.swap(false, Ordering::AcqRel);
-
                 if was_connected {
-                    tracing::warn!(error = %e, "MQTT connection lost, waiting for reconnection");
+                    tracing::warn!("MQTT connection lost, waiting for reconnection");
                     broker.dispatch_disconnected_all().await;
-                } else {
-                    tracing::debug!(error = %e, "MQTT connection error during reconnection attempt");
                 }
-                // Don't break - let rumqttc attempt to reconnect automatically
+            }
+            BrokerEvent::Message { topic, payload } => {
+                tracing::debug!(
+                    topic = %topic,
+                    payload = %payload,
+                    "MQTT message received"
+                );
+                broker.route_message(&topic, payload).await;
             }
         }
     }
+    tracing::info!("MQTT broker event loop ended");
 }
 
 #[cfg(test)]
