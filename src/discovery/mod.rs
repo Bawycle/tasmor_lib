@@ -75,7 +75,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
-use rumqttc::QoS;
+use paho_mqtt::QoS;
 use tokio::sync::RwLock;
 
 use crate::device::Device;
@@ -262,7 +262,11 @@ impl MqttBroker {
         // Trigger all devices to respond by sending Status command to default group topic
         // Tasmota devices have "tasmotas" as default GroupTopic1
         self.client()
-            .publish("cmnd/tasmotas/Status", QoS::AtMostOnce, false, "0")
+            .publish(paho_mqtt::Message::new(
+                "cmnd/tasmotas/Status",
+                "0",
+                QoS::AtMostOnce,
+            ))
             .await
             .map_err(ProtocolError::Mqtt)?;
 

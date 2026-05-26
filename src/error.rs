@@ -95,7 +95,7 @@ pub enum ProtocolError {
     /// MQTT connection or communication failed.
     #[cfg(feature = "mqtt")]
     #[error("MQTT error: {0}")]
-    Mqtt(#[from] rumqttc::ClientError),
+    Mqtt(#[from] paho_mqtt::Error),
 
     /// Connection to the device failed.
     #[error("connection failed: {0}")]

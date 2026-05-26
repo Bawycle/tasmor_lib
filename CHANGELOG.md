@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING: `ProtocolError::Mqtt` inner type changed** — Now wraps `paho_mqtt::Error` instead of `rumqttc::ClientError`. Affects only code that pattern-matches on this variant and uses the inner error type directly.
+- **MQTT backend replaced: rumqttc → paho-mqtt 0.14** — New system requirements: `cmake` at build time, `libssl`/`libcrypto` (OpenSSL) at runtime. See README for details.
+
 ## [0.6.0] - 2026-04-20
 
 ### Added
