@@ -26,6 +26,7 @@ allow = [
     "Unicode-3.0",
     "CDLA-Permissive-2.0",
     # Weak copyleft (linking permitted without copyleft contamination)
+    "EPL-2.0",
     "LGPL-2.0-only",
     "LGPL-2.0-or-later",
     "LGPL-2.1-only",
