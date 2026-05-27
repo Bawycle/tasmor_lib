@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-27
+
+### Changed
+
+- **BREAKING: `ProtocolError::Mqtt` inner type changed** — Now wraps `paho_mqtt::Error` instead of `rumqttc::ClientError`. Affects only code that pattern-matches on this variant and uses the inner error type directly.
+- **MQTT backend replaced: rumqttc → paho-mqtt 0.14** — New system requirements: `cmake` at build time, `libssl`/`libcrypto` (OpenSSL) at runtime. See README for details.
+
 ## [0.6.0] - 2026-04-20
 
 ### Added
@@ -169,7 +176,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - README with usage examples
   - CONTRIBUTING.md with development guidelines
 
-[Unreleased]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.6.0...HEAD
+[Unreleased]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.7.0...HEAD
+[0.7.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.6.0...v0.7.0
 [0.6.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.5.0...v0.6.0
 [0.5.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.4.1...v0.5.0
 [0.4.1]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.4.0...v0.4.1

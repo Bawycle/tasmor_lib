@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use rumqttc::QoS;
+use paho_mqtt::{Message, QoS};
 use tokio::sync::{Mutex, mpsc};
 
 use crate::command::Command;
@@ -51,8 +51,8 @@ use super::topic_router::TopicRouter;
 /// # }
 /// ```
 pub struct SharedMqttClient {
-    /// The shared MQTT async client for publishing.
-    client: rumqttc::AsyncClient,
+    /// The shared paho-mqtt async client for publishing.
+    client: paho_mqtt::AsyncClient,
     /// The device topic (e.g., `tasmota_bulb`).
     topic: String,
     /// Channel for receiving command responses (with topic suffix metadata).
@@ -72,7 +72,7 @@ impl SharedMqttClient {
     ///
     /// This is called internally by `MqttBroker` when creating a device.
     pub(crate) fn new(
-        client: rumqttc::AsyncClient,
+        client: paho_mqtt::AsyncClient,
         topic: String,
         response_rx: mpsc::Receiver<MqttMessage>,
         router: Arc<TopicRouter>,
@@ -101,10 +101,10 @@ impl SharedMqttClient {
     /// This only unsubscribes this device from its topics; the shared broker
     /// connection remains open for other devices.
     ///
-    /// This method is idempotent - calling it multiple times is safe.
+    /// This method is idempotent — calling it multiple times is safe.
     pub async fn disconnect(&self) {
         if self.disconnected.swap(true, Ordering::SeqCst) {
-            return; // Already disconnected
+            return;
         }
         self.broker.remove_device_subscription(&self.topic).await;
         tracing::debug!(topic = %self.topic, "Device disconnected");
@@ -121,19 +121,21 @@ impl SharedMqttClient {
         self.router.register(&self.topic, callbacks);
     }
 
-    /// Publishes a message to the command topic.
+    /// Publishes a command to the device's `cmnd/<topic>/<command>` topic.
     async fn publish_command(&self, command: &str, payload: &str) -> Result<(), ProtocolError> {
         let topic = format!("cmnd/{}/{command}", self.topic);
 
         tracing::debug!(topic = %topic, payload = %payload, "Publishing shared MQTT command");
 
+        let msg = Message::new(topic, payload.to_string(), QoS::AtLeastOnce);
         self.client
-            .publish(&topic, QoS::AtLeastOnce, false, payload)
+            .publish(msg)
             .await
-            .map_err(ProtocolError::Mqtt)
+            .map_err(ProtocolError::Mqtt)?;
+        Ok(())
     }
 
-    /// Drains stale messages from the response channel.
+    /// Drains stale messages from the response channel before sending a new command.
     async fn drain_stale_responses(&self) {
         let mut rx = self.response_rx.lock().await;
         let mut count = 0;
@@ -190,7 +192,6 @@ impl Protocol for SharedMqttClient {
         self.drain_stale_responses().await;
         self.publish_command(cmd_name, payload).await?;
 
-        // Raw commands expect a single response
         let body = self
             .collect_command_responses(&ResponseSpec::Single)
             .await?;
@@ -201,13 +202,12 @@ impl Protocol for SharedMqttClient {
 impl Drop for SharedMqttClient {
     fn drop(&mut self) {
         if self.disconnected.load(Ordering::SeqCst) {
-            return; // Already disconnected via disconnect()
+            return;
         }
 
         let topic = self.topic.clone();
         let broker = self.broker.clone();
 
-        // Attempt async cleanup if we're in a tokio runtime
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             handle.spawn(async move {
                 broker.remove_device_subscription(&topic).await;
