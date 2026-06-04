@@ -10,6 +10,7 @@ use std::time::Duration;
 use reqwest::Client;
 
 use crate::command::Command;
+use crate::credentials::Credentials;
 use crate::error::ProtocolError;
 use crate::protocol::{CommandResponse, Protocol};
 
@@ -44,7 +45,7 @@ pub struct HttpConfig {
     host: String,
     port: u16,
     use_https: bool,
-    credentials: Option<(String, String)>,
+    credentials: Option<Credentials>,
     timeout: Duration,
 }
 
@@ -98,7 +99,7 @@ impl HttpConfig {
         username: impl Into<String>,
         password: impl Into<String>,
     ) -> Self {
-        self.credentials = Some((username.into(), password.into()));
+        self.credentials = Some(Credentials::new(username, password));
         self
     }
 
@@ -132,7 +133,7 @@ impl HttpConfig {
     pub fn credentials(&self) -> Option<(&str, &str)> {
         self.credentials
             .as_ref()
-            .map(|(u, p)| (u.as_str(), p.as_str()))
+            .map(|c| (c.username(), c.password()))
     }
 
     /// Returns the timeout.
@@ -167,9 +168,7 @@ impl HttpConfig {
             .build()
             .map_err(ProtocolError::Http)?;
 
-        let credentials = self
-            .credentials
-            .map(|(username, password)| Credentials { username, password });
+        let credentials = self.credentials;
 
         Ok(HttpClient {
             base_url,
@@ -205,15 +204,6 @@ pub struct HttpClient {
     base_url: String,
     client: Client,
     credentials: Option<Credentials>,
-}
-
-/// HTTP authentication credentials.
-#[derive(Debug, Clone)]
-pub struct Credentials {
-    /// Username for authentication.
-    pub username: String,
-    /// Password for authentication.
-    pub password: String,
 }
 
 impl HttpClient {
@@ -253,10 +243,7 @@ impl HttpClient {
         username: impl Into<String>,
         password: impl Into<String>,
     ) -> Self {
-        self.credentials = Some(Credentials {
-            username: username.into(),
-            password: password.into(),
-        });
+        self.credentials = Some(Credentials::new(username, password));
         self
     }
 
@@ -275,8 +262,8 @@ impl HttpClient {
                 format!(
                     "{}/cm?user={}&password={}&cmnd={}",
                     self.base_url,
-                    urlencoding::encode(&creds.username),
-                    urlencoding::encode(&creds.password),
+                    urlencoding::encode(creds.username()),
+                    urlencoding::encode(creds.password()),
                     encoded_command
                 )
             }
@@ -298,7 +285,7 @@ impl Protocol for HttpClient {
     async fn send_raw(&self, command: &str) -> Result<CommandResponse, ProtocolError> {
         let url = self.build_url(command);
 
-        tracing::debug!(url = %url, "Sending HTTP command");
+        tracing::debug!(command = %command, "Sending HTTP command");
 
         let response = self
             .client
@@ -331,8 +318,7 @@ impl Protocol for HttpClient {
 #[derive(Debug, Default)]
 pub struct HttpClientBuilder {
     host: Option<String>,
-    username: Option<String>,
-    password: Option<String>,
+    credentials: Option<Credentials>,
     timeout: Option<Duration>,
 }
 
@@ -353,8 +339,7 @@ impl HttpClientBuilder {
     /// Sets authentication credentials.
     #[must_use]
     pub fn credentials(mut self, username: impl Into<String>, password: impl Into<String>) -> Self {
-        self.username = Some(username.into());
-        self.password = Some(password.into());
+        self.credentials = Some(Credentials::new(username, password));
         self
     }
 
@@ -386,15 +371,10 @@ impl HttpClientBuilder {
             .build()
             .map_err(ProtocolError::Http)?;
 
-        let credentials = match (self.username, self.password) {
-            (Some(username), Some(password)) => Some(Credentials { username, password }),
-            _ => None,
-        };
-
         Ok(HttpClient {
             base_url,
             client,
-            credentials,
+            credentials: self.credentials,
         })
     }
 }

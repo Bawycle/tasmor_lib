@@ -95,6 +95,7 @@ use std::time::Duration;
 use paho_mqtt::{AsyncClient, QoS};
 use tokio::sync::{RwLock, mpsc};
 
+use crate::credentials::Credentials;
 use crate::error::ProtocolError;
 use crate::protocol::TopicRouter;
 use crate::protocol::response_collector::MqttMessage;
@@ -116,11 +117,21 @@ enum BrokerEvent {
 }
 
 /// Configuration for an MQTT broker connection.
+///
+/// # Security
+///
+/// Credentials are stored in [`zeroize::Zeroizing`]-backed allocations — the heap bytes
+/// are overwritten with zeros when this config is dropped. The config is retained in the
+/// broker's inner state for the broker's entire lifetime, so zeroization occurs at broker
+/// drop, not at connection time.
+///
+/// `paho-mqtt` maintains its own C-heap copy of the credentials for the connection
+/// lifetime — that copy is outside Rust's control. Use TLS to protect credentials in transit.
 #[derive(Debug, Clone)]
 pub struct MqttBrokerConfig {
     host: String,
     port: u16,
-    credentials: Option<(String, String)>,
+    credentials: Option<Credentials>,
     keep_alive: Duration,
     connection_timeout: Duration,
     command_timeout: Duration,
@@ -520,7 +531,7 @@ impl MqttBrokerBuilder {
     /// Sets authentication credentials.
     #[must_use]
     pub fn credentials(mut self, username: impl Into<String>, password: impl Into<String>) -> Self {
-        self.config.credentials = Some((username.into(), password.into()));
+        self.config.credentials = Some(Credentials::new(username, password));
         self
     }
 
@@ -635,8 +646,8 @@ impl MqttBrokerBuilder {
             b.keep_alive_interval(self.config.keep_alive)
                 .clean_session(true)
                 .automatic_reconnect(Duration::from_millis(500), Duration::from_secs(60));
-            if let Some((ref username, ref password)) = self.config.credentials {
-                b.user_name(username).password(password.clone());
+            if let Some(creds) = &self.config.credentials {
+                b.user_name(creds.username()).password(creds.password());
             }
             b.finalize()
         };
@@ -749,8 +760,8 @@ mod tests {
     fn builder_with_credentials() {
         let builder = MqttBrokerBuilder::default().credentials("user", "pass");
         let creds = builder.config.credentials.unwrap();
-        assert_eq!(creds.0, "user");
-        assert_eq!(creds.1, "pass");
+        assert_eq!(creds.username(), "user");
+        assert_eq!(creds.password(), "pass");
     }
 
     #[test]

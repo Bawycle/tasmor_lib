@@ -78,6 +78,7 @@ use std::time::Duration;
 use paho_mqtt::QoS;
 use tokio::sync::RwLock;
 
+use crate::credentials::Credentials;
 use crate::device::Device;
 use crate::error::{Error, ProtocolError};
 use crate::protocol::{MqttBroker, SharedMqttClient};
@@ -105,8 +106,8 @@ const DEFAULT_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(5);
 pub struct DiscoveryOptions {
     /// How long to listen for device announcements.
     timeout: Option<Duration>,
-    /// MQTT broker credentials (username, password).
-    credentials: Option<(String, String)>,
+    /// MQTT broker credentials.
+    credentials: Option<Credentials>,
     /// MQTT broker port (default: 1883).
     port: Option<u16>,
 }
@@ -146,7 +147,7 @@ impl DiscoveryOptions {
         username: impl Into<String>,
         password: impl Into<String>,
     ) -> Self {
-        self.credentials = Some((username.into(), password.into()));
+        self.credentials = Some(Credentials::new(username, password));
         self
     }
 
@@ -170,7 +171,7 @@ impl DiscoveryOptions {
     pub fn credentials(&self) -> Option<(&str, &str)> {
         self.credentials
             .as_ref()
-            .map(|(u, p)| (u.as_str(), p.as_str()))
+            .map(|c| (c.username(), c.password()))
     }
 
     /// Returns the port if set.
