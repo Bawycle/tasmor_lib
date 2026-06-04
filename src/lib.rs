@@ -31,10 +31,10 @@
 //!
 //! ```toml
 //! # HTTP only
-//! tasmor_lib = { version = "0.7", default-features = false, features = ["http"] }
+//! tasmor_lib = { version = "0.8", default-features = false, features = ["http"] }
 //!
 //! # MQTT only
-//! tasmor_lib = { version = "0.7", default-features = false, features = ["mqtt"] }
+//! tasmor_lib = { version = "0.8", default-features = false, features = ["mqtt"] }
 //! ```
 //!
 //! # Quick Start
@@ -243,6 +243,8 @@
 
 mod capabilities;
 pub mod command;
+#[cfg(any(feature = "http", feature = "mqtt"))]
+mod credentials;
 mod device;
 #[cfg(feature = "mqtt")]
 pub mod discovery;

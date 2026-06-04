@@ -1,6 +1,6 @@
 [package]
 name = "tasmor_lib"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2024"
 rust-version = "1.92.0"
 license = "MPL-2.0"
@@ -19,13 +19,14 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["http", "mqtt"]
-http = ["dep:reqwest"]
-mqtt = ["dep:paho-mqtt"]
+http = ["dep:reqwest", "dep:zeroize"]
+mqtt = ["dep:paho-mqtt", "dep:zeroize"]
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 paho-mqtt = { version = "0.14", optional = true }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"], optional = true }
+zeroize = { version = "1", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

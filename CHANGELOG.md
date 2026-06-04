@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-04
+
+### Security
+
+- **Credential zeroization (CWE-316)** — `MqttBrokerConfig`, `HttpConfig`, `DiscoveryOptions`, `HttpClientBuilder`, and `HttpClient` now store credentials in zeroized allocations that overwrite heap memory on `Drop`. `Debug` output of these structs now prints `[REDACTED]` for credentials instead of the plaintext value. Residual: `paho-mqtt` and `reqwest` hold their own copies for the connection lifetime, outside Rust's control — use TLS to protect credentials in transit.
+- **HTTP debug log no longer includes credentials** — The per-command debug trace previously logged the full request URL, which includes `user=` and `password=` query parameters. It now logs only the command name.
+
 ## [0.7.0] - 2026-05-27
 
 ### Changed
@@ -176,7 +183,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - README with usage examples
   - CONTRIBUTING.md with development guidelines
 
-[Unreleased]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.7.0...HEAD
+[Unreleased]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.8.0...HEAD
+[0.8.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.7.0...v0.8.0
 [0.7.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.6.0...v0.7.0
 [0.6.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.5.0...v0.6.0
 [0.5.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.4.1...v0.5.0
