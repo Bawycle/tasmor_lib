@@ -7,11 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-05
+
 ### Added
 
 - `MqttBrokerBuilder::tls_ca_cert(path)` — enables TLS for the broker connection with
   mandatory CA certificate verification (PEM format). Server certificate verification is
-  always enforced; no insecure mode is provided by design (INV-TSM-10). The file is read
+  always enforced; no insecure mode is provided by design. The file is read
   by the paho-mqtt C library at connection time on its own thread — no file I/O occurs on
   the calling async runtime.
 
@@ -25,8 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Extracted `build_server_uri` and `build_connect_options` from the monolithic `build()`
-  method for improved testability.
 - IPv6 addresses are now correctly wrapped in brackets in MQTT broker URIs
   (e.g. `tcp://[::1]:1883` instead of the invalid `tcp://::1:1883`).
 
@@ -92,7 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING: Renamed callback** - `on_energy_updated()` renamed to `on_energy_changed()` for API consistency with other callbacks (`on_power_changed`, `on_dimmer_changed`, etc.)
 - **BREAKING: Removed `uptime_sec()`** - Use `uptime_seconds()` instead for consistency with `TelemetryState`
 
-### Improved
+### Changed
 
 - **Enhanced documentation** - Added `# Examples` sections to main Device methods (`power_on`, `power_off`, `power_toggle`, `set_dimmer`, `energy`)
 - **Better error documentation** - Enriched `# Errors` sections with specific error conditions and types
@@ -206,7 +206,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - README with usage examples
   - CONTRIBUTING.md with development guidelines
 
-[Unreleased]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.8.0...HEAD
+[Unreleased]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.9.0...HEAD
+[0.9.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.8.0...v0.9.0
 [0.8.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.7.0...v0.8.0
 [0.7.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.6.0...v0.7.0
 [0.6.0]: https://codeberg.org/Bawycle/tasmor_lib/compare/v0.5.0...v0.6.0
