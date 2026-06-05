@@ -7,14 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.10.0] - 2026-06-05
+## [0.10.0] - 2026-06-06
 
 ### Added
 
 - `MqttBrokerBuilder::tls_system_roots()` — enables TLS using the OS system CA trust store,
   without requiring an explicit CA certificate file. Certificate chain and hostname verification
-  are always enforced. Relies on OpenSSL's default verify paths; primarily designed for Linux.
-  See method documentation for cross-platform behavior notes.
+  are always enforced. Relies on OpenSSL's default verify paths (`SSL_CTX_set_default_verify_paths`).
+  Tested on Linux only; behavior on Windows and macOS is undefined — use `tls_ca_cert()` on
+  those platforms.
+
+### Changed
+
+- `MqttBroker::subscription_count()` is now `#[must_use]` — the compiler will warn if the
+  return value is discarded.
+
+### Fixed
+
+- Single-feature builds (`--no-default-features --features http` or `--features mqtt`) no
+  longer fail to compile tests and examples. Doc tests, integration tests, and all examples
+  are now correctly gated behind their required feature flags.
+- `set_dimmer()` and `energy()` now document `Error::Parse` as a possible return value in
+  their `# Errors` sections; this error was already returned but undocumented.
 
 ## [0.9.0] - 2026-06-05
 
