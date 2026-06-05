@@ -3,6 +3,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+#![cfg(feature = "http")]
 //! Integration tests for HTTP protocol using wiremock.
 
 use approx::assert_abs_diff_eq;

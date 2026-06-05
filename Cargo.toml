@@ -36,6 +36,10 @@ uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "serde"] }
 parking_lot = "0.12"
 
+[[example]]
+name = "uptime"
+required-features = ["http", "mqtt"]
+
 [dev-dependencies]
 approx = "0.5"
 tempfile = "3"

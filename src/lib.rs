@@ -44,6 +44,7 @@
 //! ```no_run
 //! use tasmor_lib::Device;
 //!
+//! # #[cfg(feature = "http")]
 //! #[tokio::main]
 //! async fn main() -> tasmor_lib::Result<()> {
 //!     // Create device with automatic capability detection
@@ -62,6 +63,8 @@
 //!
 //!     Ok(())
 //! }
+//! # #[cfg(not(feature = "http"))]
+//! # fn main() {}
 //! ```
 //!
 //! ## HTTP Device with Manual Capabilities
@@ -69,6 +72,7 @@
 //! ```no_run
 //! use tasmor_lib::{Device, Capabilities};
 //!
+//! # #[cfg(feature = "http")]
 //! #[tokio::main]
 //! async fn main() -> tasmor_lib::Result<()> {
 //!     // Create device without probing (faster startup)
@@ -81,6 +85,8 @@
 //!     device.power_on().await?;
 //!     Ok(())
 //! }
+//! # #[cfg(not(feature = "http"))]
+//! # fn main() {}
 //! ```
 //!
 //! ## MQTT Device
@@ -176,6 +182,7 @@
 //! ```no_run
 //! use tasmor_lib::Device;
 //!
+//! # #[cfg(feature = "http")]
 //! # async fn example() -> tasmor_lib::Result<()> {
 //! // HTTP: Simple, direct control
 //! let (device, _) = Device::http("192.168.1.100").build().await?;

@@ -18,6 +18,7 @@
 //! ```no_run
 //! use tasmor_lib::Device;
 //!
+//! # #[cfg(feature = "http")]
 //! # async fn example() -> tasmor_lib::Result<()> {
 //! let (device, _initial_state) = Device::http("192.168.1.100")
 //!     .with_credentials("admin", "password")
@@ -113,10 +114,12 @@ use crate::types::{
 ///
 /// ```
 /// use tasmor_lib::Device;
-/// use tasmor_lib::protocol::HttpClient;
 ///
 /// fn assert_send_sync<T: Send + Sync>() {}
-/// assert_send_sync::<Device<HttpClient>>();
+/// # #[cfg(feature = "http")]
+/// # assert_send_sync::<Device<tasmor_lib::protocol::HttpClient>>();
+/// # #[cfg(feature = "mqtt")]
+/// # assert_send_sync::<Device<tasmor_lib::protocol::SharedMqttClient>>();
 /// ```
 ///
 /// # Cloning
@@ -127,11 +130,12 @@ use crate::types::{
 ///
 /// ```
 /// use tasmor_lib::Device;
-/// use tasmor_lib::protocol::{HttpClient, SharedMqttClient};
 ///
 /// fn assert_clone<T: Clone>() {}
-/// assert_clone::<Device<HttpClient>>();
-/// assert_clone::<Device<SharedMqttClient>>();
+/// # #[cfg(feature = "http")]
+/// # assert_clone::<Device<tasmor_lib::protocol::HttpClient>>();
+/// # #[cfg(feature = "mqtt")]
+/// # assert_clone::<Device<tasmor_lib::protocol::SharedMqttClient>>();
 /// ```
 ///
 /// All clones share:
@@ -149,6 +153,7 @@ use crate::types::{
 /// ```no_run
 /// use tasmor_lib::{Device, Capabilities};
 ///
+/// # #[cfg(feature = "http")]
 /// # async fn example() -> tasmor_lib::Result<()> {
 /// // HTTP device with auto-detection
 /// let (device, _initial_state) = Device::http("192.168.1.100")
@@ -240,6 +245,7 @@ impl<P: Protocol> Device<P> {
     /// ```no_run
     /// use tasmor_lib::Device;
     ///
+    /// # #[cfg(feature = "http")]
     /// # async fn example() -> tasmor_lib::Result<()> {
     /// let (device, _) = Device::http("192.168.1.100").build().await?;
     ///
@@ -279,6 +285,7 @@ impl<P: Protocol> Device<P> {
     /// ```no_run
     /// use tasmor_lib::Device;
     ///
+    /// # #[cfg(feature = "http")]
     /// # async fn example() -> tasmor_lib::Result<()> {
     /// let (device, _) = Device::http("192.168.1.100").build().await?;
     ///
@@ -311,6 +318,7 @@ impl<P: Protocol> Device<P> {
     /// ```no_run
     /// use tasmor_lib::Device;
     ///
+    /// # #[cfg(feature = "http")]
     /// # async fn example() -> tasmor_lib::Result<()> {
     /// let (device, _) = Device::http("192.168.1.100").build().await?;
     ///
@@ -439,6 +447,7 @@ impl<P: Protocol> Device<P> {
     /// ```no_run
     /// use tasmor_lib::{Device, Dimmer};
     ///
+    /// # #[cfg(feature = "http")]
     /// # async fn example() -> tasmor_lib::Result<()> {
     /// let (device, _) = Device::http("192.168.1.100").build().await?;
     ///
@@ -915,6 +924,7 @@ impl<P: Protocol> Device<P> {
     /// ```no_run
     /// use tasmor_lib::Device;
     ///
+    /// # #[cfg(feature = "http")]
     /// # async fn example() -> tasmor_lib::Result<()> {
     /// let (device, _) = Device::http("192.168.1.100").build().await?;
     ///
@@ -1540,86 +1550,70 @@ impl Subscribable for Device<SharedMqttClient> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::HttpConfig;
-
-    #[test]
-    fn http_device_builder_from_config() {
-        let config = HttpConfig::new("192.168.1.100").with_credentials("admin", "pass");
-
-        let builder = Device::<HttpClient>::http_config(config)
-            .with_capabilities(Capabilities::neo_coolcam());
-
-        assert!(builder.capabilities().is_some());
-    }
-
-    #[test]
-    fn http_device_builder_from_host() {
-        let builder = Device::<HttpClient>::http("192.168.1.100")
-            .with_credentials("admin", "pass")
-            .with_capabilities(Capabilities::neo_coolcam());
-
-        assert!(builder.capabilities().is_some());
-    }
 
     #[test]
     fn device_state_default() {
-        // This test verifies the Device struct can hold state
         let state = DeviceState::new();
         assert!(state.power(1).is_none());
     }
 
-    #[test]
-    fn device_is_clone() {
-        // Device<P> implements Clone without requiring P: Clone
-        // This is because protocol is wrapped in Arc<P>
-        fn assert_clone<T: Clone>() {}
-        assert_clone::<Device<HttpClient>>();
-    }
+    #[cfg(feature = "http")]
+    mod http_tests {
+        use super::*;
+        use crate::protocol::HttpConfig;
 
-    #[test]
-    fn device_is_debug() {
-        // Device<P> implements Debug without requiring P: Debug
-        fn assert_debug<T: std::fmt::Debug>() {}
-        assert_debug::<Device<HttpClient>>();
+        #[test]
+        fn http_device_builder_from_config() {
+            let config = HttpConfig::new("192.168.1.100").with_credentials("admin", "pass");
+            let builder = Device::<HttpClient>::http_config(config)
+                .with_capabilities(Capabilities::neo_coolcam());
+            assert!(builder.capabilities().is_some());
+        }
+
+        #[test]
+        fn http_device_builder_from_host() {
+            let builder = Device::<HttpClient>::http("192.168.1.100")
+                .with_credentials("admin", "pass")
+                .with_capabilities(Capabilities::neo_coolcam());
+            assert!(builder.capabilities().is_some());
+        }
+
+        #[test]
+        fn device_is_clone() {
+            fn assert_clone<T: Clone>() {}
+            assert_clone::<Device<HttpClient>>();
+        }
+
+        #[test]
+        fn device_is_debug() {
+            fn assert_debug<T: std::fmt::Debug>() {}
+            assert_debug::<Device<HttpClient>>();
+        }
+
+        #[test]
+        fn device_clone_shares_callbacks() {
+            let client = HttpClient::new("192.168.1.100").unwrap();
+            let device = Device::new(client, Capabilities::basic());
+            let device_clone = device.clone();
+            assert!(Arc::ptr_eq(&device.callbacks, &device_clone.callbacks));
+        }
+
+        #[test]
+        fn device_clone_shares_protocol() {
+            let client = HttpClient::new("192.168.1.100").unwrap();
+            let device = Device::new(client, Capabilities::basic());
+            let device_clone = device.clone();
+            assert!(Arc::ptr_eq(&device.protocol, &device_clone.protocol));
+        }
     }
 
     #[cfg(feature = "mqtt")]
     #[test]
     fn device_shared_mqtt_client_is_clone_and_debug() {
-        // This test verifies that Device<SharedMqttClient> implements Clone and Debug
-        // even though SharedMqttClient does NOT implement Clone or Debug.
-        // This works because we manually implement Clone and Debug for Device<P>
-        // without requiring P: Clone or P: Debug bounds.
         use crate::protocol::SharedMqttClient;
-
         fn assert_clone<T: Clone>() {}
         fn assert_debug<T: std::fmt::Debug>() {}
-
         assert_clone::<Device<SharedMqttClient>>();
         assert_debug::<Device<SharedMqttClient>>();
-    }
-
-    #[test]
-    fn device_clone_shares_callbacks() {
-        let client = HttpClient::new("192.168.1.100").unwrap();
-        let device = Device::new(client, Capabilities::basic());
-
-        // Clone the device
-        let device_clone = device.clone();
-
-        // Both devices should share the same callbacks (Arc)
-        assert!(Arc::ptr_eq(&device.callbacks, &device_clone.callbacks));
-    }
-
-    #[test]
-    fn device_clone_shares_protocol() {
-        let client = HttpClient::new("192.168.1.100").unwrap();
-        let device = Device::new(client, Capabilities::basic());
-
-        // Clone the device
-        let device_clone = device.clone();
-
-        // Both devices should share the same protocol (Arc)
-        assert!(Arc::ptr_eq(&device.protocol, &device_clone.protocol));
     }
 }
