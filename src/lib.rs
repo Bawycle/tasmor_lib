@@ -31,10 +31,10 @@
 //!
 //! ```toml
 //! # HTTP only
-//! tasmor_lib = { version = "0.9", default-features = false, features = ["http"] }
+//! tasmor_lib = { version = "0.10", default-features = false, features = ["http"] }
 //!
 //! # MQTT only
-//! tasmor_lib = { version = "0.9", default-features = false, features = ["mqtt"] }
+//! tasmor_lib = { version = "0.10", default-features = false, features = ["mqtt"] }
 //! ```
 //!
 //! # Quick Start
