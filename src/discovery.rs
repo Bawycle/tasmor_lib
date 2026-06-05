@@ -246,17 +246,17 @@ impl MqttBroker {
         self.client()
             .subscribe("tele/+/LWT", QoS::AtMostOnce)
             .await
-            .map_err(ProtocolError::Mqtt)?;
+            .map_err(ProtocolError::from)?;
 
         self.client()
             .subscribe("tele/+/STATE", QoS::AtMostOnce)
             .await
-            .map_err(ProtocolError::Mqtt)?;
+            .map_err(ProtocolError::from)?;
 
         self.client()
             .subscribe("stat/+/STATUS", QoS::AtMostOnce)
             .await
-            .map_err(ProtocolError::Mqtt)?;
+            .map_err(ProtocolError::from)?;
 
         tracing::debug!("Subscribed to discovery topics");
 
@@ -269,7 +269,7 @@ impl MqttBroker {
                 QoS::AtMostOnce,
             ))
             .await
-            .map_err(ProtocolError::Mqtt)?;
+            .map_err(ProtocolError::from)?;
 
         tracing::debug!("Sent broadcast Status command to trigger device responses");
 

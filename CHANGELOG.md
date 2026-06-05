@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `MqttBrokerBuilder::tls_ca_cert(path)` — enables TLS for the broker connection with
+  mandatory CA certificate verification (PEM format). Server certificate verification is
+  always enforced; no insecure mode is provided by design (INV-TSM-10). The file is read
+  by the paho-mqtt C library at connection time on its own thread — no file I/O occurs on
+  the calling async runtime.
+
+### Changed
+
+- **BREAKING**: `ProtocolError::Http` and `ProtocolError::Mqtt` now wrap `String` instead
+  of `reqwest::Error` / `paho_mqtt::Error`, removing backend crate types from the public
+  API surface. `From<reqwest::Error>` and `From<paho_mqtt::Error>` impls are still provided
+  for seamless `?` propagation. Code that pattern-matched on the inner error type (e.g.
+  `ProtocolError::Mqtt(paho_err)`) must be updated.
+
+### Fixed
+
+- Extracted `build_server_uri` and `build_connect_options` from the monolithic `build()`
+  method for improved testability.
+- IPv6 addresses are now correctly wrapped in brackets in MQTT broker URIs
+  (e.g. `tcp://[::1]:1883` instead of the invalid `tcp://::1:1883`).
+
 ## [0.8.0] - 2026-06-04
 
 ### Security
