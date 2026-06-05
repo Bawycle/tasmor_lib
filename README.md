@@ -42,7 +42,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-tasmor_lib = "0.8"
+tasmor_lib = "0.9"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -81,10 +81,10 @@ Both HTTP and MQTT protocols are enabled by default. To reduce compile time and 
 
 ```toml
 # HTTP only (no C dependencies, no OpenSSL requirement)
-tasmor_lib = { version = "0.8", default-features = false, features = ["http"] }
+tasmor_lib = { version = "0.9", default-features = false, features = ["http"] }
 
 # MQTT only (no HTTP dependencies)
-tasmor_lib = { version = "0.8", default-features = false, features = ["mqtt"] }
+tasmor_lib = { version = "0.9", default-features = false, features = ["mqtt"] }
 ```
 
 ## Quick Start

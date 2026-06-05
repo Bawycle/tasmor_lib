@@ -166,7 +166,7 @@ impl HttpConfig {
         let client = Client::builder()
             .timeout(self.timeout)
             .build()
-            .map_err(ProtocolError::Http)?;
+            .map_err(ProtocolError::from)?;
 
         let credentials = self.credentials;
 
@@ -227,7 +227,7 @@ impl HttpClient {
         let client = Client::builder()
             .timeout(Duration::from_secs(10))
             .build()
-            .map_err(ProtocolError::Http)?;
+            .map_err(ProtocolError::from)?;
 
         Ok(Self {
             base_url,
@@ -292,7 +292,7 @@ impl Protocol for HttpClient {
             .get(&url)
             .send()
             .await
-            .map_err(ProtocolError::Http)?;
+            .map_err(ProtocolError::from)?;
 
         if response.status() == reqwest::StatusCode::UNAUTHORIZED {
             return Err(ProtocolError::AuthenticationFailed);
@@ -306,7 +306,7 @@ impl Protocol for HttpClient {
             )));
         }
 
-        let body = response.text().await.map_err(ProtocolError::Http)?;
+        let body = response.text().await.map_err(ProtocolError::from)?;
 
         tracing::debug!(body = %body, "Received HTTP response");
 
@@ -369,7 +369,7 @@ impl HttpClientBuilder {
         let client = Client::builder()
             .timeout(self.timeout.unwrap_or(Duration::from_secs(10)))
             .build()
-            .map_err(ProtocolError::Http)?;
+            .map_err(ProtocolError::from)?;
 
         Ok(HttpClient {
             base_url,

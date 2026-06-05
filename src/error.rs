@@ -90,12 +90,17 @@ pub enum ProtocolError {
     /// HTTP request failed.
     #[cfg(feature = "http")]
     #[error("HTTP request failed: {0}")]
-    Http(#[from] reqwest::Error),
+    Http(String),
 
     /// MQTT connection or communication failed.
     #[cfg(feature = "mqtt")]
     #[error("MQTT error: {0}")]
-    Mqtt(#[from] paho_mqtt::Error),
+    Mqtt(String),
+
+    /// TLS configuration or handshake failed.
+    #[cfg(feature = "mqtt")]
+    #[error("TLS error: {0}")]
+    Tls(String),
 
     /// Connection to the device failed.
     #[error("connection failed: {0}")]
@@ -116,6 +121,20 @@ pub enum ProtocolError {
     /// Internal channel was closed.
     #[error("channel closed: {0}")]
     ChannelClosed(String),
+}
+
+#[cfg(feature = "http")]
+impl From<reqwest::Error> for ProtocolError {
+    fn from(e: reqwest::Error) -> Self {
+        Self::Http(e.to_string())
+    }
+}
+
+#[cfg(feature = "mqtt")]
+impl From<paho_mqtt::Error> for ProtocolError {
+    fn from(e: paho_mqtt::Error) -> Self {
+        Self::Mqtt(e.to_string())
+    }
 }
 
 /// Errors related to parsing Tasmota responses.

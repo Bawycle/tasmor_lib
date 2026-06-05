@@ -131,7 +131,7 @@ impl SharedMqttClient {
         self.client
             .publish(msg)
             .await
-            .map_err(ProtocolError::Mqtt)?;
+            .map_err(ProtocolError::from)?;
         Ok(())
     }
 
