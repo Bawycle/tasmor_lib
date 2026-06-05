@@ -125,9 +125,45 @@ impl MqttBrokerBuilder {
     /// not exist or because of a permission error.
     #[must_use]
     pub fn tls_ca_cert(mut self, ca_cert_pem_path: impl Into<PathBuf>) -> Self {
-        self.config.tls = TlsConfig::Enabled {
+        self.config.tls = TlsConfig::CaCert {
             ca_cert_path: ca_cert_pem_path.into(),
         };
+        if self.config.port == 1883 {
+            self.config.port = 8883;
+        }
+        self
+    }
+
+    /// Enables TLS for the broker connection using the OS system CA trust store.
+    ///
+    /// Full certificate chain validation and hostname verification are always enforced —
+    /// there is intentionally no insecure mode.
+    ///
+    /// ## How trust anchors are resolved
+    ///
+    /// This method relies on OpenSSL's default verify paths
+    /// (`SSL_CTX_set_default_verify_paths`), which loads CA certificates from the locations
+    /// compiled into the system's OpenSSL library. On most Linux distributions these are the
+    /// paths maintained by the OS package manager (e.g. the `ca-certificates` package). The
+    /// `SSL_CERT_FILE` and `SSL_CERT_DIR` environment variables can be used to override the
+    /// paths at runtime.
+    ///
+    /// On macOS and Windows, OpenSSL may not consult the system keychain or certificate
+    /// store. Use [`Self::tls_ca_cert`] for reliable cross-platform behavior.
+    ///
+    /// ## Errors at `build()` time
+    ///
+    /// Unlike [`Self::tls_ca_cert`], no file is checked at `build()` time. A missing or untrusted
+    /// CA will surface as a connection error at handshake time
+    /// (`ProtocolError::ConnectionFailed`).
+    ///
+    /// ## Port promotion
+    ///
+    /// When TLS is enabled, the port is automatically set to 8883 if it was still at the
+    /// plain-text default (1883). Call `.port()` after `tls_system_roots()` to override.
+    #[must_use]
+    pub fn tls_system_roots(mut self) -> Self {
+        self.config.tls = TlsConfig::SystemRoots;
         if self.config.port == 1883 {
             self.config.port = 8883;
         }
@@ -149,7 +185,7 @@ impl MqttBrokerBuilder {
             ));
         }
 
-        if let TlsConfig::Enabled { ca_cert_path } = &self.config.tls
+        if let TlsConfig::CaCert { ca_cert_path } = &self.config.tls
             && let Err(e) = std::fs::File::open(ca_cert_path)
         {
             let msg = match e.kind() {
@@ -262,9 +298,12 @@ impl MqttBrokerBuilder {
 /// Returns `ssl://` scheme when TLS is enabled, `tcp://` otherwise.
 /// IPv6 addresses are wrapped in brackets as required by the URI format.
 fn build_server_uri(config: &MqttBrokerConfig) -> String {
+    // One arm per variant: any future TlsConfig variant must explicitly declare its scheme.
+    #[allow(clippy::match_same_arms)]
     let scheme = match config.tls {
         TlsConfig::Disabled => "tcp",
-        TlsConfig::Enabled { .. } => "ssl",
+        TlsConfig::SystemRoots => "ssl",
+        TlsConfig::CaCert { .. } => "ssl",
     };
     let host = if config.host.contains(':') && !config.host.starts_with('[') {
         format!("[{}]", config.host)
@@ -274,10 +313,36 @@ fn build_server_uri(config: &MqttBrokerConfig) -> String {
     format!("{scheme}://{host}:{}", config.port)
 }
 
+/// Builds the `SslOptions` for the given TLS configuration.
+///
+/// Returns `None` for plaintext connections, `Some` for both TLS modes.
+/// Full certificate chain validation and hostname verification are always enforced.
+fn build_ssl_options(tls: &TlsConfig) -> Result<Option<paho_mqtt::SslOptions>, ProtocolError> {
+    match tls {
+        TlsConfig::Disabled => Ok(None),
+        TlsConfig::SystemRoots => {
+            let mut ssl_b = paho_mqtt::SslOptionsBuilder::new();
+            // No trust_store() call: paho C delegates to SSL_CTX_set_default_verify_paths(),
+            // loading the system CA bundle. disable_default_trust_store defaults to false.
+            ssl_b.enable_server_cert_auth(true).verify(true);
+            Ok(Some(ssl_b.finalize()))
+        }
+        TlsConfig::CaCert { ca_cert_path } => {
+            let mut ssl_b = paho_mqtt::SslOptionsBuilder::new();
+            ssl_b
+                .trust_store(ca_cert_path)
+                .map_err(|e| ProtocolError::Tls(e.to_string()))?
+                .enable_server_cert_auth(true)
+                .verify(true);
+            Ok(Some(ssl_b.finalize()))
+        }
+    }
+}
+
 /// Builds the paho `ConnectOptions` from the broker config.
 ///
 /// Configures keep-alive, session, auto-reconnect, optional credentials, and
-/// TLS (CA cert + mandatory server verification) when enabled.
+/// TLS when enabled.
 fn build_connect_options(
     config: &MqttBrokerConfig,
 ) -> Result<paho_mqtt::ConnectOptions, ProtocolError> {
@@ -288,14 +353,8 @@ fn build_connect_options(
     if let Some(creds) = &config.credentials {
         b.user_name(creds.username()).password(creds.password());
     }
-    if let TlsConfig::Enabled { ca_cert_path } = &config.tls {
-        let mut ssl_b = paho_mqtt::SslOptionsBuilder::new();
-        ssl_b
-            .trust_store(ca_cert_path)
-            .map_err(|e| ProtocolError::Tls(e.to_string()))?
-            .enable_server_cert_auth(true)
-            .verify(true);
-        b.ssl_options(ssl_b.finalize());
+    if let Some(ssl_opts) = build_ssl_options(&config.tls)? {
+        b.ssl_options(ssl_opts);
     }
     Ok(b.finalize())
 }
@@ -391,9 +450,9 @@ mod tests {
     }
 
     #[test]
-    fn builder_tls_ca_cert_sets_enabled() {
+    fn builder_tls_ca_cert_sets_variant() {
         let builder = MqttBrokerBuilder::default().tls_ca_cert("/path/to/ca.pem");
-        assert!(matches!(builder.config.tls, TlsConfig::Enabled { .. }));
+        assert!(matches!(builder.config.tls, TlsConfig::CaCert { .. }));
     }
 
     #[test]
@@ -401,10 +460,10 @@ mod tests {
         let builder = MqttBrokerBuilder::default()
             .tls_ca_cert("/first/ca.pem")
             .tls_ca_cert("/second/ca.pem");
-        if let TlsConfig::Enabled { ca_cert_path } = &builder.config.tls {
+        if let TlsConfig::CaCert { ca_cert_path } = &builder.config.tls {
             assert_eq!(ca_cert_path.to_str().unwrap(), "/second/ca.pem");
         } else {
-            panic!("expected TlsConfig::Enabled");
+            panic!("expected TlsConfig::CaCert");
         }
     }
 
@@ -436,7 +495,7 @@ mod tests {
         assert_eq!(builder.config.host, "192.168.1.50");
         assert_eq!(builder.config.port, 8883);
         assert!(builder.config.credentials.is_some());
-        assert!(matches!(builder.config.tls, TlsConfig::Enabled { .. }));
+        assert!(matches!(builder.config.tls, TlsConfig::CaCert { .. }));
     }
 
     #[test]
@@ -450,13 +509,24 @@ mod tests {
     }
 
     #[test]
-    fn build_server_uri_ssl() {
+    fn build_server_uri_ssl_ca_cert() {
         let config = MqttBrokerConfig {
             host: "broker.example.com".to_string(),
             port: 8883,
-            tls: TlsConfig::Enabled {
+            tls: TlsConfig::CaCert {
                 ca_cert_path: "/etc/ssl/ca.pem".into(),
             },
+            ..MqttBrokerConfig::default()
+        };
+        assert_eq!(build_server_uri(&config), "ssl://broker.example.com:8883");
+    }
+
+    #[test]
+    fn build_server_uri_ssl_system_roots() {
+        let config = MqttBrokerConfig {
+            host: "broker.example.com".to_string(),
+            port: 8883,
+            tls: TlsConfig::SystemRoots,
             ..MqttBrokerConfig::default()
         };
         assert_eq!(build_server_uri(&config), "ssl://broker.example.com:8883");
@@ -487,7 +557,7 @@ mod tests {
         let config = MqttBrokerConfig {
             host: "broker.example.com".to_string(),
             port: 8883,
-            tls: TlsConfig::Enabled {
+            tls: TlsConfig::CaCert {
                 ca_cert_path: "path/with\0nul".into(),
             },
             ..MqttBrokerConfig::default()
@@ -573,5 +643,126 @@ mod tests {
         let paho_err = paho_mqtt::Error::Failure;
         let proto_err: ProtocolError = paho_err.into();
         assert!(matches!(proto_err, ProtocolError::Mqtt(ref msg) if !msg.is_empty()));
+    }
+
+    // --- tls_system_roots() builder method ---
+
+    #[test]
+    fn builder_tls_system_roots_sets_variant() {
+        let builder = MqttBrokerBuilder::default().tls_system_roots();
+        assert!(matches!(builder.config.tls, TlsConfig::SystemRoots));
+    }
+
+    #[test]
+    fn builder_tls_system_roots_bumps_default_port() {
+        let builder = MqttBrokerBuilder::default().tls_system_roots();
+        assert_eq!(builder.config.port, 8883);
+    }
+
+    #[test]
+    fn builder_tls_system_roots_preserves_explicit_port() {
+        let builder = MqttBrokerBuilder::default().port(8885).tls_system_roots();
+        assert_eq!(builder.config.port, 8885);
+    }
+
+    #[test]
+    fn builder_tls_ca_cert_then_system_roots_wins() {
+        let builder = MqttBrokerBuilder::default()
+            .tls_ca_cert("/ca.pem")
+            .tls_system_roots();
+        assert!(matches!(builder.config.tls, TlsConfig::SystemRoots));
+    }
+
+    #[test]
+    fn builder_tls_system_roots_then_ca_cert_wins() {
+        let builder = MqttBrokerBuilder::default()
+            .tls_system_roots()
+            .tls_ca_cert("/ca.pem");
+        assert!(matches!(builder.config.tls, TlsConfig::CaCert { .. }));
+    }
+
+    // --- build_ssl_options() helper ---
+
+    #[test]
+    fn build_ssl_options_disabled_returns_none() {
+        let result = build_ssl_options(&TlsConfig::Disabled);
+        assert!(matches!(result, Ok(None)));
+    }
+
+    #[test]
+    fn build_ssl_options_system_roots_returns_some() {
+        let result = build_ssl_options(&TlsConfig::SystemRoots);
+        assert!(matches!(result, Ok(Some(_))));
+    }
+
+    #[test]
+    fn build_ssl_options_system_roots_no_trust_store() {
+        let ssl_opts = build_ssl_options(&TlsConfig::SystemRoots).unwrap().unwrap();
+        // trust_store() returns an empty PathBuf when not set.
+        assert_eq!(ssl_opts.trust_store(), std::path::PathBuf::new());
+        // default trust store must NOT be disabled — this is the core invariant of system-roots mode.
+        assert!(!ssl_opts.is_default_trust_store_disabled());
+    }
+
+    #[test]
+    fn build_ssl_options_system_roots_server_auth_enforced() {
+        let ssl_opts = build_ssl_options(&TlsConfig::SystemRoots).unwrap().unwrap();
+        assert!(ssl_opts.enable_server_cert_auth());
+        // SslOptions has no verify() getter; the setter is always called in build_ssl_options().
+        // Covered by build_ssl_options_system_roots_no_trust_store and visual inspection.
+    }
+
+    #[test]
+    fn build_connect_options_system_roots_and_credentials() {
+        let mut config = MqttBrokerConfig {
+            tls: TlsConfig::SystemRoots,
+            ..MqttBrokerConfig::default()
+        };
+        config.credentials = Some(crate::credentials::Credentials::new("user", "pass"));
+        let result = build_connect_options(&config);
+        assert!(result.is_ok());
+    }
+
+    // --- TlsConfig Debug ---
+
+    #[test]
+    fn tls_config_debug_system_roots() {
+        let dbg = format!("{:?}", TlsConfig::SystemRoots);
+        assert!(dbg.contains("SystemRoots"));
+    }
+
+    #[test]
+    fn tls_config_debug_ca_cert_redacted() {
+        let tls = TlsConfig::CaCert {
+            ca_cert_path: "/secret/path/ca.pem".into(),
+        };
+        let dbg = format!("{tls:?}");
+        assert!(
+            dbg.contains("[REDACTED]"),
+            "Debug should redact the path: {dbg}"
+        );
+        assert!(
+            !dbg.contains("/secret/path/ca.pem"),
+            "Debug must not leak the cert path: {dbg}"
+        );
+    }
+
+    // --- build() integration: system roots skips file guard ---
+
+    #[tokio::test]
+    async fn build_tls_system_roots_skips_file_guard() {
+        // Short timeout so the test fails fast at connection, not at file-guard.
+        // The assertion is that we do NOT get a ProtocolError::Tls (which would indicate
+        // the file-existence guard fired). ConnectionFailed or timeout are both acceptable.
+        let result = MqttBrokerBuilder::default()
+            .host("127.0.0.1")
+            .connection_timeout(Duration::from_millis(100))
+            .tls_system_roots()
+            .build()
+            .await;
+        assert!(
+            !matches!(result, Err(ProtocolError::Tls(_))),
+            "build() with tls_system_roots() must not trigger the CA file guard; got: {result:?}"
+        );
     }
 }

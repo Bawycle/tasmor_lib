@@ -16,16 +16,19 @@ pub(super) enum TlsConfig {
     /// Plaintext connection (default).
     #[default]
     Disabled,
-    /// TLS connection with mandatory CA certificate verification.
-    Enabled { ca_cert_path: PathBuf },
+    /// TLS connection using the OS system CA trust store.
+    SystemRoots,
+    /// TLS connection with mandatory CA certificate verification against an explicit PEM file.
+    CaCert { ca_cert_path: PathBuf },
 }
 
 impl std::fmt::Debug for TlsConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Disabled => write!(f, "Disabled"),
-            Self::Enabled { .. } => f
-                .debug_struct("Enabled")
+            Self::SystemRoots => write!(f, "SystemRoots"),
+            Self::CaCert { .. } => f
+                .debug_struct("CaCert")
                 .field("ca_cert_path", &"[REDACTED]")
                 .finish(),
         }

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `MqttBrokerBuilder::tls_system_roots()` — enables TLS using the OS system CA trust store,
+  without requiring an explicit CA certificate file. Certificate chain and hostname verification
+  are always enforced. Relies on OpenSSL's default verify paths; primarily designed for Linux.
+  See method documentation for cross-platform behavior notes.
+
 ## [0.9.0] - 2026-06-05
 
 ### Added
