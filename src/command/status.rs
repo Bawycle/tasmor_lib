@@ -10,6 +10,7 @@
 use std::time::Duration;
 
 use crate::command::Command;
+#[cfg(feature = "mqtt")]
 use crate::protocol::ResponseSpec;
 
 /// Type of status information to query.
@@ -201,6 +202,7 @@ impl Command for StatusCommand {
         }
     }
 
+    #[cfg(feature = "mqtt")]
     fn response_spec(&self) -> ResponseSpec {
         match self.status_type {
             // Status 0 returns multiple MQTT messages

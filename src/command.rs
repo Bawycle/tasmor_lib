@@ -78,6 +78,7 @@ pub use routine::{MAX_ROUTINE_STEPS, Routine, RoutineBuilder};
 pub use scheme::{SchemeCommand, WakeupDurationCommand};
 pub use status::{StatusCommand, StatusType};
 
+#[cfg(feature = "mqtt")]
 use crate::protocol::ResponseSpec;
 
 /// A command that can be sent to a Tasmota device.
@@ -129,6 +130,7 @@ pub trait Command {
     /// which topic suffixes to expect.
     ///
     /// The default implementation returns `ResponseSpec::Single`.
+    #[cfg(feature = "mqtt")]
     fn response_spec(&self) -> ResponseSpec {
         ResponseSpec::Single
     }

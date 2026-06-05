@@ -92,8 +92,10 @@
 //! ## MQTT Device
 //!
 //! ```no_run
+//! # #[cfg(feature = "mqtt")]
 //! use tasmor_lib::MqttBroker;
 //!
+//! # #[cfg(feature = "mqtt")]
 //! #[tokio::main]
 //! async fn main() -> tasmor_lib::Result<()> {
 //!     // Connect to MQTT broker
@@ -114,6 +116,8 @@
 //!     broker.disconnect().await?;
 //!     Ok(())
 //! }
+//! # #[cfg(not(feature = "mqtt"))]
+//! # fn main() {}
 //! ```
 //!
 //! ## MQTT Device with Callbacks (Event Subscriptions)
@@ -121,8 +125,10 @@
 //! MQTT devices support real-time event subscriptions via callbacks:
 //!
 //! ```no_run
+//! # #[cfg(feature = "mqtt")]
 //! use tasmor_lib::{MqttBroker, subscription::Subscribable};
 //!
+//! # #[cfg(feature = "mqtt")]
 //! #[tokio::main]
 //! async fn main() -> tasmor_lib::Result<()> {
 //!     let broker = MqttBroker::builder()
@@ -151,6 +157,8 @@
 //!     broker.disconnect().await?;
 //!     Ok(())
 //! }
+//! # #[cfg(not(feature = "mqtt"))]
+//! # fn main() {}
 //! ```
 //!
 //! # HTTP vs MQTT: Choosing a Protocol
@@ -199,8 +207,10 @@
 //! - **State synchronization**: Keep local state in sync with device state
 //!
 //! ```no_run
+//! # #[cfg(feature = "mqtt")]
 //! use tasmor_lib::{MqttBroker, subscription::Subscribable};
 //!
+//! # #[cfg(feature = "mqtt")]
 //! # async fn example() -> tasmor_lib::Result<()> {
 //! // MQTT: Real-time events and state tracking
 //! let broker = MqttBroker::builder()

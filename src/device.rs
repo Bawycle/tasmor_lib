@@ -36,9 +36,12 @@
 //! real-time event subscriptions via the [`Subscribable`](crate::subscription::Subscribable) trait.
 //!
 //! ```no_run
+//! # #[cfg(feature = "mqtt")]
 //! use tasmor_lib::MqttBroker;
+//! # #[cfg(feature = "mqtt")]
 //! use tasmor_lib::subscription::Subscribable;
 //!
+//! # #[cfg(feature = "mqtt")]
 //! # async fn example() -> tasmor_lib::Result<()> {
 //! let broker = MqttBroker::builder()
 //!     .host("192.168.1.50")

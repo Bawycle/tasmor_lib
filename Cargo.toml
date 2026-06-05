@@ -40,6 +40,22 @@ parking_lot = "0.12"
 name = "uptime"
 required-features = ["http", "mqtt"]
 
+[[example]]
+name = "bulb_test"
+required-features = ["mqtt"]
+
+[[example]]
+name = "discovery_test"
+required-features = ["mqtt"]
+
+[[example]]
+name = "energy_test"
+required-features = ["mqtt"]
+
+[[example]]
+name = "routine_test"
+required-features = ["mqtt"]
+
 [dev-dependencies]
 approx = "0.5"
 tempfile = "3"

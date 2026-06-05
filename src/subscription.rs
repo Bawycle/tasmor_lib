@@ -22,9 +22,12 @@
 //! Subscriptions are typically created through methods on MQTT devices:
 //!
 //! ```no_run
+//! # #[cfg(feature = "mqtt")]
 //! use tasmor_lib::MqttBroker;
+//! # #[cfg(feature = "mqtt")]
 //! use tasmor_lib::subscription::Subscribable;
 //!
+//! # #[cfg(feature = "mqtt")]
 //! # async fn example() -> tasmor_lib::Result<()> {
 //! let broker = MqttBroker::builder()
 //!     .host("192.168.1.50")
