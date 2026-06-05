@@ -183,9 +183,8 @@ impl RgbColor {
     ///
     /// # Panics
     ///
-    /// This method should never panic as the internal conversion always produces
-    /// valid HSB values. If it does panic, it indicates a bug in the conversion
-    /// algorithm.
+    /// Panics if `rgb_to_hsb` produces an out-of-range value, which would indicate
+    /// a bug in the conversion algorithm.
     ///
     /// # Examples
     ///

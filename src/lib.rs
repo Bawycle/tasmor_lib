@@ -199,6 +199,28 @@
 //! # }
 //! ```
 //!
+//! For advanced HTTP configuration (custom port, HTTPS, credentials), use
+//! [`Device::http_config`] with an [`HttpConfig`]:
+//!
+//! ```no_run
+//! # #[cfg(feature = "http")]
+//! use tasmor_lib::Device;
+//! # #[cfg(feature = "http")]
+//! use tasmor_lib::protocol::HttpConfig;
+//!
+//! # #[cfg(feature = "http")]
+//! # async fn example() -> tasmor_lib::Result<()> {
+//! let config = HttpConfig::new("192.168.1.100")
+//!     .with_port(8080)
+//!     .with_credentials("admin", "secret");
+//!
+//! let (device, _) = Device::http_config(config).build().await?;
+//! device.power_on().await?;
+//! # Ok(())
+//! # }
+//! # fn main() {}
+//! ```
+//!
 //! ## When to Use MQTT
 //!
 //! - **Real-time monitoring**: React to device state changes instantly

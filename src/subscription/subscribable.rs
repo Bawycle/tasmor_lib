@@ -16,19 +16,20 @@ use crate::types::{ColorTemperature, Dimmer, HsbColor, PowerState, Scheme};
 /// Trait for types that support event subscriptions.
 ///
 /// This trait provides methods to subscribe to various device events.
-/// It is implemented for MQTT devices but not for HTTP devices, providing
-/// compile-time safety.
+/// It is implemented for [`Device<SharedMqttClient>`](crate::Device) but **not** for
+/// [`Device<HttpClient>`](crate::Device). Calling subscription methods on an HTTP device
+/// is a compile-time error.
 ///
 /// # Type Safety
 ///
 /// ```ignore
 /// // MQTT devices support subscriptions
-/// let mqtt_device: Device<MqttClient> = ...;
+/// let mqtt_device: Device<SharedMqttClient> = ...;
 /// mqtt_device.on_power_changed(|idx, state| { /* ... */ }); // OK
 ///
-/// // HTTP devices do NOT support subscriptions
+/// // HTTP devices do NOT support subscriptions — compile-time error:
 /// let http_device: Device<HttpClient> = ...;
-/// http_device.on_power_changed(|idx, state| { /* ... */ }); // Compile error!
+/// http_device.on_power_changed(|idx, state| { /* ... */ }); // error[E0277]
 /// ```
 ///
 /// # Examples
@@ -131,9 +132,39 @@ pub trait Subscribable {
     /// this callback is triggered.
     ///
     /// Unlike `on_connected`, this callback does not receive a device state
-    /// since the library does not retain state. The application should call
-    /// `query_state()` after receiving this callback to refresh the device
-    /// state if needed.
+    /// because the library does not cache state across reconnections. Call
+    /// [`Device::query_state`](crate::Device::query_state) inside the callback
+    /// to refresh the device state if needed.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "mqtt")]
+    /// use tasmor_lib::{MqttBroker, subscription::Subscribable};
+    ///
+    /// # #[cfg(feature = "mqtt")]
+    /// # async fn example() -> tasmor_lib::Result<()> {
+    /// let broker = MqttBroker::builder()
+    ///     .host("192.168.1.50")
+    ///     .build()
+    ///     .await?;
+    ///
+    /// let (device, _) = broker.device("tasmota_device")
+    ///     .build()
+    ///     .await?;
+    ///
+    /// let device_clone = device.clone();
+    /// device.on_reconnected(move || {
+    ///     let d = device_clone.clone();
+    ///     tokio::spawn(async move {
+    ///         if let Err(e) = d.query_state().await {
+    ///             eprintln!("Failed to refresh state after reconnect: {e}");
+    ///         }
+    ///     });
+    /// });
+    /// # Ok(())
+    /// # }
+    /// ```
     fn on_reconnected<F>(&self, callback: F) -> SubscriptionId
     where
         F: Fn() + Send + Sync + 'static;

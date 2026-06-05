@@ -445,6 +445,8 @@ impl<P: Protocol> Device<P> {
     ///
     /// Returns [`Error::Protocol`] if the device is unreachable or returns an invalid response.
     ///
+    /// Returns [`Error::Parse`] if the device response cannot be parsed.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -921,6 +923,8 @@ impl<P: Protocol> Device<P> {
     /// [`capabilities().supports_energy_monitoring()`](Capabilities::supports_energy_monitoring)).
     ///
     /// Returns [`Error::Protocol`] if the device is unreachable or returns an invalid response.
+    ///
+    /// Returns [`Error::Parse`] if the device response cannot be parsed.
     ///
     /// # Examples
     ///
@@ -1411,6 +1415,8 @@ impl Device<SharedMqttClient> {
 
     /// Disconnects and cleans up MQTT subscriptions.
     ///
+    /// *Requires the `mqtt` feature. Not available on HTTP devices.*
+    ///
     /// This unsubscribes from device topics on the broker. The shared
     /// broker connection remains open for other devices.
     ///
@@ -1441,12 +1447,16 @@ impl Device<SharedMqttClient> {
     }
 
     /// Returns whether this device has been disconnected.
+    ///
+    /// *Requires the `mqtt` feature. Not available on HTTP devices.*
     #[must_use]
     pub fn is_disconnected(&self) -> bool {
         self.protocol.is_disconnected()
     }
 
     /// Returns the MQTT topic for this device.
+    ///
+    /// *Requires the `mqtt` feature. Not available on HTTP devices.*
     ///
     /// This is the base topic used for all MQTT communication with the device.
     ///

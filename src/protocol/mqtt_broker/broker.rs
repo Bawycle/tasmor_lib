@@ -326,6 +326,7 @@ impl MqttBroker {
     }
 
     /// Returns the number of active device subscriptions.
+    #[must_use]
     pub async fn subscription_count(&self) -> usize {
         self.inner.subscriptions.read().await.len()
     }

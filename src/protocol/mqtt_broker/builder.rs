@@ -118,6 +118,9 @@ impl MqttBrokerBuilder {
     /// Server certificate verification is always enforced; there is intentionally no
     /// insecure mode.
     ///
+    /// Calling this method after [`Self::tls_system_roots`] (or vice versa) replaces the
+    /// previous TLS configuration — last call wins.
+    ///
     /// # Errors at `build()` time
     ///
     /// `build()` performs a brief access check on the certificate file and returns
@@ -156,6 +159,9 @@ impl MqttBrokerBuilder {
     /// Unlike [`Self::tls_ca_cert`], no file is checked at `build()` time. A missing or untrusted
     /// CA will surface as a connection error at handshake time
     /// (`ProtocolError::ConnectionFailed`).
+    ///
+    /// Calling this method after [`Self::tls_ca_cert`] (or vice versa) replaces the
+    /// previous TLS configuration — last call wins.
     ///
     /// ## Port promotion
     ///
