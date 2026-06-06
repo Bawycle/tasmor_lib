@@ -3,6 +3,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use tokio::sync::mpsc;
 
 use super::broker::MqttBroker;
@@ -17,6 +19,23 @@ pub(super) enum BrokerEvent {
     Reconnected,
 }
 
+/// Forwards a broker event into the bounded bridge channel without blocking.
+///
+/// The paho callback runs on a synchronous C thread that must never block, so
+/// this uses `try_send`. When the channel is full the event is dropped, the
+/// drop counter is incremented, and a warning is logged — making backpressure
+/// observable rather than silently growing memory (the unbounded alternative).
+pub(super) fn try_forward(
+    tx: &mpsc::Sender<BrokerEvent>,
+    event: BrokerEvent,
+    drop_counter: &AtomicU64,
+) {
+    if tx.try_send(event).is_err() {
+        drop_counter.fetch_add(1, Ordering::Relaxed);
+        tracing::warn!("MQTT broker event channel full — event dropped");
+    }
+}
+
 /// Processes broker events forwarded from paho-mqtt's C-thread callbacks.
 ///
 /// Runs for the lifetime of the broker, handling:
@@ -24,7 +43,7 @@ pub(super) enum BrokerEvent {
 /// - Connection loss → `on_disconnected` callbacks dispatched
 /// - Reconnection → topics resubscribed, `on_reconnected` callbacks dispatched
 pub(super) async fn handle_broker_events(
-    mut event_rx: mpsc::UnboundedReceiver<BrokerEvent>,
+    mut event_rx: mpsc::Receiver<BrokerEvent>,
     broker: MqttBroker,
 ) {
     while let Some(event) = event_rx.recv().await {
@@ -52,4 +71,32 @@ pub(super) async fn handle_broker_events(
         }
     }
     tracing::info!("MQTT broker event loop ended");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn try_forward_succeeds_on_open_channel() {
+        let (tx, _rx) = mpsc::channel(4);
+        let counter = AtomicU64::new(0);
+
+        try_forward(&tx, BrokerEvent::Reconnected, &counter);
+
+        assert_eq!(counter.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn try_forward_increments_counter_on_full_channel() {
+        // Capacity 1, no consumer: first send fills it, second must be dropped.
+        let (tx, _rx) = mpsc::channel(1);
+        let counter = AtomicU64::new(0);
+
+        try_forward(&tx, BrokerEvent::ConnectionLost, &counter);
+        assert_eq!(counter.load(Ordering::Relaxed), 0);
+
+        try_forward(&tx, BrokerEvent::Reconnected, &counter);
+        assert_eq!(counter.load(Ordering::Relaxed), 1);
+    }
 }

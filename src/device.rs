@@ -1311,6 +1311,20 @@ impl<P: Protocol> Device<P> {
                 if !sys_info.is_empty() {
                     state.set_system_info(sys_info);
                 }
+
+                // Get stable identity metadata (firmware version, device name).
+                // Empty strings are normalized to absent fields.
+                let mut identity = crate::state::DeviceIdentity::new();
+                if let Some(version) = status_response.firmware_version().filter(|s| !s.is_empty())
+                {
+                    identity = identity.with_firmware_version(version);
+                }
+                if let Some(name) = status_response.device_name().filter(|s| !s.is_empty()) {
+                    identity = identity.with_device_name(name);
+                }
+                if !identity.is_empty() {
+                    state.set_identity(identity);
+                }
             }
             Err(e) => tracing::debug!(error = %e, "Failed to get status for system info"),
         }

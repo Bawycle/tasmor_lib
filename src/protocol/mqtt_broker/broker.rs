@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use paho_mqtt::{AsyncClient, QoS};
@@ -37,6 +37,8 @@ pub(super) struct MqttBrokerInner {
     pub(super) connected: AtomicBool,
     /// Channel for sending discovered device topics during discovery.
     pub(super) discovery_tx: RwLock<Option<mpsc::Sender<String>>>,
+    /// Count of broker events dropped because the bridge channel was full.
+    pub(super) dropped_events: Arc<AtomicU64>,
 }
 
 /// An MQTT broker connection that can be shared across multiple devices.
@@ -329,6 +331,18 @@ impl MqttBroker {
     #[must_use]
     pub async fn subscription_count(&self) -> usize {
         self.inner.subscriptions.read().await.len()
+    }
+
+    /// Returns the number of broker events dropped because the internal
+    /// paho→Tokio bridge channel was full.
+    ///
+    /// This is normally `0`. A non-zero value indicates the Tokio event loop
+    /// could not drain incoming MQTT events fast enough — useful for diagnosing
+    /// backpressure under sustained load. Poll it periodically or log it at
+    /// `WARN` when non-zero.
+    #[must_use]
+    pub fn dropped_event_count(&self) -> u64 {
+        self.inner.dropped_events.load(Ordering::Relaxed)
     }
 
     /// Starts discovery mode and returns a receiver for discovered device topics.

@@ -12,6 +12,7 @@
 //! - **Light settings**: dimmer level, HSB color, color temperature
 //! - **Energy readings**: voltage, current, power consumption, energy totals
 //! - **System info**: uptime, Wi-Fi signal strength, free memory (read-only)
+//! - **Identity**: firmware version, device name (near-immutable, read-only)
 //!
 //! # Design Philosophy
 //!
@@ -206,6 +207,88 @@ impl SystemInfo {
     }
 }
 
+/// Stable identity metadata for a Tasmota device.
+///
+/// Unlike [`SystemInfo`], these values are near-immutable: they only change
+/// when the device is reflashed (`firmware_version`) or reconfigured
+/// (`device_name`). They are populated once from the `Status 0` response during
+/// device construction and do **not** trigger callbacks.
+///
+/// Both fields are plain `String`s rather than newtypes: a Tasmota firmware
+/// version (e.g. `"15.4.0(release-tasmota)"`) and a device name are opaque
+/// identifiers with no domain invariant the library can enforce.
+///
+/// # Examples
+///
+/// ```
+/// use tasmor_lib::state::DeviceIdentity;
+///
+/// let identity = DeviceIdentity::new()
+///     .with_firmware_version("15.4.0(release-tasmota)")
+///     .with_device_name("salon_right_wall_side_light");
+///
+/// assert_eq!(identity.firmware_version(), Some("15.4.0(release-tasmota)"));
+/// assert_eq!(identity.device_name(), Some("salon_right_wall_side_light"));
+/// ```
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct DeviceIdentity {
+    /// Firmware version string (`StatusFWR.Version`).
+    firmware_version: Option<String>,
+    /// Human-readable device name (`Status.DeviceName`).
+    device_name: Option<String>,
+}
+
+impl DeviceIdentity {
+    /// Creates a new empty device identity.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sets the firmware version.
+    #[must_use]
+    pub fn with_firmware_version(mut self, version: impl Into<String>) -> Self {
+        self.firmware_version = Some(version.into());
+        self
+    }
+
+    /// Sets the device name.
+    #[must_use]
+    pub fn with_device_name(mut self, name: impl Into<String>) -> Self {
+        self.device_name = Some(name.into());
+        self
+    }
+
+    /// Returns the firmware version.
+    #[must_use]
+    pub fn firmware_version(&self) -> Option<&str> {
+        self.firmware_version.as_deref()
+    }
+
+    /// Returns the device name.
+    #[must_use]
+    pub fn device_name(&self) -> Option<&str> {
+        self.device_name.as_deref()
+    }
+
+    /// Updates fields from another `DeviceIdentity`, preserving existing values
+    /// when the new value is `None`.
+    pub fn merge(&mut self, other: &DeviceIdentity) {
+        if other.firmware_version.is_some() {
+            self.firmware_version.clone_from(&other.firmware_version);
+        }
+        if other.device_name.is_some() {
+            self.device_name.clone_from(&other.device_name);
+        }
+    }
+
+    /// Returns `true` if all fields are `None`.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.firmware_version.is_none() && self.device_name.is_none()
+    }
+}
+
 /// Tracked state of a Tasmota device.
 ///
 /// This struct maintains the current state of a device, including power states,
@@ -271,6 +354,10 @@ pub struct DeviceState {
     ///
     /// This is read-only data that does **not** trigger callbacks.
     system_info: Option<SystemInfo>,
+    /// Stable identity metadata (firmware version, device name).
+    ///
+    /// Near-immutable data populated from `Status 0`; does **not** trigger callbacks.
+    identity: Option<DeviceIdentity>,
 }
 
 impl DeviceState {
@@ -634,6 +721,43 @@ impl DeviceState {
             existing.merge(info);
         } else {
             self.system_info = Some(info.clone());
+        }
+    }
+
+    /// Gets the device identity metadata (firmware version, device name).
+    ///
+    /// This near-immutable data does **not** trigger callbacks when updated.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tasmor_lib::state::{DeviceState, DeviceIdentity};
+    ///
+    /// let mut state = DeviceState::new();
+    /// state.set_identity(DeviceIdentity::new().with_firmware_version("15.4.0"));
+    ///
+    /// if let Some(identity) = state.identity() {
+    ///     println!("Firmware: {:?}", identity.firmware_version());
+    /// }
+    /// ```
+    #[must_use]
+    pub fn identity(&self) -> Option<&DeviceIdentity> {
+        self.identity.as_ref()
+    }
+
+    /// Sets the device identity metadata.
+    pub fn set_identity(&mut self, identity: DeviceIdentity) {
+        self.identity = Some(identity);
+    }
+
+    /// Updates device identity, merging with existing data.
+    ///
+    /// This preserves existing values when the new `DeviceIdentity` has `None` fields.
+    pub fn update_identity(&mut self, identity: &DeviceIdentity) {
+        if let Some(existing) = &mut self.identity {
+            existing.merge(identity);
+        } else {
+            self.identity = Some(identity.clone());
         }
     }
 
@@ -1193,5 +1317,192 @@ mod tests {
 
         assert_eq!(state, deserialized);
         assert_eq!(deserialized.uptime(), Some(Duration::from_secs(172800)));
+    }
+
+    // ========== DeviceIdentity Tests ==========
+
+    #[test]
+    fn device_identity_new_is_empty() {
+        let identity = DeviceIdentity::new();
+        assert!(identity.is_empty());
+        assert!(identity.firmware_version().is_none());
+        assert!(identity.device_name().is_none());
+    }
+
+    #[test]
+    fn device_identity_builder_pattern() {
+        let identity = DeviceIdentity::new()
+            .with_firmware_version("15.4.0(release-tasmota)")
+            .with_device_name("salon_right_wall_side_light");
+
+        assert!(!identity.is_empty());
+        assert_eq!(identity.firmware_version(), Some("15.4.0(release-tasmota)"));
+        assert_eq!(identity.device_name(), Some("salon_right_wall_side_light"));
+    }
+
+    #[test]
+    fn device_identity_empty_string_accepted() {
+        // The struct itself does not normalize empty strings: `Some("")` is a
+        // distinct, observable value. Normalization to `None` happens at the
+        // call site in `query_state()`.
+        let identity = DeviceIdentity::new().with_firmware_version("");
+        assert_eq!(identity.firmware_version(), Some(""));
+        assert!(!identity.is_empty());
+    }
+
+    #[test]
+    fn device_identity_merge_preserves_existing() {
+        let mut identity = DeviceIdentity::new().with_firmware_version("15.4.0");
+
+        // Merge with partial update (only device name)
+        let update = DeviceIdentity::new().with_device_name("kitchen_plug");
+        identity.merge(&update);
+
+        // Original value preserved, new value added
+        assert_eq!(identity.firmware_version(), Some("15.4.0"));
+        assert_eq!(identity.device_name(), Some("kitchen_plug"));
+    }
+
+    #[test]
+    fn device_identity_merge_updates_values() {
+        let mut identity = DeviceIdentity::new()
+            .with_firmware_version("15.2.0")
+            .with_device_name("old_name");
+
+        // Merge with overlapping update
+        let update = DeviceIdentity::new().with_firmware_version("15.4.0");
+        identity.merge(&update);
+
+        assert_eq!(identity.firmware_version(), Some("15.4.0")); // Updated
+        assert_eq!(identity.device_name(), Some("old_name")); // Preserved
+    }
+
+    #[test]
+    fn device_identity_merge_both_none_stays_empty() {
+        let mut identity = DeviceIdentity::new();
+        identity.merge(&DeviceIdentity::new());
+        assert!(identity.is_empty());
+    }
+
+    #[test]
+    fn device_identity_serialization() {
+        let identity = DeviceIdentity::new()
+            .with_firmware_version("15.4.0(release-tasmota)")
+            .with_device_name("salon_right_wall_side_light");
+
+        let json = serde_json::to_string(&identity).unwrap();
+        let deserialized: DeviceIdentity = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(identity, deserialized);
+    }
+
+    #[test]
+    fn device_state_identity_none_by_default() {
+        let state = DeviceState::new();
+        assert!(state.identity().is_none());
+    }
+
+    #[test]
+    fn device_state_identity_getters_setters() {
+        let mut state = DeviceState::new();
+
+        // Initially None
+        assert!(state.identity().is_none());
+
+        // Set identity
+        let identity = DeviceIdentity::new().with_firmware_version("15.4.0");
+        state.set_identity(identity);
+
+        assert!(state.identity().is_some());
+        assert_eq!(state.identity().unwrap().firmware_version(), Some("15.4.0"));
+    }
+
+    #[test]
+    fn device_state_update_identity_from_none() {
+        let mut state = DeviceState::new();
+
+        // Update on empty state must create Some(...)
+        let identity = DeviceIdentity::new().with_firmware_version("15.4.0");
+        state.update_identity(&identity);
+
+        assert!(state.identity().is_some());
+        assert_eq!(state.identity().unwrap().firmware_version(), Some("15.4.0"));
+    }
+
+    #[test]
+    fn device_state_update_identity_merge() {
+        let mut state = DeviceState::new();
+
+        let identity1 = DeviceIdentity::new().with_firmware_version("15.4.0");
+        state.update_identity(&identity1);
+
+        let identity2 = DeviceIdentity::new().with_device_name("kitchen_plug");
+        state.update_identity(&identity2);
+
+        let identity = state.identity().unwrap();
+        assert_eq!(identity.firmware_version(), Some("15.4.0")); // Preserved
+        assert_eq!(identity.device_name(), Some("kitchen_plug")); // Added
+    }
+
+    #[test]
+    fn device_state_clear_also_clears_identity() {
+        let mut state = DeviceState::new();
+        state.set_identity(DeviceIdentity::new().with_firmware_version("15.4.0"));
+
+        state.clear();
+
+        assert!(state.identity().is_none());
+    }
+
+    #[test]
+    fn device_state_with_identity_serialization() {
+        let mut state = DeviceState::new();
+        state.set_power(1, PowerState::On);
+        state.set_identity(
+            DeviceIdentity::new()
+                .with_firmware_version("15.4.0(release-tasmota)")
+                .with_device_name("salon_right_wall_side_light"),
+        );
+
+        let json = serde_json::to_string(&state).unwrap();
+        let deserialized: DeviceState = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(state, deserialized);
+        assert_eq!(
+            deserialized.identity().unwrap().firmware_version(),
+            Some("15.4.0(release-tasmota)")
+        );
+    }
+
+    #[test]
+    fn device_state_v0_10_json_deserializes_without_identity_field() {
+        // A DeviceState serialized before D-22 has no `identity` key.
+        // serde treats a missing Option field as None, so this must round-trip
+        // without error and yield identity() == None.
+        let json = r#"{
+            "power": [null, null, null, null, null, null, null, null],
+            "dimmer": null,
+            "hsb_color": null,
+            "color_temperature": null,
+            "scheme": null,
+            "wakeup_duration": null,
+            "fade_enabled": null,
+            "fade_duration": null,
+            "power_consumption": null,
+            "voltage": null,
+            "current": null,
+            "apparent_power": null,
+            "reactive_power": null,
+            "power_factor": null,
+            "energy_today": null,
+            "energy_yesterday": null,
+            "energy_total": null,
+            "total_start_time": null,
+            "frequency": null,
+            "system_info": null
+        }"#;
+
+        let state: DeviceState = serde_json::from_str(json).unwrap();
+        assert!(state.identity().is_none());
     }
 }

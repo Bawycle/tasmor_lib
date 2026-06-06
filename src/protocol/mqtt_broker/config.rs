@@ -10,6 +10,13 @@ use crate::credentials::Credentials;
 
 use super::DEFAULT_COMMAND_TIMEOUT;
 
+/// Default capacity for the paho→Tokio event bridge channel.
+///
+/// Sized to absorb reconnection bursts (all devices republishing `STATE` at once)
+/// and parallel `Status 0` probes at startup. At the v1 load envelope the channel
+/// utilization is negligible; this bound only guards against pathological saturation.
+pub(super) const DEFAULT_EVENT_CHANNEL_CAPACITY: usize = 1024;
+
 /// TLS configuration for the broker connection.
 #[derive(Clone, Default)]
 pub(super) enum TlsConfig {
@@ -56,6 +63,8 @@ pub struct MqttBrokerConfig {
     pub(super) connection_timeout: Duration,
     pub(super) command_timeout: Duration,
     pub(super) tls: TlsConfig,
+    /// Capacity of the bounded channel bridging paho C-thread callbacks into Tokio.
+    pub(super) event_channel_capacity: usize,
 }
 
 impl std::fmt::Debug for MqttBrokerConfig {
@@ -68,6 +77,7 @@ impl std::fmt::Debug for MqttBrokerConfig {
             .field("connection_timeout", &self.connection_timeout)
             .field("command_timeout", &self.command_timeout)
             .field("tls", &self.tls)
+            .field("event_channel_capacity", &self.event_channel_capacity)
             .finish()
     }
 }
@@ -82,6 +92,7 @@ impl Default for MqttBrokerConfig {
             connection_timeout: Duration::from_secs(10),
             command_timeout: DEFAULT_COMMAND_TIMEOUT,
             tls: TlsConfig::Disabled,
+            event_channel_capacity: DEFAULT_EVENT_CHANNEL_CAPACITY,
         }
     }
 }
@@ -96,5 +107,11 @@ mod tests {
         assert!(config.host.is_empty());
         assert_eq!(config.port, 1883);
         assert!(config.credentials.is_none());
+    }
+
+    #[test]
+    fn config_default_event_channel_capacity() {
+        let config = MqttBrokerConfig::default();
+        assert_eq!(config.event_channel_capacity, 1024);
     }
 }

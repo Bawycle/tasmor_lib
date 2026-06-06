@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `DeviceIdentity` struct (in `tasmor_lib::state`) exposing `firmware_version` and
+  `device_name`, accessible via `DeviceState::identity()`. Populated from the `Status 0`
+  response already fetched during `query_state()` — no additional network round-trip.
+  Empty firmware version / device name strings are normalized to absent.
+- `MqttBroker::dropped_event_count()` — observable counter of broker events dropped when
+  the internal paho→Tokio bridge channel is full. Normally `0`; non-zero indicates
+  backpressure under sustained load.
+- `MqttBrokerBuilder::event_channel_capacity()` — configures the bridge channel capacity
+  (default 1024). Panics on `0`.
+
+### Changed
+
+- The internal paho→Tokio event bridge now uses a **bounded** channel (default capacity 1024)
+  instead of an unbounded one. This bounds memory under sustained load; overflow events are
+  dropped (counted via `dropped_event_count()`) and logged at `WARN` rather than queued
+  without limit. At typical load the channel utilization is negligible.
+
 ## [0.10.0] - 2026-06-06
 
 ### Added

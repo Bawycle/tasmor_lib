@@ -16,7 +16,7 @@ use crate::error::ProtocolError;
 
 use super::broker::{MqttBroker, MqttBrokerInner};
 use super::config::{MqttBrokerConfig, TlsConfig};
-use super::events::{BrokerEvent, handle_broker_events};
+use super::events::{BrokerEvent, handle_broker_events, try_forward};
 
 /// Global counter for generating unique client IDs.
 static BROKER_CLIENT_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -106,6 +106,26 @@ impl MqttBrokerBuilder {
     #[must_use]
     pub fn command_timeout(mut self, duration: Duration) -> Self {
         self.config.command_timeout = duration;
+        self
+    }
+
+    /// Sets the capacity of the internal paho→Tokio event bridge channel
+    /// (default: 1024).
+    ///
+    /// Incoming MQTT messages and connection events are forwarded from paho's
+    /// C-thread callbacks into a bounded channel drained by the Tokio event
+    /// loop. When the channel is full, events are dropped (counted via
+    /// [`MqttBroker::dropped_event_count`](crate::MqttBroker::dropped_event_count))
+    /// rather than queued without bound. Raise this if you expect very high
+    /// telemetry rates or large reconnection bursts.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `capacity` is `0` (Tokio's bounded channel requires capacity ≥ 1).
+    #[must_use]
+    pub fn event_channel_capacity(mut self, capacity: usize) -> Self {
+        assert!(capacity >= 1, "event_channel_capacity must be at least 1");
+        self.config.event_channel_capacity = capacity;
         self
     }
 
@@ -220,43 +240,31 @@ impl MqttBrokerBuilder {
 
         let conn_opts = build_connect_options(&self.config)?;
 
+        // Drop counter shared with the paho callbacks. Created before the inner
+        // so both the inner and the callbacks hold clones of the same Arc.
+        let dropped_events = Arc::new(AtomicU64::new(0));
+        let event_channel_capacity = self.config.event_channel_capacity;
+
         let inner = MqttBrokerInner {
             client,
             subscriptions: RwLock::new(HashMap::new()),
             config: self.config,
             connected: AtomicBool::new(false),
             discovery_tx: RwLock::new(None),
+            dropped_events: Arc::clone(&dropped_events),
         };
         let broker = MqttBroker {
             inner: Arc::new(inner),
         };
 
-        // Channels bridge paho C-thread callbacks into the Tokio event loop.
-        let (event_tx, event_rx) = mpsc::unbounded_channel::<BrokerEvent>();
+        // Bounded channel bridges paho C-thread callbacks into the Tokio event
+        // loop. Callbacks use `try_forward` (non-blocking) so the C thread is
+        // never blocked; overflow is dropped and counted via `dropped_events`.
+        let (event_tx, event_rx) = mpsc::channel::<BrokerEvent>(event_channel_capacity);
 
-        // Message callback: route incoming publishes.
-        {
-            let tx = event_tx.clone();
-            broker.inner.client.set_message_callback(move |_cli, msg| {
-                if let Some(msg) = msg {
-                    let _ = tx.send(BrokerEvent::Message {
-                        topic: msg.topic().to_string(),
-                        payload: msg.payload_str().into_owned(),
-                    });
-                }
-            });
-        }
-
-        // Connection-lost callback: fires when the TCP connection drops.
-        {
-            let tx = event_tx.clone();
-            broker
-                .inner
-                .client
-                .set_connection_lost_callback(move |_cli| {
-                    let _ = tx.send(BrokerEvent::ConnectionLost);
-                });
-        }
+        // Message and connection-lost callbacks (the reconnected callback is set
+        // later, after the initial connect, to avoid firing on first connect).
+        register_incoming_callbacks(&broker.inner.client, &event_tx, &dropped_events);
 
         // Connect and wait with a user-defined timeout.
         let timeout = broker.inner.config.connection_timeout;
@@ -285,8 +293,9 @@ impl MqttBrokerBuilder {
         // automatic-reconnect logic.
         {
             let tx = event_tx;
+            let drop_ctr = Arc::clone(&dropped_events);
             broker.inner.client.set_connected_callback(move |_cli| {
-                let _ = tx.send(BrokerEvent::Reconnected);
+                try_forward(&tx, BrokerEvent::Reconnected, &drop_ctr);
             });
         }
 
@@ -296,6 +305,43 @@ impl MqttBrokerBuilder {
         });
 
         Ok(broker)
+    }
+}
+
+/// Wires the message and connection-lost paho callbacks that forward C-thread
+/// events into the bounded bridge channel.
+///
+/// Both callbacks capture cloned handles (`event_tx`, `dropped_events`) rather
+/// than the broker itself — capturing the broker would create an `Arc` cycle
+/// keeping the inner alive forever. The reconnected callback is registered
+/// separately, after the initial connect, so it does not fire on first connect.
+fn register_incoming_callbacks(
+    client: &paho_mqtt::AsyncClient,
+    event_tx: &mpsc::Sender<BrokerEvent>,
+    dropped_events: &Arc<AtomicU64>,
+) {
+    {
+        let tx = event_tx.clone();
+        let drop_ctr = Arc::clone(dropped_events);
+        client.set_message_callback(move |_cli, msg| {
+            if let Some(msg) = msg {
+                try_forward(
+                    &tx,
+                    BrokerEvent::Message {
+                        topic: msg.topic().to_string(),
+                        payload: msg.payload_str().into_owned(),
+                    },
+                    &drop_ctr,
+                );
+            }
+        });
+    }
+    {
+        let tx = event_tx.clone();
+        let drop_ctr = Arc::clone(dropped_events);
+        client.set_connection_lost_callback(move |_cli| {
+            try_forward(&tx, BrokerEvent::ConnectionLost, &drop_ctr);
+        });
     }
 }
 
@@ -649,6 +695,26 @@ mod tests {
         let paho_err = paho_mqtt::Error::Failure;
         let proto_err: ProtocolError = paho_err.into();
         assert!(matches!(proto_err, ProtocolError::Mqtt(ref msg) if !msg.is_empty()));
+    }
+
+    // --- event_channel_capacity() builder method ---
+
+    #[test]
+    fn builder_event_channel_capacity_default() {
+        let builder = MqttBrokerBuilder::default();
+        assert_eq!(builder.config.event_channel_capacity, 1024);
+    }
+
+    #[test]
+    fn builder_event_channel_capacity_custom() {
+        let builder = MqttBrokerBuilder::default().event_channel_capacity(512);
+        assert_eq!(builder.config.event_channel_capacity, 512);
+    }
+
+    #[test]
+    #[should_panic(expected = "event_channel_capacity must be at least 1")]
+    fn builder_event_channel_capacity_zero_panics() {
+        let _ = MqttBrokerBuilder::default().event_channel_capacity(0);
     }
 
     // --- tls_system_roots() builder method ---

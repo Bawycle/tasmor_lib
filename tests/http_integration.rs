@@ -377,6 +377,80 @@ mod device_auto_detection {
     }
 
     #[tokio::test]
+    async fn http_build_populates_identity() {
+        let mock_server = MockServer::start().await;
+
+        // Status 0 carries firmware version and device name (already fetched).
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Status 0"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "Status": {
+                    "Module": 18,
+                    "DeviceName": "Mon Device",
+                    "FriendlyName": ["Living Room Light"],
+                    "Topic": "tasmota_bulb",
+                    "Power": 1
+                },
+                "StatusFWR": {
+                    "Version": "13.4.0",
+                    "BuildDateTime": "2024-01-01T00:00:00"
+                }
+            })))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Power1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(mock_power_response()))
+            .mount(&mock_server)
+            .await;
+
+        let host = mock_server.uri().replace("http://", "");
+        let (_device, state) = Device::http(&host).build().await.unwrap();
+
+        let identity = state.identity().expect("identity should be populated");
+        assert_eq!(identity.firmware_version(), Some("13.4.0"));
+        assert_eq!(identity.device_name(), Some("Mon Device"));
+    }
+
+    #[tokio::test]
+    async fn http_build_ignores_empty_firmware_version() {
+        let mock_server = MockServer::start().await;
+
+        // Empty firmware version must be normalized to absent.
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Status 0"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "Status": {
+                    "Module": 18,
+                    "DeviceName": "Named Device",
+                    "Topic": "tasmota_bulb",
+                    "Power": 1
+                },
+                "StatusFWR": {
+                    "Version": "",
+                    "BuildDateTime": "2024-01-01T00:00:00"
+                }
+            })))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(query_param("cmnd", "Power1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(mock_power_response()))
+            .mount(&mock_server)
+            .await;
+
+        let host = mock_server.uri().replace("http://", "");
+        let (_device, state) = Device::http(&host).build().await.unwrap();
+
+        // Device name is still present, but firmware version is filtered out.
+        let identity = state.identity().expect("identity should be populated");
+        assert_eq!(identity.firmware_version(), None);
+        assert_eq!(identity.device_name(), Some("Named Device"));
+    }
+
+    #[tokio::test]
     async fn build_device_detects_neo_coolcam() {
         let mock_server = MockServer::start().await;
 
