@@ -1490,7 +1490,7 @@ mod error_handling {
     use super::*;
 
     #[tokio::test]
-    #[ignore = "requires real Tasmota devices; run with --ignored"]
+    #[ignore = "depends on a controlled LAN (unreachable host at .254); run with --ignored"]
     async fn http_connection_to_invalid_ip() {
         let result = Device::http("192.168.11.254") // Non-existent IP
             .with_credentials("admin", "password")
@@ -1514,7 +1514,7 @@ mod error_handling {
     }
 
     #[tokio::test]
-    #[ignore = "requires real Tasmota devices; run with --ignored"]
+    #[ignore = "depends on a controlled LAN (unreachable host at .254); run with --ignored"]
     async fn mqtt_connection_to_invalid_broker() {
         let result = MqttBroker::builder()
             .host("192.168.11.254") // Non-existent broker
