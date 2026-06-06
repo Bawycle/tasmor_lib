@@ -497,9 +497,9 @@ mod tests {
 
     #[test]
     fn wakeup_duration_valid_values() {
-        for v in [1, 60, 300, 1800, 3000] {
-            let duration = WakeupDuration::new(Duration::from_secs(v)).unwrap();
-            assert_eq!(duration.seconds(), v as u16);
+        for v in [1u16, 60, 300, 1800, 3000] {
+            let duration = WakeupDuration::new(Duration::from_secs(u64::from(v))).unwrap();
+            assert_eq!(duration.seconds(), v);
         }
     }
 

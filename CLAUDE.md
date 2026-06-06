@@ -10,7 +10,8 @@ TasmoR Lib is a Rust library for controlling Tasmota devices via MQTT and HTTP p
 
 ```bash
 # Full verification pipeline (run before committing)
-cargo check && cargo build && cargo test && cargo fmt --check && cargo clippy -- -D warnings -W clippy::pedantic
+# --all-targets lints test code too, keeping tests at the same pedantic standard as the library.
+cargo check && cargo build && cargo test && cargo fmt --check && cargo clippy --all-targets -- -D warnings -W clippy::pedantic
 
 # Run a single test
 cargo test test_name

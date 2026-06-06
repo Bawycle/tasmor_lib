@@ -72,11 +72,11 @@ use super::StateChange;
 /// use tasmor_lib::state::SystemInfo;
 ///
 /// let info = SystemInfo::new()
-///     .with_uptime(Duration::from_secs(172800))
+///     .with_uptime(Duration::from_secs(172_800))
 ///     .with_wifi_rssi(-60)
 ///     .with_heap(25000);
 ///
-/// assert_eq!(info.uptime(), Some(Duration::from_secs(172800)));
+/// assert_eq!(info.uptime(), Some(Duration::from_secs(172_800)));
 /// ```
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SystemInfo {
@@ -161,7 +161,7 @@ impl SystemInfo {
     /// use std::time::Duration;
     /// use tasmor_lib::state::SystemInfo;
     ///
-    /// let info = SystemInfo::new().with_uptime(Duration::from_secs(172800));
+    /// let info = SystemInfo::new().with_uptime(Duration::from_secs(172_800));
     ///
     /// let uptime = info.uptime().unwrap();
     /// println!("Uptime: {} days", uptime.as_secs() / 86400);
@@ -696,7 +696,7 @@ impl DeviceState {
     /// use tasmor_lib::state::{DeviceState, SystemInfo};
     ///
     /// let mut state = DeviceState::new();
-    /// state.set_system_info(SystemInfo::new().with_uptime(Duration::from_secs(172800)));
+    /// state.set_system_info(SystemInfo::new().with_uptime(Duration::from_secs(172_800)));
     ///
     /// if let Some(info) = state.system_info() {
     ///     let uptime = info.uptime().unwrap_or(Duration::ZERO);
@@ -773,7 +773,7 @@ impl DeviceState {
     /// use tasmor_lib::state::{DeviceState, SystemInfo};
     ///
     /// let mut state = DeviceState::new();
-    /// state.set_system_info(SystemInfo::new().with_uptime(Duration::from_secs(172800)));
+    /// state.set_system_info(SystemInfo::new().with_uptime(Duration::from_secs(172_800)));
     ///
     /// let uptime = state.uptime().unwrap();
     /// println!("Uptime: {} days", uptime.as_secs() / 86400);
@@ -1201,12 +1201,12 @@ mod tests {
     #[test]
     fn system_info_builder_pattern() {
         let info = SystemInfo::new()
-            .with_uptime(Duration::from_secs(172800))
+            .with_uptime(Duration::from_secs(172_800))
             .with_wifi_rssi(-55)
             .with_heap(25000);
 
         assert!(!info.is_empty());
-        assert_eq!(info.uptime(), Some(Duration::from_secs(172800)));
+        assert_eq!(info.uptime(), Some(Duration::from_secs(172_800)));
         assert_eq!(info.wifi_rssi(), Some(-55));
         assert_eq!(info.heap(), Some(25000));
     }
@@ -1254,11 +1254,11 @@ mod tests {
         assert!(state.uptime().is_none());
 
         // Set system info
-        let info = SystemInfo::new().with_uptime(Duration::from_secs(172800));
+        let info = SystemInfo::new().with_uptime(Duration::from_secs(172_800));
         state.set_system_info(info);
 
         assert!(state.system_info().is_some());
-        assert_eq!(state.uptime(), Some(Duration::from_secs(172800)));
+        assert_eq!(state.uptime(), Some(Duration::from_secs(172_800)));
     }
 
     #[test]
@@ -1282,7 +1282,7 @@ mod tests {
     #[test]
     fn device_state_clear_clears_system_info() {
         let mut state = DeviceState::new();
-        state.set_system_info(SystemInfo::new().with_uptime(Duration::from_secs(172800)));
+        state.set_system_info(SystemInfo::new().with_uptime(Duration::from_secs(172_800)));
 
         state.clear();
 
@@ -1292,7 +1292,7 @@ mod tests {
     #[test]
     fn system_info_serialization() {
         let info = SystemInfo::new()
-            .with_uptime(Duration::from_secs(172800))
+            .with_uptime(Duration::from_secs(172_800))
             .with_wifi_rssi(-55)
             .with_heap(25000);
 
@@ -1308,7 +1308,7 @@ mod tests {
         state.set_power(1, PowerState::On);
         state.set_system_info(
             SystemInfo::new()
-                .with_uptime(Duration::from_secs(172800))
+                .with_uptime(Duration::from_secs(172_800))
                 .with_wifi_rssi(-55),
         );
 
@@ -1316,7 +1316,7 @@ mod tests {
         let deserialized: DeviceState = serde_json::from_str(&json).unwrap();
 
         assert_eq!(state, deserialized);
-        assert_eq!(deserialized.uptime(), Some(Duration::from_secs(172800)));
+        assert_eq!(deserialized.uptime(), Some(Duration::from_secs(172_800)));
     }
 
     // ========== DeviceIdentity Tests ==========

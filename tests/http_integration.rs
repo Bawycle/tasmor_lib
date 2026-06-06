@@ -1021,8 +1021,8 @@ mod device_energy_commands {
         let response = device.energy().await.unwrap();
 
         let energy = response.energy().unwrap();
-        assert_eq!(energy.power, 45.0);
-        assert_eq!(energy.voltage, 230.0);
+        assert_abs_diff_eq!(energy.power, 45.0, epsilon = 1e-6);
+        assert_abs_diff_eq!(energy.voltage, 230.0, epsilon = 1e-6);
     }
 
     #[tokio::test]

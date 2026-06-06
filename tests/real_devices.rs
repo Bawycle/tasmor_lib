@@ -19,7 +19,7 @@
 //! - `MQTT_USER` - MQTT username
 //! - `MQTT_PASSWORD` - MQTT password
 //!
-//! ## Devices (LIGHT_1, LIGHT_2, LIGHT_3, PLUG_1, PLUG_2)
+//! ## Devices (`LIGHT_1`, `LIGHT_2`, `LIGHT_3`, `PLUG_1`, `PLUG_2`)
 //! For each device, set:
 //! - `{DEVICE}_HTTP_IP` - Device IP address
 //! - `{DEVICE}_HTTP_USER` - HTTP username
@@ -139,7 +139,7 @@ mod http_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn connect_to_light_with_auto_detection() {
         let config = cfg_light_1();
         let (device, initial_state) = Device::http(&config.http_ip)
@@ -149,7 +149,7 @@ mod http_protocol {
             .expect("Failed to connect to light");
 
         println!("Device capabilities: {:?}", device.capabilities());
-        println!("Initial state: {:?}", initial_state);
+        println!("Initial state: {initial_state:?}");
 
         // Light should support dimmer
         assert!(
@@ -159,7 +159,7 @@ mod http_protocol {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn connect_to_plug_with_auto_detection() {
         let (device, initial_state) = Device::http(cfg_plug_1().http_ip)
             .with_credentials(cfg_plug_1().http_user, cfg_plug_1().http_password)
@@ -168,7 +168,7 @@ mod http_protocol {
             .expect("Failed to connect to plug");
 
         println!("Device capabilities: {:?}", device.capabilities());
-        println!("Initial state: {:?}", initial_state);
+        println!("Initial state: {initial_state:?}");
 
         // Plug should support energy monitoring
         assert!(
@@ -178,7 +178,7 @@ mod http_protocol {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn connect_with_manual_capabilities() {
         let (device, _) = Device::http(cfg_light_1().http_ip)
             .with_credentials(cfg_light_1().http_user, cfg_light_1().http_password)
@@ -196,7 +196,7 @@ mod http_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn power_on_off_toggle_light() {
         let (device, _) = Device::http(cfg_light_1().http_ip)
             .with_credentials(cfg_light_1().http_user, cfg_light_1().http_password)
@@ -243,7 +243,7 @@ mod http_protocol {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn power_control_plug() {
         let (device, _) = Device::http(cfg_plug_2().http_ip)
             .with_credentials(cfg_plug_2().http_user, cfg_plug_2().http_password)
@@ -273,7 +273,7 @@ mod http_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn get_full_status() {
         let (device, _) = Device::http(cfg_light_1().http_ip)
             .with_credentials(cfg_light_1().http_user, cfg_light_1().http_password)
@@ -282,7 +282,7 @@ mod http_protocol {
             .unwrap();
 
         let status = device.status().await.unwrap();
-        println!("Full status: {:?}", status);
+        println!("Full status: {status:?}");
 
         // Should have basic status info
         assert!(status.device_name().is_some(), "Should have device name");
@@ -291,7 +291,7 @@ mod http_protocol {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn get_abbreviated_status() {
         let (device, _) = Device::http(cfg_plug_1().http_ip)
             .with_credentials(cfg_plug_1().http_user, cfg_plug_1().http_password)
@@ -300,7 +300,7 @@ mod http_protocol {
             .unwrap();
 
         let status = device.status_abbreviated().await.unwrap();
-        println!("Abbreviated status: {:?}", status);
+        println!("Abbreviated status: {status:?}");
     }
 
     // -------------------------------------------------------------------------
@@ -308,7 +308,7 @@ mod http_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn dimmer_control() {
         let (device, _) = Device::http(cfg_light_1().http_ip)
             .with_credentials(cfg_light_1().http_user, cfg_light_1().http_password)
@@ -342,7 +342,7 @@ mod http_protocol {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn dimmer_unsupported_on_plug() {
         let (device, _) = Device::http(cfg_plug_1().http_ip)
             .with_credentials(cfg_plug_1().http_user, cfg_plug_1().http_password)
@@ -354,8 +354,7 @@ mod http_protocol {
         let result = device.set_dimmer(Dimmer::new(50).unwrap()).await;
         assert!(
             result.is_err(),
-            "Dimmer should not be supported on plug: {:?}",
-            result
+            "Dimmer should not be supported on plug: {result:?}"
         );
     }
 
@@ -364,7 +363,7 @@ mod http_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn color_temperature_control() {
         let (device, _) = Device::http(cfg_light_2().http_ip)
             .with_credentials(cfg_light_2().http_user, cfg_light_2().http_password)
@@ -401,7 +400,7 @@ mod http_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn hsb_color_control() {
         let (device, _) = Device::http(cfg_light_1().http_ip)
             .with_credentials(cfg_light_1().http_user, cfg_light_1().http_password)
@@ -449,7 +448,7 @@ mod http_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn rgb_color_control() {
         let (device, _) = Device::http(cfg_light_3().http_ip)
             .with_credentials(cfg_light_3().http_user, cfg_light_3().http_password)
@@ -477,7 +476,7 @@ mod http_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn scheme_control() {
         let (device, _) = Device::http(cfg_light_1().http_ip)
             .with_credentials(cfg_light_1().http_user, cfg_light_1().http_password)
@@ -509,7 +508,7 @@ mod http_protocol {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn wakeup_duration_control() {
         let (device, _) = Device::http(cfg_light_1().http_ip)
             .with_credentials(cfg_light_1().http_user, cfg_light_1().http_password)
@@ -542,7 +541,7 @@ mod http_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn fade_control() {
         let (device, _) = Device::http(cfg_light_2().http_ip)
             .with_credentials(cfg_light_2().http_user, cfg_light_2().http_password)
@@ -589,7 +588,7 @@ mod http_protocol {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn fade_at_startup_control() {
         let (device, _) = Device::http(cfg_light_1().http_ip)
             .with_credentials(cfg_light_1().http_user, cfg_light_1().http_password)
@@ -626,7 +625,7 @@ mod http_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn energy_monitoring() {
         let (device, _) = Device::http(cfg_plug_1().http_ip)
             .with_credentials(cfg_plug_1().http_user, cfg_plug_1().http_password)
@@ -653,7 +652,7 @@ mod http_protocol {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn energy_unsupported_on_light() {
         let (device, _) = Device::http(cfg_light_1().http_ip)
             .with_credentials(cfg_light_1().http_user, cfg_light_1().http_password)
@@ -664,8 +663,7 @@ mod http_protocol {
         let result = device.energy().await;
         assert!(
             result.is_err(),
-            "Energy should not be supported on light: {:?}",
-            result
+            "Energy should not be supported on light: {result:?}"
         );
     }
 
@@ -674,7 +672,7 @@ mod http_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn run_routine() {
         use tasmor_lib::command::Routine;
 
@@ -694,7 +692,7 @@ mod http_protocol {
             .unwrap();
 
         let response = device.run(&routine).await.unwrap();
-        println!("Routine response: {:?}", response);
+        println!("Routine response: {response:?}");
 
         // Check final dimmer value
         if let Ok(dimmer) = response.get_as::<u8>("Dimmer") {
@@ -706,7 +704,7 @@ mod http_protocol {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn run_color_routine() {
         use tasmor_lib::command::Routine;
 
@@ -728,7 +726,7 @@ mod http_protocol {
             .unwrap();
 
         let response = device.run(&routine).await.unwrap();
-        println!("Color routine response: {:?}", response);
+        println!("Color routine response: {response:?}");
 
         sleep(Duration::from_secs(1)).await;
         device.power_off().await.unwrap();
@@ -747,7 +745,7 @@ mod mqtt_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn connect_to_broker() {
         let broker = MqttBroker::builder()
             .host(cfg_broker().ip)
@@ -767,7 +765,7 @@ mod mqtt_protocol {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn connect_to_device_via_mqtt() {
         let broker = MqttBroker::builder()
             .host(cfg_broker().ip)
@@ -784,7 +782,7 @@ mod mqtt_protocol {
             .expect("Failed to connect to device via MQTT");
 
         println!("Device topic: {}", device.topic());
-        println!("Initial state: {:?}", initial_state);
+        println!("Initial state: {initial_state:?}");
         println!("Capabilities: {:?}", device.capabilities());
 
         device.disconnect().await;
@@ -796,7 +794,7 @@ mod mqtt_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn mqtt_power_control() {
         let broker = MqttBroker::builder()
             .host(cfg_broker().ip)
@@ -834,7 +832,7 @@ mod mqtt_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn power_change_subscription() {
         let broker = MqttBroker::builder()
             .host(cfg_broker().ip)
@@ -855,7 +853,7 @@ mod mqtt_protocol {
 
         // Subscribe to power changes
         let _sub_id = device.on_power_changed(move |idx, state| {
-            println!("Power callback: relay {} = {:?}", idx, state);
+            println!("Power callback: relay {idx} = {state:?}");
             count_clone.fetch_add(1, Ordering::SeqCst);
         });
 
@@ -867,7 +865,7 @@ mod mqtt_protocol {
 
         // Check callbacks were triggered
         let count = callback_count.load(Ordering::SeqCst);
-        println!("Power callbacks received: {}", count);
+        println!("Power callbacks received: {count}");
         assert!(
             count >= 2,
             "Should have received at least 2 power callbacks"
@@ -878,7 +876,7 @@ mod mqtt_protocol {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn dimmer_change_subscription() {
         let broker = MqttBroker::builder()
             .host(cfg_broker().ip)
@@ -912,7 +910,7 @@ mod mqtt_protocol {
         sleep(Duration::from_millis(300)).await;
 
         let count = callback_count.load(Ordering::SeqCst);
-        println!("Dimmer callbacks received: {}", count);
+        println!("Dimmer callbacks received: {count}");
         assert!(
             count >= 2,
             "Should have received at least 2 dimmer callbacks"
@@ -924,7 +922,7 @@ mod mqtt_protocol {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn color_change_subscription() {
         let broker = MqttBroker::builder()
             .host(cfg_broker().ip)
@@ -968,7 +966,7 @@ mod mqtt_protocol {
         sleep(Duration::from_millis(300)).await;
 
         let count = callback_count.load(Ordering::SeqCst);
-        println!("Color callbacks received: {}", count);
+        println!("Color callbacks received: {count}");
         assert!(
             count >= 2,
             "Should have received at least 2 color callbacks"
@@ -980,7 +978,7 @@ mod mqtt_protocol {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn unsubscribe_callback() {
         let broker = MqttBroker::builder()
             .host(cfg_broker().ip)
@@ -1030,7 +1028,7 @@ mod mqtt_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn multiple_devices_same_broker() {
         let broker = MqttBroker::builder()
             .host(cfg_broker().ip)
@@ -1084,7 +1082,7 @@ mod mqtt_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn mqtt_dimmer_control() {
         let broker = MqttBroker::builder()
             .host(cfg_broker().ip)
@@ -1124,7 +1122,7 @@ mod mqtt_protocol {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn mqtt_color_temperature_control() {
         let broker = MqttBroker::builder()
             .host(cfg_broker().ip)
@@ -1167,7 +1165,7 @@ mod mqtt_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn mqtt_fade_control() {
         let broker = MqttBroker::builder()
             .host(cfg_broker().ip)
@@ -1222,7 +1220,7 @@ mod mqtt_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn mqtt_scheme_control() {
         let broker = MqttBroker::builder()
             .host(cfg_broker().ip)
@@ -1270,7 +1268,7 @@ mod mqtt_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn mqtt_wakeup_duration_control() {
         let broker = MqttBroker::builder()
             .host(cfg_broker().ip)
@@ -1314,7 +1312,7 @@ mod mqtt_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn mqtt_run_routine() {
         use tasmor_lib::command::Routine;
 
@@ -1342,7 +1340,7 @@ mod mqtt_protocol {
             .unwrap();
 
         let response = device.run(&routine).await.unwrap();
-        println!("MQTT Routine response: {:?}", response);
+        println!("MQTT Routine response: {response:?}");
 
         sleep(Duration::from_millis(500)).await;
 
@@ -1357,7 +1355,7 @@ mod mqtt_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn mqtt_energy_monitoring() {
         let broker = MqttBroker::builder()
             .host(cfg_broker().ip)
@@ -1390,7 +1388,7 @@ mod mqtt_protocol {
     // -------------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn device_disconnect_is_idempotent() {
         let broker = MqttBroker::builder()
             .host(cfg_broker().ip)
@@ -1427,7 +1425,7 @@ mod cross_protocol {
     use super::*;
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn http_and_mqtt_see_same_state() {
         // Connect via HTTP
         let (http_device, _) = Device::http(cfg_light_1().http_ip)
@@ -1492,7 +1490,7 @@ mod error_handling {
     use super::*;
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn http_connection_to_invalid_ip() {
         let result = Device::http("192.168.11.254") // Non-existent IP
             .with_credentials("admin", "password")
@@ -1504,7 +1502,7 @@ mod error_handling {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn http_wrong_credentials() {
         let result = Device::http(cfg_light_1().http_ip)
             .with_credentials("wrong_user", "wrong_password")
@@ -1516,7 +1514,7 @@ mod error_handling {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn mqtt_connection_to_invalid_broker() {
         let result = MqttBroker::builder()
             .host("192.168.11.254") // Non-existent broker
@@ -1530,7 +1528,7 @@ mod error_handling {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn mqtt_wrong_credentials() {
         let result = MqttBroker::builder()
             .host(cfg_broker().ip)
@@ -1544,7 +1542,7 @@ mod error_handling {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires real Tasmota devices; run with --ignored"]
     async fn mqtt_invalid_device_topic() {
         let broker = MqttBroker::builder()
             .host(cfg_broker().ip)
@@ -1562,7 +1560,7 @@ mod error_handling {
         // This might timeout or fail depending on implementation
         match result {
             Ok(_) => println!("Unexpectedly succeeded"),
-            Err(e) => println!("Error for invalid topic: {:?}", e),
+            Err(e) => println!("Error for invalid topic: {e:?}"),
         }
 
         broker.disconnect().await.unwrap();

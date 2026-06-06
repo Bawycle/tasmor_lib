@@ -318,6 +318,9 @@ fn parse_result_payload(payload: &str) -> Option<Vec<StateChange>> {
 }
 
 #[cfg(test)]
+// The `x` / `x_clone` move-into-closure idiom and `router` / `routed` pairings
+// trip `similar_names`; both are standard, readable test conventions here.
+#[allow(clippy::similar_names)]
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU32, Ordering};

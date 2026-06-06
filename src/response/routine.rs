@@ -309,7 +309,7 @@ mod tests {
 
     #[test]
     fn empty_response() {
-        let json = r#"{}"#;
+        let json = r"{}";
         let response: RoutineResponse = serde_json::from_str(json).unwrap();
 
         assert!(response.is_empty());

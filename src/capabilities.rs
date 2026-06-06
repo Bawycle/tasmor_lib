@@ -692,7 +692,7 @@ mod tests {
     #[test]
     fn from_status_empty_response() {
         // Handle gracefully when status response has no data
-        let json = r#"{}"#;
+        let json = r"{}";
 
         let status: StatusResponse = serde_json::from_str(json).unwrap();
         let caps = Capabilities::from_status(&status);

@@ -314,7 +314,7 @@ impl TelemetryState {
     /// let json = r#"{"Uptime":"1T23:46:58","UptimeSec":172018}"#;
     /// let state: TelemetryState = serde_json::from_str(json).unwrap();
     ///
-    /// assert_eq!(state.uptime(), Some(Duration::from_secs(172018)));
+    /// assert_eq!(state.uptime(), Some(Duration::from_secs(172_018)));
     /// ```
     #[must_use]
     pub fn uptime(&self) -> Option<Duration> {
@@ -404,7 +404,7 @@ impl TelemetryState {
     /// let state: TelemetryState = serde_json::from_str(json).unwrap();
     ///
     /// let info = state.to_system_info();
-    /// assert_eq!(info.uptime(), Some(Duration::from_secs(172800)));
+    /// assert_eq!(info.uptime(), Some(Duration::from_secs(172_800)));
     /// assert_eq!(info.wifi_rssi(), Some(-55));
     /// ```
     #[must_use]
@@ -698,7 +698,7 @@ mod tests {
         let state: TelemetryState = serde_json::from_str(json).unwrap();
 
         let info = state.to_system_info();
-        assert_eq!(info.uptime(), Some(Duration::from_secs(172800)));
+        assert_eq!(info.uptime(), Some(Duration::from_secs(172_800)));
         assert!(info.wifi_rssi().is_none());
         assert!(info.heap().is_none());
     }
@@ -719,7 +719,7 @@ mod tests {
         let state: TelemetryState = serde_json::from_str(json).unwrap();
 
         let info = state.to_system_info();
-        assert_eq!(info.uptime(), Some(Duration::from_secs(172800)));
+        assert_eq!(info.uptime(), Some(Duration::from_secs(172_800)));
         assert_eq!(info.wifi_rssi(), Some(-60)); // Uses Signal (dBm), not RSSI (%)
     }
 
@@ -746,7 +746,7 @@ mod tests {
         let state: TelemetryState = serde_json::from_str(json).unwrap();
 
         let info = state.to_system_info();
-        assert_eq!(info.uptime(), Some(Duration::from_secs(172018)));
+        assert_eq!(info.uptime(), Some(Duration::from_secs(172_018)));
         assert_eq!(info.wifi_rssi(), Some(-52));
         // Note: Heap is not extracted from TelemetryState (only available via Status)
         assert!(info.heap().is_none());

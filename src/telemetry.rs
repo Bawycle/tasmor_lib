@@ -339,7 +339,7 @@ mod tests {
         let info = msg.to_system_info();
         assert!(info.is_some());
         let info = info.unwrap();
-        assert_eq!(info.uptime(), Some(Duration::from_secs(172800)));
+        assert_eq!(info.uptime(), Some(Duration::from_secs(172_800)));
         assert_eq!(info.wifi_rssi(), Some(-55));
     }
 

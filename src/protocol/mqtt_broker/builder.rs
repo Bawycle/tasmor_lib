@@ -620,8 +620,10 @@ mod tests {
 
     #[test]
     fn build_connect_options_preserves_credentials() {
-        let mut config = MqttBrokerConfig::default();
-        config.credentials = Some(crate::credentials::Credentials::new("user", "pass"));
+        let config = MqttBrokerConfig {
+            credentials: Some(crate::credentials::Credentials::new("user", "pass")),
+            ..MqttBrokerConfig::default()
+        };
         let opts = build_connect_options(&config).unwrap();
         // We cannot inspect ConnectOptions fields directly; verify build succeeds
         // when credentials are present (regression guard for the extraction refactor).
